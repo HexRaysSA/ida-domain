@@ -136,7 +136,12 @@ def test_database(test_env):
 def test_segment(test_env):
     db = test_env
 
-    assert len(db.segments) == 4
+    seg = db.segments.add_new_last(0, 0x100, ".ifak", "CODE", 0)
+    assert seg is not None
+    assert db.segments.set_segment_rwx(seg) == True
+    assert db.segments.set_segment_addr_mode(seg, 64) == True
+
+    assert len(db.segments) == 5
     for segment in db.segments:
         assert db.segments.get_name(segment)
 

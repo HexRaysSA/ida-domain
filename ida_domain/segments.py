@@ -102,3 +102,99 @@ class Segments(DatabaseEntity):
             seg = ida_segment.getnseg(current_index)
             if seg:
                 yield seg
+
+    def add_new(self, seg_para: ea_t, start_ea : ea_t, end_ea: ea_t, seg_name: str, seg_class: str, flags: int) -> segment_t:
+        """
+        Adds a new segment to the IDA database.
+
+        Args:
+            seg_para: Segment base paragraph.
+            start_ea: Start address of the segment.
+            end_ea: End address of the segment.
+            seg_name: Name of new segment.
+            seg_class: Class of the segment.
+                "CODE" -> SEG_CODE
+                "DATA" -> SEG_DATA
+                "CONST" -> SEG_DATA
+                "STACK" -> SEG_BSS
+                "BSS" -> SEG_BSS
+                "XTRN" -> SEG_XTRN
+                "COMM" -> SEG_COMM
+                "ABS" -> SEG_ABSSYM
+            flags: Add segment flags(https://cpp.docs.hex-rays.com/group___a_d_d_s_e_g__.html)
+
+        Returns:
+            Return the "segment_t*" from the new added segment.
+        """
+
+        if ida_segment.add_segm(seg_para, start_ea, end_ea, seg_name, seg_class, flags):
+            return ida_segment.get_last_seg() # The last segment in our database will always be the last entry.
+
+        # Since ida_segment.add_segm returns True, we’ll just return None because we failed to add the section.
+        return None
+
+    def add_new_last(self, seg_para: ea_t, seg_size: ea_t, seg_name: str, seg_class: str, flags: int) -> segment_t:
+        """
+        Add a new segment directly after the last segment in the database. A hackfix  
+        so that the user only needs to provide the desired size for the segment and its class name. 
+
+        Args:
+            seg_para: Segment base paragraph.
+            seg_size: Desired size in bytes to store information in the new segment (segment size).
+            seg_name: Name of new segment.
+            seg_class: Class of the segment.
+                "CODE" -> SEG_CODE
+                "DATA" -> SEG_DATA
+                "CONST" -> SEG_DATA
+                "STACK" -> SEG_BSS
+                "BSS" -> SEG_BSS
+                "XTRN" -> SEG_XTRN
+                "COMM" -> SEG_COMM
+                "ABS" -> SEG_ABSSYM
+            flags: Add segment flags(https://cpp.docs.hex-rays.com/group___a_d_d_s_e_g__.html)
+
+        Returns:
+            Return the "segment_t*" from the new added segment.
+        """
+        last_seg = ida_segment.get_last_seg()
+
+        return self.add_new(seg_para, last_seg.end_ea, last_seg.end_ea + seg_size, seg_name, seg_class, flags)
+
+    def set_segment_rwx(self, segment: segment_t) -> bool:
+        """
+        Configures the segment to be RWX.
+        
+        Args:
+            segment: The target segment object.
+        
+        Returns:
+            True if it was possible to configure the referenced segment as RWX, 
+            False otherwise.
+        """
+        if not segment: return False
+
+        seg = ida_segment.getseg(segment.start_ea)
+        if seg:
+            seg.perm = ida_segment.SEGPERM_MAXVAL
+            return True
+
+        return False
+
+    def set_segment_addr_mode(self, segment: segment_t, mode: int) -> bool:
+        """
+        Sets the segment addressing mode (16-bit, 32-bit, or 64-bit).
+        
+        Args:
+            segment: The target segment object.
+            mode: The desired segment mode, one of: (16 - 16-bit, 32 - 32-bit, 64 - 64-bit).
+        
+        Returns:
+            True if it was possible to set the segment addressing mode to the user’s choice, 
+            False otherwise.
+        """
+        # Translating para IDA Segment mode
+        if mode == 16: mode = 0 # 16-bit mode
+        elif mode == 32: mode = 1 # 32-bit mode
+        else: mode = 2 # 64-bit mode
+
+        return ida_segment.set_segm_addressing(segment, mode)
