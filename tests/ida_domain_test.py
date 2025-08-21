@@ -14,6 +14,7 @@ import ida_typeinf
 
 from ida_domain.database import IdaCommandOptions
 from ida_domain.instructions import Instructions
+from ida_domain.segments import *
 
 idb_path: str = ''
 logger = logging.getLogger(__name__)
@@ -136,10 +137,12 @@ def test_database(test_env):
 def test_segment(test_env):
     db = test_env
 
-    seg = db.segments.add_new_last(0, 0x100, ".ifak", "CODE", 0)
+    seg = db.segments.append(0, 0x100, ".test", PredefinedClass.CODE, AddSegmentFlags.NONE)
     assert seg is not None
-    assert db.segments.set_segment_rwx(seg) == True
-    assert db.segments.set_segment_addr_mode(seg, 64) == True
+    assert db.segments.set_permissions(seg, SegmentPermissions.READ | SegmentPermissions.EXEC) == True
+    assert db.segments.add_permissions(seg, SegmentPermissions.WRITE) == True
+    assert db.segments.remove_permissions(seg, SegmentPermissions.EXEC) == True
+    assert db.segments.set_addressing_mode(seg, AddressingMode.BIT64) == True
 
     assert len(db.segments) == 5
     for segment in db.segments:
