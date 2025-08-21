@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import logging
+from enum import Enum, IntEnum, IntFlag
+from typing import Union
 
 import ida_bytes
 import ida_segment
 from ida_idaapi import ea_t
 from ida_segment import segment_t
-from enum import Enum, IntFlag, IntEnum
 from typing_extensions import TYPE_CHECKING, Iterator, Optional
 
 from .base import DatabaseEntity, InvalidEAError, check_db_open, decorate_all_methods
@@ -136,7 +137,9 @@ class Segments(DatabaseEntity):
             if seg:
                 yield seg
 
-    def add(self, seg_para: ea_t, start_ea: ea_t, end_ea: ea_t, seg_name: Optional[str] = None, seg_class: Optional[Union[str, PredefinedClass]] = None, flags: AddSegmentFlags = AddSegmentFlags.NONE) -> Optional[segment_t]:
+    def add(self, seg_para: ea_t, start_ea: ea_t, end_ea: ea_t, seg_name: Optional[str] = None, 
+            seg_class: Optional[Union[str, PredefinedClass]] = None, 
+            flags: AddSegmentFlags = AddSegmentFlags.NONE) -> Optional[segment_t]:
         """
         Adds a new segment to the IDA database.
 
@@ -182,7 +185,9 @@ class Segments(DatabaseEntity):
 
         return seg
 
-    def append(self, seg_para: ea_t, seg_size: ea_t, seg_name: Optional[str] = None, seg_class: Optional[Union[str, PredefinedClass]] = None, flags: AddSegmentFlags = AddSegmentFlags.NONE) -> Optional[segment_t]:
+    def append(self, seg_para: ea_t, seg_size: ea_t, seg_name: Optional[str] = None, 
+        seg_class: Optional[Union[str, PredefinedClass]] = None, 
+        flags: AddSegmentFlags = AddSegmentFlags.NONE) -> Optional[segment_t]:
         """
         Append a new segment directly after the last segment in the database.
 
@@ -208,7 +213,10 @@ class Segments(DatabaseEntity):
         last_seg = ida_segment.get_last_seg()
         if last_seg is None: # Theres one last segment ?
             # No segments exist in database: require explicit addresses via add.
-            raise RuntimeError("No existing segments found, cannot append. Use add(...) with explicit addresses.")
+            raise RuntimeError(
+                "No existing segments found, cannot append. "
+                "Use add(...) with explicit addresses."
+            )
 
         start_ea = last_seg.end_ea
         end_ea = start_ea + seg_size

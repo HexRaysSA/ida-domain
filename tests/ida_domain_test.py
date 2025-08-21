@@ -139,7 +139,8 @@ def test_segment(test_env):
 
     seg = db.segments.append(0, 0x100, ".test", PredefinedClass.CODE, AddSegmentFlags.NONE)
     assert seg is not None
-    assert db.segments.set_permissions(seg, SegmentPermissions.READ | SegmentPermissions.EXEC) == True
+    assert db.segments.set_permissions(seg, SegmentPermissions.READ 
+                                       | SegmentPermissions.EXEC) == True
     assert db.segments.add_permissions(seg, SegmentPermissions.WRITE) == True
     assert db.segments.remove_permissions(seg, SegmentPermissions.EXEC) == True
     assert db.segments.set_addressing_mode(seg, AddressingMode.BIT64) == True
