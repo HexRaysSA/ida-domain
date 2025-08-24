@@ -216,9 +216,9 @@ def analyze_bytes(db_path, search_pattern=None, patch_demo=False, max_results=20
         test_addr = entry_point + 0x10
         if test_addr <= db.maximum_ea:
             next_head = bytes_handler.get_next_head(test_addr)
-            prev_head = bytes_handler.get_prev_head(test_addr)
-            next_addr = bytes_handler.get_next_addr(test_addr)
-            prev_addr = bytes_handler.get_prev_addr(test_addr)
+            prev_head = bytes_handler.get_previous_head(test_addr)
+            next_addr = bytes_handler.get_next_address(test_addr)
+            prev_addr = bytes_handler.get_previous_address(test_addr)
 
             print(f'  From address {hex(test_addr)}:')
             print(

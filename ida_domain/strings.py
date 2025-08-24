@@ -1,14 +1,15 @@
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
-from enum import IntEnum
+from enum import Enum, IntEnum
 
 import ida_bytes
 import ida_nalt
 import ida_strlist
 from ida_idaapi import ea_t
-from typing_extensions import TYPE_CHECKING, Iterator, Optional, Tuple, Union
+from typing_extensions import TYPE_CHECKING, Iterator, Optional, Pattern, Tuple, Union
 
 from .base import (
     DatabaseEntity,
@@ -37,6 +38,33 @@ class StringType(IntEnum):
     LEN2 = ida_nalt.STRTYPE_LEN2  # String with 2-byte length prefix
     LEN2_16 = ida_nalt.STRTYPE_LEN2_16  # 16-bit string with 2-byte length prefix
     LEN2_32 = ida_nalt.STRTYPE_LEN2_32  # 32-bit string with 2-byte length prefix
+
+
+class StringEncoding(Enum):
+    """Common string encodings."""
+    ASCII = "ascii"
+    UTF8 = "utf-8"
+    UTF16 = "utf-16"
+    UTF16LE = "utf-16-le"
+    UTF16BE = "utf-16-be"
+    UTF32 = "utf-32"
+    LATIN1 = "latin-1"
+
+    @classmethod
+    def from_string_type(cls, string_type: StringType) -> 'StringEncoding':
+        """Convert StringType to appropriate encoding."""
+        mapping = {
+            StringType.C: cls.UTF8,
+            StringType.C_16: cls.UTF16LE,
+            StringType.C_32: cls.UTF32,
+            StringType.PASCAL: cls.UTF8,
+            StringType.PASCAL_16: cls.UTF16LE,
+            StringType.PASCAL_32: cls.UTF32,
+            StringType.LEN2: cls.UTF8,
+            StringType.LEN2_16: cls.UTF16LE,
+            StringType.LEN2_32: cls.UTF32,
+        }
+        return mapping.get(string_type, cls.ASCII)
 
 
 @dataclass(frozen=True)
@@ -77,6 +105,49 @@ class StringInfo:
             return 'UTF-32'
         else:
             return 'ASCII/UTF-8'
+
+    def get_content(self, encoding: Optional[Union[str, StringEncoding]] = None,
+                    errors: str = 'strict') -> str:
+        """
+        Get string content with flexible encoding support.
+
+        Args:
+            encoding: Encoding to use (defaults to auto-detection based on type)
+            errors: How to handle encoding errors ('strict', 'ignore', 'replace')
+
+        Returns:
+            Decoded string content
+        """
+        if encoding is None:
+            encoding = StringEncoding.from_string_type(self.type).value
+        elif isinstance(encoding, StringEncoding):
+            encoding = encoding.value
+
+        # Get raw bytes from the address
+        raw_bytes = ida_bytes.get_bytes(self.address, self.length)
+        if raw_bytes:
+            return raw_bytes.decode(encoding, errors=errors)
+        return self.content
+
+    def get_raw_content(self) -> bytes:
+        """Get raw bytes of the string without decoding."""
+        return ida_bytes.get_bytes(self.address, self.length) or b''
+
+
+@dataclass(frozen=True)
+class StringSearchResult:
+    """Result of a string search operation."""
+    address: ea_t
+    content: str
+    raw_bytes: bytes
+    length: int
+    string_type: Optional[StringType]
+    match_start: int  # Offset within string where match starts
+    match_end: int    # Offset within string where match ends
+
+    def get_match_text(self) -> str:
+        """Get the matched portion of the string."""
+        return self.content[self.match_start:self.match_end]
 
 
 @decorate_all_methods(check_db_open)
@@ -269,3 +340,195 @@ class Strings(DatabaseEntity):
             InvalidEAError: If the effective address is invalid.
         """
         return self.get_at(ea) is not None
+
+    def find(
+        self,
+        pattern: Union[str, bytes, Pattern],
+        start_ea: Optional[ea_t] = None,
+        end_ea: Optional[ea_t] = None,
+        encoding: Optional[Union[str, StringType, StringEncoding]] = None,
+        case_sensitive: bool = True,
+        whole_words: bool = False
+    ) -> Optional[StringSearchResult]:
+        """
+        Find the first occurrence of a string pattern.
+
+        Args:
+            pattern: String, bytes, or compiled regex pattern to search for
+            start_ea: Start address for search (default: database start)
+            end_ea: End address for search (default: database end)
+            encoding: String encoding or StringType to use
+            case_sensitive: Whether search is case-sensitive
+            whole_words: Match whole words only
+
+        Returns:
+            StringSearchResult with match details, or None if not found
+        """
+        for result in self.find_all(pattern, start_ea, end_ea, encoding, case_sensitive,
+                                    whole_words, max_results=1):
+            return result
+        return None
+
+    def find_all(
+        self,
+        pattern: Union[str, bytes, Pattern],
+        start_ea: Optional[ea_t] = None,
+        end_ea: Optional[ea_t] = None,
+        encoding: Optional[Union[str, StringType, StringEncoding]] = None,
+        case_sensitive: bool = True,
+        whole_words: bool = False,
+        max_results: Optional[int] = None
+    ) -> Iterator[StringSearchResult]:
+        """
+        Find all occurrences of a string pattern.
+
+        Args:
+            pattern: String, bytes, or compiled regex pattern
+            start_ea: Start address for search
+            end_ea: End address for search
+            encoding: String encoding or StringType
+            case_sensitive: Whether search is case-sensitive
+            whole_words: Match whole words only
+            max_results: Maximum number of results to return
+
+        Yields:
+            StringSearchResult objects for each match
+        """
+        # Set defaults
+        start_ea = start_ea or self.database.minimum_ea
+        end_ea = end_ea or self.database.maximum_ea
+
+        # Validate addresses
+        if not self.database.is_valid_ea(start_ea, strict_check=False):
+            raise InvalidEAError(start_ea)
+        if not self.database.is_valid_ea(end_ea, strict_check=False):
+            raise InvalidEAError(end_ea)
+        if start_ea >= end_ea:
+            raise InvalidParameterError('start_ea', start_ea, 'must be less than end_ea')
+
+        # Determine encoding
+        if isinstance(encoding, StringType):
+            encoding = StringEncoding.from_string_type(encoding)
+        elif encoding is None:
+            encoding = StringEncoding.UTF8
+        elif isinstance(encoding, str):
+            encoding = StringEncoding(encoding)
+
+        # Prepare pattern
+        compiled_pattern: Optional[Pattern[str]] = None
+        pattern_str: str = ""
+
+        if isinstance(pattern, bytes):
+            pattern_str = pattern.decode(encoding.value, errors='replace')
+            is_regex = False
+        elif isinstance(pattern, str):
+            pattern_str = pattern
+            is_regex = False
+        else:  # Pattern object
+            compiled_pattern = pattern
+            is_regex = True
+            if not case_sensitive and not pattern.flags & re.IGNORECASE:
+                # Recompile with IGNORECASE
+                compiled_pattern = re.compile(pattern.pattern, pattern.flags | re.IGNORECASE)
+
+        # For non-regex patterns, handle case sensitivity
+        if not is_regex and not case_sensitive:
+            pattern_str = pattern_str.lower()
+
+        # Word boundary regex if needed
+        if whole_words and not is_regex:
+            compiled_pattern = re.compile(r'\b' + re.escape(pattern_str) + r'\b',
+                                        re.IGNORECASE if not case_sensitive else 0)
+            is_regex = True
+
+        # Build string list if needed
+        self.build_string_list()
+
+        # Search through strings
+        results_count = 0
+        for index in range(ida_strlist.get_strlist_qty()):
+            if max_results is not None and results_count >= max_results:
+                break
+
+            si = ida_strlist.string_info_t()
+            if not ida_strlist.get_strlist_item(si, index):
+                continue
+
+            # Check address range
+            if not (start_ea <= si.ea < end_ea):
+                continue
+
+            # Get string content
+            str_info = self.get_at(si.ea)
+            if not str_info:
+                continue
+
+            content = str_info.get_content(encoding, errors='replace')
+            search_content = content if case_sensitive or is_regex else content.lower()
+
+            # Find matches
+            if is_regex and compiled_pattern:
+                matches = list(compiled_pattern.finditer(search_content))
+            else:
+                # Simple string search
+                matches = []
+                start_pos = 0
+                while True:
+                    pos = search_content.find(pattern_str, start_pos)
+                    if pos == -1:
+                        break
+                    matches.append(type('Match', (), {
+                        'start': lambda: pos,
+                        'end': lambda: pos + len(pattern_str)
+                    })())
+                    start_pos = pos + 1
+
+            # Yield results
+            for match in matches:
+                if max_results is not None and results_count >= max_results:
+                    break
+
+                raw_bytes = ida_bytes.get_bytes(si.ea, si.length) or b''
+
+                yield StringSearchResult(
+                    address=si.ea,
+                    content=content,
+                    raw_bytes=raw_bytes,
+                    length=si.length,
+                    string_type=str_info.type,
+                    match_start=match.start(),
+                    match_end=match.end()
+                )
+                results_count += 1
+
+    def find_next(
+        self,
+        pattern: Union[str, bytes, Pattern],
+        current_ea: ea_t,
+        encoding: Optional[Union[str, StringType, StringEncoding]] = None,
+        case_sensitive: bool = True,
+        whole_words: bool = False,
+        wrap_around: bool = False
+    ) -> Optional[StringSearchResult]:
+        """
+        Find next occurrence starting from current address.
+
+        Args:
+            pattern: Pattern to search for
+            current_ea: Current address to start search after
+            encoding: String encoding
+            case_sensitive: Case sensitivity flag
+            whole_words: Whole word matching
+            wrap_around: Wrap to beginning if end reached
+
+        Returns:
+            Next match or None
+        """
+        # First search from current position to end
+        result = self.find(pattern, current_ea + 1, None, encoding, case_sensitive, whole_words)
+
+        # If not found and wrap_around, search from beginning
+        if result is None and wrap_around and current_ea > self.database.minimum_ea:
+            result = self.find(pattern, None, current_ea, encoding, case_sensitive, whole_words)
+
+        return result

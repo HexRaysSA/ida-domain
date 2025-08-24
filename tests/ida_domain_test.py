@@ -139,7 +139,7 @@ def test_segment(test_env):
 
     seg = db.segments.append(0, 0x100, ".test", PredefinedClass.CODE, AddSegmentFlags.NONE)
     assert seg is not None
-    assert db.segments.set_permissions(seg, SegmentPermissions.READ 
+    assert db.segments.set_permissions(seg, SegmentPermissions.READ
                                        | SegmentPermissions.EXEC) == True
     assert db.segments.add_permissions(seg, SegmentPermissions.WRITE) == True
     assert db.segments.remove_permissions(seg, SegmentPermissions.EXEC) == True
@@ -280,7 +280,7 @@ def test_entries(test_env):
     assert db.entries[0] == ida_domain.entries.EntryInfo(0, 0, '_start', None)
     assert db.entries.get_at_index(0) == ida_domain.entries.EntryInfo(0, 0, '_start', None)
     assert db.entries.get_by_ordinal(0) == ida_domain.entries.EntryInfo(0, 0, '_start', None)
-    assert db.entries.get_by_address(0) == ida_domain.entries.EntryInfo(0, 0, '_start', None)
+    assert db.entries.get_at(0) == ida_domain.entries.EntryInfo(0, 0, '_start', None)
 
     assert db.entries.add(address=0xCC, name='test_entry', ordinal=1)
     assert db.entries.get_count() == 2
@@ -288,7 +288,7 @@ def test_entries(test_env):
     assert db.entries.get_by_ordinal(1) == ida_domain.entries.EntryInfo(
         1, 0xCC, 'test_entry', None
     )
-    assert db.entries.get_by_address(0xCC) == ida_domain.entries.EntryInfo(
+    assert db.entries.get_at(0xCC) == ida_domain.entries.EntryInfo(
         1, 0xCC, 'test_entry', None
     )
 
@@ -309,7 +309,7 @@ def test_heads(test_env):
         count += 1
     assert count == 201
 
-    assert db.heads.get_prev(db.minimum_ea) is None
+    assert db.heads.get_previous(db.minimum_ea) is None
     assert db.heads.get_next(db.maximum_ea) is None
 
     expected = [0xC8, 0xC9, 0xCB, 0xCD, 0xCF, 0xD1, 0xD4]
@@ -319,7 +319,7 @@ def test_heads(test_env):
         actual.append(ea)
     assert actual == expected
 
-    assert db.heads.get_prev(0xCB) == 0xC9
+    assert db.heads.get_previous(0xCB) == 0xC9
     assert db.heads.get_next(0xC9) == 0xCB
 
 
@@ -347,7 +347,7 @@ def test_instruction(test_env):
     assert isinstance(operands[0], ida_domain.operands.RegisterOperand)
     assert isinstance(operands[1], ida_domain.operands.RegisterOperand)
 
-    instruction = db.instructions.get_prev(0xD6)
+    instruction = db.instructions.get_previous(0xD6)
     assert instruction is not None
     assert instruction.ea == 0xD4
     assert db.instructions.is_valid(instruction)
@@ -810,24 +810,24 @@ def test_comments(test_env):
         assert expected_comments[i][1] == comment_info.comment
         assert False == comment_info.repeatable
 
-    assert db.comments.set(0xAE, 'Testing adding regular comment')
-    assert db.comments.get(0xAE).comment == 'Testing adding regular comment'
-    assert not db.comments.get(0xAE, ida_domain.comments.CommentKind.REPEATABLE)
+    assert db.comments.set_at(0xAE, 'Testing adding regular comment')
+    assert db.comments.get_at(0xAE).comment == 'Testing adding regular comment'
+    assert not db.comments.get_at(0xAE, ida_domain.comments.CommentKind.REPEATABLE)
     assert (
-        db.comments.get(0xAE, ida_domain.comments.CommentKind.ALL).comment
+        db.comments.get_at(0xAE, ida_domain.comments.CommentKind.ALL).comment
         == 'Testing adding regular comment'
     )
 
-    assert db.comments.set(
+    assert db.comments.set_at(
         0xD1, 'Testing adding repeatable comment', ida_domain.comments.CommentKind.REPEATABLE
     )
     assert (
-        db.comments.get(0xD1, ida_domain.comments.CommentKind.REPEATABLE).comment
+        db.comments.get_at(0xD1, ida_domain.comments.CommentKind.REPEATABLE).comment
         == 'Testing adding repeatable comment'
     )
-    assert not db.comments.get(0xD1, ida_domain.comments.CommentKind.REGULAR)
+    assert not db.comments.get_at(0xD1, ida_domain.comments.CommentKind.REGULAR)
     assert (
-        db.comments.get(0xD1, ida_domain.comments.CommentKind.ALL).comment
+        db.comments.get_at(0xD1, ida_domain.comments.CommentKind.ALL).comment
         == 'Testing adding repeatable comment'
     )
 
@@ -990,13 +990,13 @@ def test_bytes(test_env):
     next_head = db.bytes.get_next_head(0x330)
     assert isinstance(next_head, int) and next_head == 0x332
 
-    prev_head = db.bytes.get_prev_head(0x340)
+    prev_head = db.bytes.get_previous_head(0x340)
     assert isinstance(prev_head, int) and prev_head == 0x338
 
-    next_addr = db.bytes.get_next_addr(0x330)
+    next_addr = db.bytes.get_next_address(0x330)
     assert isinstance(next_addr, int) and next_addr == 0x331
 
-    prev_addr = db.bytes.get_prev_addr(0x340)
+    prev_addr = db.bytes.get_previous_address(0x340)
     assert isinstance(prev_addr, int) and prev_addr == 0x33F
 
     test_patch_addr = 0x330  # Use test_data address for patching tests

@@ -9,9 +9,10 @@ import ida_ida
 import ida_lines
 import ida_nalt
 import ida_search
+import idaapi
 import idc
 from ida_idaapi import BADADDR, ea_t
-from typing_extensions import TYPE_CHECKING, Optional
+from typing_extensions import TYPE_CHECKING, List, Optional
 
 from .base import (
     DatabaseEntity,
@@ -1966,7 +1967,7 @@ class Bytes(DatabaseEntity):
         ret = ida_bytes.next_head(ea, max_ea)
         return ret if ret != BADADDR else None
 
-    def get_prev_head(self, ea: ea_t, min_ea: ea_t = None) -> Optional[ea_t]:
+    def get_previous_head(self, ea: ea_t, min_ea: ea_t = None) -> Optional[ea_t]:
         """
         Gets the previous head (start of data item) before the specified address.
 
@@ -1991,7 +1992,7 @@ class Bytes(DatabaseEntity):
         ret = ida_bytes.prev_head(ea, min_ea)
         return ret if ret != BADADDR else None
 
-    def get_next_addr(self, ea: ea_t) -> ea_t | None:
+    def get_next_address(self, ea: ea_t) -> ea_t | None:
         """
         Gets the next valid address after the specified address.
 
@@ -2010,7 +2011,7 @@ class Bytes(DatabaseEntity):
         ret = ida_bytes.next_addr(ea)
         return ret if ret != BADADDR else None
 
-    def get_prev_addr(self, ea: ea_t) -> ea_t | None:
+    def get_previous_address(self, ea: ea_t) -> ea_t | None:
         """
         Gets the previous valid address before the specified address.
 
@@ -2068,3 +2069,61 @@ class Bytes(DatabaseEntity):
 
         flags = ida_bytes.get_flags(ea)
         return (flags & flag_mask) != 0
+
+    def get_byte_value_at(self, ea: ea_t) -> int:
+        """
+        Get the byte value at the specified address.
+
+        Args:
+            ea: The effective address.
+
+        Returns:
+            The byte value at the address.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+        return ida_bytes.get_byte(ea)
+
+    def find_binary_sequence(
+        self, pattern: bytes, start_ea: ea_t = None, end_ea: ea_t = None
+    ) -> List[ea_t]:
+        """
+        Find all occurrences of a binary pattern.
+
+        Args:
+            pattern: Binary pattern to search for.
+            start_ea: Search start address; defaults to database minimum ea if None.
+            end_ea: Search end address; defaults to database maximum ea if None.
+
+        Returns:
+            List of addresses where pattern was found.
+
+        Raises:
+            InvalidParameterError: If pattern is invalid.
+            InvalidEAError: If start_ea or end_ea are specified but invalid.
+        """
+        if not isinstance(pattern, bytes):
+            raise InvalidParameterError('pattern', type(pattern), 'must be bytes')
+
+        if len(pattern) == 0:
+            raise InvalidParameterError('pattern', len(pattern), 'cannot be empty')
+
+        if start_ea is None:
+            start_ea = self.database.minimum_ea
+        elif not self.database.is_valid_ea(start_ea, strict_check=False):
+            raise InvalidEAError(start_ea)
+
+        if end_ea is None:
+            end_ea = self.database.maximum_ea
+        elif not self.database.is_valid_ea(end_ea, strict_check=False):
+            raise InvalidEAError(end_ea)
+
+        results = []
+        ea = ida_search.find_binary(start_ea, end_ea, pattern, 16, ida_search.SEARCH_DOWN)
+        while ea != BADADDR:
+            results.append(ea)
+            ea = ida_search.find_binary(ea + 1, end_ea, pattern, 16, ida_search.SEARCH_DOWN)
+        return results

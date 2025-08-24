@@ -4,8 +4,8 @@ import logging
 from enum import Enum, IntEnum, IntFlag
 from typing import Union
 
-import ida_bytes
 import ida_segment
+import idautils
 from ida_idaapi import ea_t
 from ida_segment import segment_t
 from typing_extensions import TYPE_CHECKING, Iterator, Optional
@@ -20,15 +20,15 @@ logger = logging.getLogger(__name__)
 
 
 class AddSegmentFlags(IntFlag):
-    NONE = 0x0000  # No flag
-    NOSREG = 0x0001  # Set all default segment register values to BADSEL
-    OR_DIE = 0x0002  # qexit() if can't add a segment
-    NOTRUNC = 0x0004  # Don't truncate the new segment at the beginning of the next segment
-    QUIET = 0x0008  # Silent mode, no "Adding segment..." in the messages window
-    FILLGAP = 0x0010  # Fill gap between new segment and previous one
-    SPARSE = 0x0020  # Use sparse storage method for the new ranges
-    NOAA = 0x0040  # Do not mark new segment for auto-analysis
-    IDBENC = 0x0080  # 'name' and 'sclass' are given in the IDB encoding
+    NONE = 0  # No flag
+    NOSREG = ida_segment.ADDSEG_NOSREG  # Set all default segment register values to BADSEL
+    OR_DIE = ida_segment.ADDSEG_OR_DIE  # qexit() if can't add a segment
+    NOTRUNC = ida_segment.ADDSEG_NOTRUNC  # Don't truncate the new segment on next segment start
+    QUIET = ida_segment.ADDSEG_QUIET  # Silent mode, no "Adding segment..." in the messages window
+    FILLGAP = ida_segment.ADDSEG_FILLGAP  # Fill gap between new segment and previous one
+    SPARSE = ida_segment.ADDSEG_SPARSE  # Use sparse storage method for the new ranges
+    NOAA = ida_segment.ADDSEG_NOAA  # Do not mark new segment for auto-analysis
+    IDBENC = ida_segment.ADDSEG_IDBENC  # 'name' and 'sclass' are given in the IDB encoding
 
 class PredefinedClass(Enum):
     CODE = "CODE"  # SEG_CODE
@@ -51,6 +51,17 @@ class AddressingMode(IntEnum):
     BIT16 = 0  # 16-bit segment
     BIT32 = 1  # 32-bit segment
     BIT64 = 2  # 64-bit segment
+
+class SegmentType(IntEnum):
+    """Segment type constants from IDA SDK."""
+    NORMAL = ida_segment.SEG_NORM
+    EXTERNAL = ida_segment.SEG_XTRN
+    CODE = ida_segment.SEG_CODE
+    DATA = ida_segment.SEG_DATA
+    NULL = ida_segment.SEG_NULL
+    BSS = ida_segment.SEG_BSS
+    COMM = ida_segment.SEG_COMM
+    ABSSYM = ida_segment.SEG_ABSSYM
 
 @decorate_all_methods(check_db_open)
 class Segments(DatabaseEntity):
@@ -82,7 +93,7 @@ class Segments(DatabaseEntity):
             ea: The effective address to search.
 
         Returns:
-            A pointer to the containing segment, or None if none found.
+            A segment_t object, or None if none found.
 
         Raises:
             InvalidEAError: If the effective address is invalid.
@@ -96,7 +107,7 @@ class Segments(DatabaseEntity):
         Retrieves the name of the given segment.
 
         Args:
-            segment: Pointer to the segment.
+            segment: The segment to get the name from.
 
         Returns:
             The segment name as a string, or an empty string if unavailable.
@@ -108,7 +119,7 @@ class Segments(DatabaseEntity):
         Renames a segment.
 
         Args:
-            segment: Pointer to the segment to rename.
+            segment: The segment to rename.
             name: The new name to assign to the segment.
 
         Returns:
@@ -130,15 +141,30 @@ class Segments(DatabaseEntity):
         Retrieves an iterator over all segments in the database.
 
         Returns:
-            A generator yielding all segments in the database.
+            A generator yielding all segment_t objects in the database.
         """
         for current_index in range(0, ida_segment.get_segm_qty()):
             seg = ida_segment.getnseg(current_index)
             if seg:
                 yield seg
 
-    def add(self, seg_para: ea_t, start_ea: ea_t, end_ea: ea_t, seg_name: Optional[str] = None, 
-            seg_class: Optional[Union[str, PredefinedClass]] = None, 
+    def get_by_name(self, name: str) -> Optional[segment_t]:
+        """Find segment by name.
+
+        Args:
+            name: Segment name to search for
+
+        Returns:
+            segment_t if found, None otherwise
+        """
+        for seg_ea in idautils.Segments():
+            seg = ida_segment.getseg(seg_ea)
+            if seg and ida_segment.get_segm_name(seg) == name:
+                return seg
+        return None
+
+    def add(self, seg_para: ea_t, start_ea: ea_t, end_ea: ea_t, seg_name: Optional[str] = None,
+            seg_class: Optional[Union[str, PredefinedClass]] = None,
             flags: AddSegmentFlags = AddSegmentFlags.NONE) -> Optional[segment_t]:
         """
         Adds a new segment to the IDA database.
@@ -185,8 +211,8 @@ class Segments(DatabaseEntity):
 
         return seg
 
-    def append(self, seg_para: ea_t, seg_size: ea_t, seg_name: Optional[str] = None, 
-        seg_class: Optional[Union[str, PredefinedClass]] = None, 
+    def append(self, seg_para: ea_t, seg_size: ea_t, seg_name: Optional[str] = None,
+        seg_class: Optional[Union[str, PredefinedClass]] = None,
         flags: AddSegmentFlags = AddSegmentFlags.NONE) -> Optional[segment_t]:
         """
         Append a new segment directly after the last segment in the database.
@@ -232,11 +258,8 @@ class Segments(DatabaseEntity):
         if not seg:
             return False
 
-        try:
-            seg.perm = int(perms)
-            return True
-        except Exception:
-            return False
+        seg.perm = int(perms)
+        return True
 
     def add_permissions(self, segment: segment_t, perms: SegmentPermissions) -> bool:
         """
@@ -272,7 +295,23 @@ class Segments(DatabaseEntity):
         Returns:
             True if successful, False otherwise.
         """
-        try:
-            return ida_segment.set_segm_addressing(segment, int(mode))
-        except Exception:
-            return False
+        return ida_segment.set_segm_addressing(segment, int(mode))
+
+    def get_size(self, segment: segment_t) -> int:
+        """Calculate segment size in bytes."""
+        return segment.end_ea - segment.start_ea
+
+    def get_bitness(self, segment: segment_t) -> int:
+        """Get segment bitness (16/32/64)."""
+        # Determine bitness from segment attributes
+        if segment.is_64bit():
+            return 64
+        elif segment.is_32bit():
+            return 32
+        else:
+            return 16
+
+    def get_class(self, segment: segment_t) -> Optional[str]:
+        """Get segment class name."""
+        cls = ida_segment.get_segm_class(segment)
+        return cls if cls else None

@@ -7,7 +7,6 @@ import ida_idaapi
 import ida_idp
 import ida_lines
 import ida_ua
-from ida_ida import inf_get_max_ea, inf_get_min_ea
 from ida_ua import insn_t
 from typing_extensions import TYPE_CHECKING, Iterator, List, Optional
 
@@ -93,9 +92,9 @@ class Instructions(DatabaseEntity):
             return insn
         return None
 
-    def get_prev(self, ea: ea_t) -> insn_t | None:
+    def get_previous(self, ea: ea_t) -> insn_t | None:
         """
-        Decodes prev instruction of the one at specified address.
+        Decodes previous instruction of the one at specified address.
 
         Args:
             ea: The effective address of the instruction.
@@ -119,7 +118,7 @@ class Instructions(DatabaseEntity):
         Returns:
             An iterator over the instructions.
         """
-        return self.get_between(inf_get_min_ea(), inf_get_max_ea())
+        return self.get_between(self.database.minimum_ea, self.database.maximum_ea)
 
     def get_between(self, start: ea_t, end: ea_t) -> Iterator[insn_t]:
         """

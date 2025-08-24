@@ -132,17 +132,17 @@ class Entries(DatabaseEntity):
             forwarder_name=forwarder,
         )
 
-    def get_by_address(self, address: ea_t) -> EntryInfo | None:
+    def get_at(self, ea: ea_t) -> EntryInfo | None:
         """Get entry point by its address.
 
         Args:
-            address: Linear address to search for
+            ea: Linear address to search for
 
         Returns:
             Entry: The entry point at the specified address, or None if not found
         """
         for entry in self.get_all():
-            if entry.address == address:
+            if entry.address == ea:
                 return entry
         return None
 

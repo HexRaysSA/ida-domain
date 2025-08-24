@@ -6,6 +6,7 @@ from enum import Enum
 from itertools import repeat
 
 import ida_bytes
+import ida_lines
 from ida_ida import inf_get_max_ea, inf_get_min_ea
 from ida_idaapi import BADADDR, ea_t
 from typing_extensions import TYPE_CHECKING, Iterator, Optional
@@ -26,6 +27,15 @@ class CommentKind(Enum):
     REGULAR = 'regular'
     REPEATABLE = 'repeatable'
     ALL = 'all'
+
+
+class ExtraCommentKind(Enum):
+    """
+    Enumeration for extra comment positions.
+    """
+
+    ANTERIOR = 'anterior'  # Comments before the line (E_PREV)
+    POSTERIOR = 'posterior'  # Comments after the line (E_NEXT)
 
 
 @dataclass(frozen=True)
@@ -60,7 +70,9 @@ class Comments(DatabaseEntity):
     def __iter__(self) -> Iterator[CommentInfo]:
         return self.get_all()
 
-    def get(self, ea: ea_t, comment_kind: CommentKind = CommentKind.REGULAR) -> CommentInfo | None:
+    def get_at(
+        self, ea: ea_t, comment_kind: CommentKind = CommentKind.REGULAR
+    ) -> CommentInfo | None:
         """
         Retrieves the comment at the specified address.
 
@@ -106,9 +118,10 @@ class Comments(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return self.get(ea, CommentKind.ALL)
+        return self.get_at(ea, CommentKind.ALL)
 
-    def set(self, ea: int, comment: str, comment_kind: CommentKind = CommentKind.REGULAR) -> bool:
+    def set_at(self, ea: int, comment: str,
+              comment_kind: CommentKind = CommentKind.REGULAR) -> bool:
         """
         Sets a comment at the specified address.
 
@@ -183,3 +196,95 @@ class Comments(DatabaseEntity):
             if next_addr == current or next_addr == BADADDR:
                 break
             current = next_addr
+
+    def set_extra(self, ea: int, index: int, comment: str, kind: ExtraCommentKind) -> bool:
+        """
+        Sets an extra comment at the specified address and index.
+
+        Args:
+            ea: The effective address.
+            index: The comment index (0-based).
+            comment: The comment text.
+            kind: ANTERIOR or POSTERIOR.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+
+        Returns:
+            True if successful.
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        base_idx = ida_lines.E_PREV if kind == ExtraCommentKind.ANTERIOR else ida_lines.E_NEXT
+        ida_lines.update_extra_cmt(ea, base_idx + index, comment)
+        return True
+
+    def get_extra(self, ea: int, index: int, kind: ExtraCommentKind) -> str | None:
+        """
+        Gets a specific extra comment.
+
+        Args:
+            ea: The effective address.
+            index: The comment index (0-based).
+            kind: ANTERIOR or POSTERIOR.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+
+        Returns:
+            The comment text or None if not found.
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        base_idx = ida_lines.E_PREV if kind == ExtraCommentKind.ANTERIOR else ida_lines.E_NEXT
+        return ida_lines.get_extra_cmt(ea, base_idx + index)
+
+    def get_extra_all(self, ea: int, kind: ExtraCommentKind) -> Iterator[str]:
+        """
+        Gets all extra comments of a specific kind.
+
+        Args:
+            ea: The effective address.
+            kind: ANTERIOR or POSTERIOR.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+
+        Yields:
+            Comment strings in order.
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        base_idx = ida_lines.E_PREV if kind == ExtraCommentKind.ANTERIOR else ida_lines.E_NEXT
+        index = 0
+        while True:
+            comment = ida_lines.get_extra_cmt(ea, base_idx + index)
+            if comment is None:
+                break
+            yield comment
+            index += 1
+
+    def delete_extra(self, ea: int, index: int, kind: ExtraCommentKind) -> bool:
+        """
+        Deletes a specific extra comment.
+
+        Args:
+            ea: The effective address.
+            index: The comment index (0-based).
+            kind: ANTERIOR or POSTERIOR.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+
+        Returns:
+            True if successful.
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        base_idx = ida_lines.E_PREV if kind == ExtraCommentKind.ANTERIOR else ida_lines.E_NEXT
+        ida_lines.del_extra_cmt(ea, base_idx + index)
+        return True
