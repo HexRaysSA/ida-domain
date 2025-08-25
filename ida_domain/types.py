@@ -1,12 +1,23 @@
 from __future__ import annotations
 
 import logging
-from enum import Enum, IntEnum, IntFlag
+from dataclasses import dataclass
+from enum import Enum, Flag, IntEnum, IntFlag, auto
 from pathlib import Path
 
+import ida_nalt
 import ida_typeinf
-from ida_typeinf import til_t, tinfo_t
-from typing_extensions import TYPE_CHECKING, Iterator, Optional, Union
+from ida_typeinf import (
+    array_type_data_t,
+    bitfield_type_data_t,
+    enum_type_data_t,
+    func_type_data_t,
+    ptr_type_data_t,
+    til_t,
+    tinfo_t,
+    udt_type_data_t,
+)
+from typing_extensions import TYPE_CHECKING, Callable, ClassVar, Dict, Iterator, Optional
 
 from .base import DatabaseEntity, InvalidEAError, check_db_open, decorate_all_methods
 
@@ -41,6 +52,65 @@ class LibraryAddResult(IntEnum):
     """Library loaded but is incompatible"""
     ABORTED = ida_typeinf.ADDTIL_ABORTED
     """Library not loaded, rejected by the user"""
+
+
+class TypeManipulationFlags(IntFlag):
+    """Flags to be used"""
+
+    NTF_TYPE = ida_typeinf.NTF_TYPE
+    """type name
+    """
+    NTF_SYMU = ida_typeinf.NTF_SYMU
+    """symbol, name is unmangled ('func')
+    """
+    NTF_SYMM = ida_typeinf.NTF_SYMM
+    """symbol, name is mangled ('_func'); only one of NTF_TYPE and NTF_SYMU, NTF_SYMM can be used
+            """
+    NTF_NOBASE = ida_typeinf.NTF_NOBASE
+    """don't inspect base tils (for get_named_type)
+    """
+    NTF_REPLACE = ida_typeinf.NTF_REPLACE
+    """replace original type (for set_named_type)
+    """
+    NTF_UMANGLED = ida_typeinf.NTF_UMANGLED
+    """name is unmangled (don't use this flag)
+    """
+    NTF_NOCUR = ida_typeinf.NTF_NOCUR
+    """don't inspect current til file (for get_named_type)
+    """
+    NTF_64BIT = ida_typeinf.NTF_64BIT
+    """value is 64bit
+    """
+    NTF_FIXNAME = ida_typeinf.NTF_FIXNAME
+    """force-validate the name of the type when setting (set_named_type, set_numbered_type only)
+            """
+    NTF_IDBENC = ida_typeinf.NTF_IDBENC
+    """the name is given in the IDB encoding;
+       non-ASCII bytes will be decoded accordingly (set_named_type, set_numbered_type only)
+            """
+    NTF_CHKSYNC = ida_typeinf.NTF_CHKSYNC
+    """check that synchronization to IDB passed OK (set_numbered_type, set_named_type)
+            """
+    NTF_NO_NAMECHK = ida_typeinf.NTF_NO_NAMECHK
+    """do not validate type name (set_numbered_type, set_named_type)
+            """
+    NTF_COPY = ida_typeinf.NTF_COPY
+    """save a new type definition, not a typeref
+       (tinfo_t::set_numbered_type, tinfo_t::set_named_type)
+    """
+
+
+class TypeApplyFlags(IntFlag):
+    """Flags that control how type information is applied to a given address"""
+
+    GUESSED = ida_typeinf.TINFO_GUESSED  # this is a guessed type
+    DEFINITE = ida_typeinf.TINFO_DEFINITE  # this is a definite type
+    DELAYFUNC = ida_typeinf.TINFO_DELAYFUNC
+    # if type is a function and no function exists at ea
+    # schedule its creation and argument renaming to auto-analysis
+    # otherwise try to create it immediately
+    STRICT = ida_typeinf.TINFO_STRICT
+    # never convert given type to another one before applying
 
 
 class TypeFormattingFlags(IntFlag):
@@ -105,6 +175,488 @@ class TypeKind(Enum):
 
     NAMED = 1
     NUMBERED = 2
+
+
+class TypeAttr(Flag):
+    ARITHMETIC = auto()
+    ARRAY = auto()
+    BITFIELD = auto()
+    BOOL = auto()
+    CHAR = auto()
+    COMPLEX = auto()
+    CONST = auto()
+    CORRECT = auto()
+    DECL_ARRAY = auto()
+    DECL_BITFIELD = auto()
+    DECL_BOOL = auto()
+    DECL_CHAR = auto()
+    DECL_COMPLEX = auto()
+    DECL_CONST = auto()
+    DECL_DOUBLE = auto()
+    DECL_ENUM = auto()
+    DECL_FLOAT = auto()
+    DECL_FLOATING = auto()
+    DECL_FUNC = auto()
+    DECL_INT = auto()
+    DECL_INT128 = auto()
+    DECL_INT16 = auto()
+    DECL_INT32 = auto()
+    DECL_INT64 = auto()
+    DECL_LAST = auto()
+    DECL_LDOUBLE = auto()
+    DECL_PAF = auto()
+    DECL_PARTIAL = auto()
+    DECL_PTR = auto()
+    DECL_STRUCT = auto()
+    DECL_SUE = auto()
+    DECL_TBYTE = auto()
+    DECL_TYPEDEF = auto()
+    DECL_UCHAR = auto()
+    DECL_UDT = auto()
+    DECL_UINT = auto()
+    DECL_UINT128 = auto()
+    DECL_UINT16 = auto()
+    DECL_UINT32 = auto()
+    DECL_UINT64 = auto()
+    DECL_UNION = auto()
+    DECL_UNKNOWN = auto()
+    DECL_VOID = auto()
+    DECL_VOLATILE = auto()
+    DOUBLE = auto()
+    ENUM = auto()
+    EXT_ARITHMETIC = auto()
+    EXT_INTEGRAL = auto()
+    FLOAT = auto()
+    FLOATING = auto()
+    FUNC = auto()
+    FUNC_PTR = auto()
+    HIGH_LEVEL_FUNC = auto()
+    INT = auto()
+    INT128 = auto()
+    INT16 = auto()
+    INT32 = auto()
+    INT64 = auto()
+    INTEGRAL = auto()
+    LDOUBLE = auto()
+    PAF = auto()
+    PARTIAL = auto()
+    POINTER_UNKNOWN = auto()
+    POINTER_VOID = auto()
+    PTR = auto()
+    PTR_OR_ARRAY = auto()
+    PURGING_CALLING_CONVENTION = auto()
+    SCALAR = auto()
+    SHIFTED_PTR = auto()
+    STRUCT = auto()
+    SUE = auto()
+    TBYTE = auto()
+    UCHAR = auto()
+    UDT = auto()
+    UINT = auto()
+    UINT128 = auto()
+    UINT16 = auto()
+    UINT32 = auto()
+    UINT64 = auto()
+    UNION = auto()
+    UNKNOWN = auto()
+    USER_CALLING_CONVENTION = auto()
+    VARARG_CALLING_CONVENTION = auto()
+    VARIABLE_STRUCT = auto()
+    VARIABLE_STRUCT_MEMBER = auto()
+    VOID = auto()
+    VOLATILE = auto()
+    WELL_DEFINED = auto()
+
+
+class UdtAttr(Flag):
+    """User Defined Type flags"""
+
+    CPP_OBJ = auto()
+    FIXED = auto()
+    MS_STRUCT = auto()
+    TUPLE = auto()
+    UNALIGNED = auto()
+    VFTABLE = auto()
+
+
+UDT_ATTR_HANDLERS: Dict[UdtAttr, Callable[[udt_type_data_t], bool]] = {
+    UdtAttr.FIXED: lambda t: t.is_fixed(),
+    UdtAttr.UNALIGNED: lambda t: t.is_unaligned(),
+    UdtAttr.MS_STRUCT: lambda t: t.is_msstruct(),
+    UdtAttr.CPP_OBJ: lambda t: t.is_cppobj(),
+    UdtAttr.VFTABLE: lambda t: t.is_vftable(),
+    UdtAttr.TUPLE: lambda t: t.is_tuple(),
+}
+
+
+class UdtDetails:
+    """User Defined Type details"""
+
+    def __init__(self) -> None:
+        self.attributes: Optional[UdtAttr] = None
+        self.num_members = 0
+        self.is_union: bool
+
+    @classmethod
+    def extract(cls, type_info: tinfo_t) -> UdtDetails | None:
+        details = UdtDetails()
+        details.attributes = UdtAttr(0)
+        data = ida_typeinf.udt_type_data_t()
+
+        if type_info.get_udt_details(data):
+            details.num_members = type_info.get_udt_nmembers()
+            details.is_union = data.is_union
+            for flag, handler in UDT_ATTR_HANDLERS.items():
+                if handler(data):
+                    details.attributes |= flag
+
+            details.attributes = details.attributes or None
+            return details
+        else:
+            return None
+
+
+class EnumAttr(Flag):
+    """Enum Type flags"""
+
+    BITMASK = auto()
+    SIGNED = auto()
+    CHAR = auto()
+    DECIMAL = auto()
+    HEXADECIMAL = auto()
+    OCTAL = auto()
+    BINARY = auto()
+    UNSIGNED_DECIMAL = auto()
+    SIGNED_HEXADECIMAL = auto()
+    SIGNED_OCTAL = auto()
+    SIGNED_BINARY = auto()
+    LEADING_ZEROS = auto()
+
+
+ENUM_ATTR_HANDLERS: Dict[EnumAttr, Callable[[enum_type_data_t], bool]] = {
+    EnumAttr.BITMASK: lambda t: t.is_bf(),
+    EnumAttr.SIGNED: lambda t: t.is_number_signed(),
+    EnumAttr.CHAR: lambda t: t.is_char(),
+    EnumAttr.DECIMAL: lambda t: t.is_dec(),
+    EnumAttr.HEXADECIMAL: lambda t: t.is_hex(),
+    EnumAttr.OCTAL: lambda t: t.is_oct(),
+    EnumAttr.BINARY: lambda t: t.is_bin(),
+    EnumAttr.UNSIGNED_DECIMAL: lambda t: t.is_udec(),
+    EnumAttr.SIGNED_HEXADECIMAL: lambda t: t.is_shex(),
+    EnumAttr.SIGNED_OCTAL: lambda t: t.is_soct(),
+    EnumAttr.SIGNED_BINARY: lambda t: t.is_sbin(),
+    EnumAttr.LEADING_ZEROS: lambda t: t.has_lzero(),
+}
+
+
+class EnumDetails:
+    def __init__(self) -> None:
+        self.attributes: Optional[EnumAttr] = None
+
+    @classmethod
+    def extract(cls, type_info: tinfo_t) -> EnumDetails | None:
+        details = EnumDetails()
+        details.attributes = EnumAttr(0)
+        data = ida_typeinf.enum_type_data_t()
+
+        if type_info.get_enum_details(data):
+            for flag, handler in ENUM_ATTR_HANDLERS.items():
+                if handler(data):
+                    details.attributes |= flag
+
+            details.attributes = details.attributes or None
+            return details
+        else:
+            return None
+
+
+class PtrAttr(Flag):
+    """Pointer Type Flags"""
+
+    CODE_POINTER = auto()
+    SHIFTED = auto()
+
+
+PTR_ATTR_HANDLERS: Dict[PtrAttr, Callable[[ptr_type_data_t], bool]] = {
+    PtrAttr.CODE_POINTER: lambda t: t.is_code_ptr(),
+    PtrAttr.SHIFTED: lambda t: t.is_shifted(),
+}
+
+
+class PtrDetails:
+    def __init__(self) -> None:
+        self.attributes: Optional[PtrAttr] = None
+
+    @classmethod
+    def extract(cls, type_info: tinfo_t) -> PtrDetails | None:
+        details = PtrDetails()
+        details.attributes = PtrAttr(0)
+        data = ida_typeinf.ptr_type_data_t()
+
+        if type_info.get_ptr_details(data):
+            for flag, handler in PTR_ATTR_HANDLERS.items():
+                if handler(data):
+                    details.attributes |= flag
+
+            details.attributes = details.attributes or None
+            return details
+        else:
+            return None
+
+
+class ArrayDetails:
+    def __init__(self) -> None:
+        self.element_type: str
+        self.base: str
+        self.number_of_elements: str
+
+    @classmethod
+    def extract(cls, type_info: tinfo_t) -> ArrayDetails | None:
+        details: ArrayDetails = ArrayDetails()
+        data = ida_typeinf.array_type_data_t()
+
+        if type_info.get_array_details(data):
+            details.element_type = data.elem_type
+            details.base = data.base
+            details.number_of_elements = data.nelems
+            return details
+        else:
+            return None
+
+
+class FuncAttr(Flag):
+    """Function Type flags"""
+
+    HIGH_LEVEL = auto()
+    NO_RET = auto()  # No return
+    PURE = auto()
+    STATIC = auto()
+    VIRTUAL = auto()
+    CONST = auto()
+    CONSTRUCTOR = auto()  # Constructor
+    DESTRUCTOR = auto()  # Destructor
+    VARARG_CC = auto()  # Variable argument calling convention
+    GOLANG_CC = auto()  # Go calling convention
+    SWIFT_CC = auto()  # Swift calling convention
+    USER_CC = auto()  # User-defined calling convention
+
+
+FUNC_ATTR_HANDLERS: Dict[FuncAttr, Callable[[func_type_data_t], bool]] = {
+    FuncAttr.HIGH_LEVEL: lambda f: f.is_high(),
+    FuncAttr.NO_RET: lambda f: f.is_noret(),
+    FuncAttr.PURE: lambda f: f.is_pure(),
+    FuncAttr.STATIC: lambda f: f.is_static(),
+    FuncAttr.VIRTUAL: lambda f: f.is_virtual(),
+    FuncAttr.CONST: lambda f: f.is_const(),
+    FuncAttr.CONSTRUCTOR: lambda f: f.is_ctor(),
+    FuncAttr.DESTRUCTOR: lambda f: f.is_dtor(),
+    FuncAttr.VARARG_CC: lambda f: f.is_vararg_cc(),
+    FuncAttr.GOLANG_CC: lambda f: f.is_golang_cc(),
+    FuncAttr.SWIFT_CC: lambda f: f.is_swift_cc(),
+    FuncAttr.USER_CC: lambda f: f.is_user_cc(),
+}
+
+
+class FuncDetails:
+    def __init__(self) -> None:
+        self.attributes: Optional[FuncAttr] = None
+
+    @classmethod
+    def extract(cls, type_info: tinfo_t) -> FuncDetails | None:
+        details = FuncDetails()
+        details.attributes = FuncAttr(0)
+        data = ida_typeinf.func_type_data_t()
+
+        if type_info.get_func_details(data):
+            for flag, handler in FUNC_ATTR_HANDLERS.items():
+                if handler(data):
+                    details.attributes |= flag
+
+            details.attributes = details.attributes or None
+            return details
+        else:
+            return None
+
+
+class BitfieldAttr(Flag):
+    """Bitfield Type flags"""
+
+    UNSIGNED = auto()
+    VALID = auto()
+
+
+BITFIELD_ATTR_HANDLERS: Dict[BitfieldAttr, Callable[[bitfield_type_data_t], bool]] = {
+    BitfieldAttr.UNSIGNED: lambda f: f.is_unsigned,
+    BitfieldAttr.VALID: lambda f: f.is_valid_bitfield(),
+}
+
+
+class BitfieldDetails:
+    """Bitfield type details"""
+
+    def __init__(self) -> None:
+        self.attributes: Optional[BitfieldAttr] = None
+
+    @classmethod
+    def extract(cls, type_info: tinfo_t) -> BitfieldDetails | None:
+        details = BitfieldDetails()
+        details.attributes = BitfieldAttr(0)
+        data = ida_typeinf.bitfield_type_data_t()
+
+        if type_info.get_bitfield_details(data):
+            for flag, handler in BITFIELD_ATTR_HANDLERS.items():
+                if handler(data):
+                    details.attributes |= flag
+
+            details.attributes = details.attributes or None
+            return details
+        else:
+            return None
+
+
+class TypeDetails:
+    """Comprehensive type information with category-specific attributes"""
+
+    def __init__(self) -> None:
+        self.attributes = TypeAttr(0)
+        self.name: str
+        self.size: int = 0
+        self.udt_details: Optional[UdtDetails] = None
+        self.enum_details: Optional[EnumDetails] = None
+        self.ptr_details: Optional[PtrDetails] = None
+        self.array_details: Optional[ArrayDetails] = None
+        self.func_details: Optional[FuncDetails] = None
+        self.bitfield_details: Optional[BitfieldDetails] = None
+
+    @classmethod
+    def extract(cls, type_info: tinfo_t) -> TypeDetails:
+        details = TypeDetails()
+        details.name = type_info.get_type_name()
+        details.size = type_info.get_size()
+        for flag, handler in TYPE_ATTR_HANDLERS.items():
+            if handler(type_info):
+                details.attributes |= flag
+
+        details.udt_details = UdtDetails.extract(type_info)
+        details.enum_details = EnumDetails.extract(type_info)
+        details.func_details = FuncDetails.extract(type_info)
+        details.ptr_details = PtrDetails.extract(type_info)
+        details.array_details = ArrayDetails.extract(type_info)
+        details.bitfield_details = BitfieldDetails.extract(type_info)
+
+        return details
+
+
+TYPE_ATTR_HANDLERS: Dict[TypeAttr, Callable[[tinfo_t], bool]] = {
+    TypeAttr.ARITHMETIC: lambda t: t.is_arithmetic(),
+    TypeAttr.ARRAY: lambda t: t.is_array(),
+    TypeAttr.BITFIELD: lambda t: t.is_bitfield(),
+    TypeAttr.BOOL: lambda t: t.is_bool(),
+    TypeAttr.CHAR: lambda t: t.is_char(),
+    TypeAttr.COMPLEX: lambda t: t.is_complex(),
+    TypeAttr.CONST: lambda t: t.is_const(),
+    TypeAttr.CORRECT: lambda t: t.is_correct(),
+    TypeAttr.DECL_ARRAY: lambda t: t.is_decl_array(),
+    TypeAttr.DECL_BITFIELD: lambda t: t.is_decl_bitfield(),
+    TypeAttr.DECL_BOOL: lambda t: t.is_decl_bool(),
+    TypeAttr.DECL_CHAR: lambda t: t.is_decl_char(),
+    TypeAttr.DECL_COMPLEX: lambda t: t.is_decl_complex(),
+    TypeAttr.DECL_CONST: lambda t: t.is_decl_const(),
+    TypeAttr.DECL_DOUBLE: lambda t: t.is_decl_double(),
+    TypeAttr.DECL_ENUM: lambda t: t.is_decl_enum(),
+    TypeAttr.DECL_FLOAT: lambda t: t.is_decl_float(),
+    TypeAttr.DECL_FLOATING: lambda t: t.is_decl_floating(),
+    TypeAttr.DECL_FUNC: lambda t: t.is_decl_func(),
+    TypeAttr.DECL_INT128: lambda t: t.is_decl_int128(),
+    TypeAttr.DECL_INT16: lambda t: t.is_decl_int16(),
+    TypeAttr.DECL_INT32: lambda t: t.is_decl_int32(),
+    TypeAttr.DECL_INT64: lambda t: t.is_decl_int64(),
+    TypeAttr.DECL_INT: lambda t: t.is_decl_int(),
+    TypeAttr.DECL_LAST: lambda t: t.is_decl_last(),
+    TypeAttr.DECL_LDOUBLE: lambda t: t.is_decl_ldouble(),
+    TypeAttr.DECL_PAF: lambda t: t.is_decl_paf(),
+    TypeAttr.DECL_PARTIAL: lambda t: t.is_decl_partial(),
+    TypeAttr.DECL_PTR: lambda t: t.is_decl_ptr(),
+    TypeAttr.DECL_STRUCT: lambda t: t.is_decl_struct(),
+    TypeAttr.DECL_SUE: lambda t: t.is_decl_sue(),
+    TypeAttr.DECL_TBYTE: lambda t: t.is_decl_tbyte(),
+    TypeAttr.DECL_TYPEDEF: lambda t: t.is_decl_typedef(),
+    TypeAttr.DECL_UCHAR: lambda t: t.is_decl_uchar(),
+    TypeAttr.DECL_UDT: lambda t: t.is_decl_udt(),
+    TypeAttr.DECL_UINT128: lambda t: t.is_decl_uint128(),
+    TypeAttr.DECL_UINT16: lambda t: t.is_decl_uint16(),
+    TypeAttr.DECL_UINT32: lambda t: t.is_decl_uint32(),
+    TypeAttr.DECL_UINT64: lambda t: t.is_decl_uint64(),
+    TypeAttr.DECL_UINT: lambda t: t.is_decl_uint(),
+    TypeAttr.DECL_UNION: lambda t: t.is_decl_union(),
+    TypeAttr.DECL_UNKNOWN: lambda t: t.is_decl_unknown(),
+    TypeAttr.DECL_VOID: lambda t: t.is_decl_void(),
+    TypeAttr.DECL_VOLATILE: lambda t: t.is_decl_volatile(),
+    TypeAttr.DOUBLE: lambda t: t.is_double(),
+    TypeAttr.ENUM: lambda t: t.is_enum(),
+    TypeAttr.EXT_ARITHMETIC: lambda t: t.is_ext_arithmetic(),
+    TypeAttr.EXT_INTEGRAL: lambda t: t.is_ext_integral(),
+    TypeAttr.FLOAT: lambda t: t.is_float(),
+    TypeAttr.FLOATING: lambda t: t.is_floating(),
+    TypeAttr.FUNC: lambda t: t.is_func(),
+    TypeAttr.FUNC_PTR: lambda t: t.is_funcptr(),
+    TypeAttr.HIGH_LEVEL_FUNC: lambda t: t.is_high_func(),
+    TypeAttr.INT128: lambda t: t.is_int128(),
+    TypeAttr.INT16: lambda t: t.is_int16(),
+    TypeAttr.INT32: lambda t: t.is_int32(),
+    TypeAttr.INT64: lambda t: t.is_int64(),
+    TypeAttr.INT: lambda t: t.is_int(),
+    TypeAttr.INTEGRAL: lambda t: t.is_integral(),
+    TypeAttr.LDOUBLE: lambda t: t.is_ldouble(),
+    TypeAttr.PAF: lambda t: t.is_paf(),
+    TypeAttr.PARTIAL: lambda t: t.is_partial(),
+    TypeAttr.POINTER_UNKNOWN: lambda t: t.is_punknown(),
+    TypeAttr.POINTER_VOID: lambda t: t.is_pvoid(),
+    TypeAttr.PTR: lambda t: t.is_ptr(),
+    TypeAttr.PTR_OR_ARRAY: lambda t: t.is_ptr_or_array(),
+    TypeAttr.PURGING_CALLING_CONVENTION: lambda t: t.is_purging_cc(),
+    TypeAttr.SCALAR: lambda t: t.is_scalar(),
+    TypeAttr.SHIFTED_PTR: lambda t: t.is_shifted_ptr(),
+    TypeAttr.STRUCT: lambda t: t.is_struct(),
+    TypeAttr.SUE: lambda t: t.is_sue(),
+    TypeAttr.TBYTE: lambda t: t.is_tbyte(),
+    TypeAttr.UCHAR: lambda t: t.is_uchar(),
+    TypeAttr.UDT: lambda t: t.is_udt(),
+    TypeAttr.UINT128: lambda t: t.is_uint128(),
+    TypeAttr.UINT16: lambda t: t.is_uint16(),
+    TypeAttr.UINT32: lambda t: t.is_uint32(),
+    TypeAttr.UINT64: lambda t: t.is_uint64(),
+    TypeAttr.UINT: lambda t: t.is_uint(),
+    TypeAttr.UNION: lambda t: t.is_union(),
+    TypeAttr.UNKNOWN: lambda t: t.is_unknown(),
+    TypeAttr.USER_CALLING_CONVENTION: lambda t: t.is_user_cc(),
+    TypeAttr.VARARG_CALLING_CONVENTION: lambda t: t.is_vararg_cc(),
+    TypeAttr.VARIABLE_STRUCT: lambda t: t.is_varstruct(),
+    TypeAttr.VARIABLE_STRUCT_MEMBER: lambda t: t.is_varmember(),
+    TypeAttr.VOID: lambda t: t.is_void(),
+    TypeAttr.VOLATILE: lambda t: t.is_volatile(),
+    TypeAttr.WELL_DEFINED: lambda t: t.is_well_defined(),
+}
+
+
+class TypeDetailsVisitor(ida_typeinf.tinfo_visitor_t):
+    """
+    Visitor class for user defined types.
+    Can be used to recursively list the members of a type and output to JSON.
+    """
+
+    def __init__(self, db: Database):
+        ida_typeinf.tinfo_visitor_t.__init__(self, ida_typeinf.TVST_DEF)
+        self.output: list[TypeDetails] = []
+        self.db = db
+
+    def visit_type(
+        self, out: ida_typeinf.type_mods_t, tif: tinfo_t, name: str, comment: str
+    ) -> int:
+        details = self.db.types.get_type_details(tif)
+        self.output.append(details)
+
+        return 0
 
 
 @decorate_all_methods(check_db_open)
@@ -302,7 +854,12 @@ class Types(DatabaseEntity):
         """
         return ida_typeinf.parse_decls(library, decl, None, flags)
 
-    def get_type_name_at(self, ea: ea_t) -> str | None:
+    def get_type_by_name(self, name: str, library: til_t = None) -> tinfo_t | None:
+        if not library:
+            library = ida_typeinf.get_idati()
+        return library.get_named_type(name)
+
+    def get_type_at(self, ea: ea_t) -> tinfo_t | None:
         """
         Retrieves the type information of the item at the given address.
 
@@ -310,22 +867,30 @@ class Types(DatabaseEntity):
             ea: The effective address.
 
         Returns:
-            The type name or None if it does not exist.
+            The type information object or None if it does not exist.
 
         Raises:
             InvalidEAError: If the effective address is invalid.
         """
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
-        return ida_typeinf.idc_get_type(ea)
 
-    def apply_named_type_at(self, type: str, ea: ea_t) -> bool:
+        type_info = ida_typeinf.tinfo_t()
+        result = ida_nalt.get_tinfo(type_info, ea)
+        if result:
+            return type_info
+        return None
+
+    def apply_type_at(
+        self, type: tinfo_t, ea: ea_t, flags: TypeApplyFlags = TypeApplyFlags.GUESSED
+    ) -> bool:
         """
         Applies a named type to the given address.
 
         Args:
             ea: The effective address.
             type: The name of the type to apply.
+            flags: Type apply flags.
 
         Returns:
             True if the type was applied successfully, false otherwise.
@@ -335,7 +900,7 @@ class Types(DatabaseEntity):
         """
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
-        return ida_typeinf.apply_named_type(ea, type)
+        return ida_typeinf.apply_tinfo(ea, type, flags)
 
     def get_all(
         self, library: Optional[til_t] = None, type_kind: TypeKind = TypeKind.NAMED
@@ -358,3 +923,42 @@ class Types(DatabaseEntity):
             yield from til.named_types()
         elif type_kind == TypeKind.NUMBERED:
             yield from til.numbered_types()
+
+    def traverse_type(self, type_info: tinfo_t, visitor: ida_typeinf.tinfo_visitor_t) -> None:
+        """
+        Traverse and recursively print the members of a user defined type.
+
+        Args:
+            type_info: The type information object to visit.
+            visitor: A type visitor subclassed object.
+        """
+        visitor.apply_to(type_info)
+
+    def get_type_attributes(self, type_info: tinfo_t) -> TypeAttr:
+        """
+        Get type attributes.
+
+        Args:
+            type_info: The type information object for which to gather attributes.
+
+        Returns:
+            Type attribute flags.
+        """
+        attrs = TypeAttr(0)
+        for flag, handler in TYPE_ATTR_HANDLERS.items():
+            if handler(type_info):
+                attrs |= flag
+
+        return attrs
+
+    def get_type_details(self, type_info: tinfo_t) -> TypeDetails:
+        """
+        Get type details including attributes.
+
+        Args:
+            type_info: The type information object for which to gather details.
+
+        Returns:
+            Type details object.
+        """
+        return TypeDetails.extract(type_info)

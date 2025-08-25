@@ -14,6 +14,7 @@ import ida_typeinf
 
 from ida_domain.database import IdaCommandOptions
 from ida_domain.instructions import Instructions
+from ida_domain.types import TypeDetails
 
 idb_path: str = ''
 logger = logging.getLogger(__name__)
@@ -741,13 +742,6 @@ def test_types(test_env):
     all_types = db.types
     assert len(list(all_types)) == 0
 
-    type_name = db.types.get_type_name_at(0xB3)
-    assert type_name is None
-
-    assert not db.types.apply_named_type_at('int', 0xB3)
-    type_name = db.types.get_type_name_at(0xB3)
-    assert type_name is None
-
     til_path = Path(__file__).parent / 'resources' / 'example.til'
     assert til_path.exists()
     til = db.types.load_library(til_path)
@@ -758,6 +752,54 @@ def test_types(test_env):
 
     assert db.types.import_type(til, 'STRUCT_EXAMPLE')
     assert len(list(db.types)) == 2
+
+    tif = db.types.get_type_by_name('STRUCT_EXAMPLE')
+    assert not db.types.apply_type_at(tif, 0xB3)
+
+    type_info = db.types.get_type_at(0xB3)
+    assert type_info is None
+
+    assert not db.types.apply_type_at(tif, 0xB3)
+
+    from ida_domain.types import TYPE_ATTR_HANDLERS, TypeAttr, TypeDetailsVisitor
+
+    # Print details via visitor
+    visitor = TypeDetailsVisitor(db)
+    db.types.traverse_type(tif, visitor)
+    for item in visitor.output:
+        logger.debug(vars(item))
+        if item.udt_details:
+            logger.debug(vars(item.udt_details))
+
+    # Check for missing attr handlers
+    for i in TypeAttr:
+        assert i in TYPE_ATTR_HANDLERS
+
+    for k, _ in TYPE_ATTR_HANDLERS.items():
+        assert k in TypeAttr
+
+    # Check attributes
+    attrs = db.types.get_type_attributes(tif)
+
+    assert attrs
+    assert TypeAttr.UDT in attrs
+    assert TypeAttr.COMPLEX in attrs
+    assert TypeAttr.DECL_TYPEDEF in attrs
+    assert TypeAttr.STRUCT in attrs
+    assert TypeAttr.WELL_DEFINED in attrs
+    assert not TypeAttr.ARRAY in attrs
+    assert not TypeAttr.PTR in attrs
+
+    # Check details
+    type_details: TypeDetails = db.types.get_type_details(tif)
+    assert type_details
+    assert type_details.udt_details
+    assert type_details.udt_details.num_members == 3
+    assert not type_details.array_details
+    assert not type_details.ptr_details
+    assert not type_details.enum_details
+    assert not type_details.bitfield_details
+    assert not type_details.func_details
 
     db.types.unload_library(til)
 
