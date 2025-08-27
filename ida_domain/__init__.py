@@ -22,7 +22,13 @@ def _load_dependencies() -> None:
         need_idapro = True
 
     if need_idapro:
-        import idapro
+        try:
+            import idapro
+        except OSError as e:
+            raise RuntimeError(
+                'Failed to load idapro module. Make sure IDA is properly installed and '
+                'the IDADIR environment variable is set correctly.'
+            ) from e
 
 
 __version__ = '0.1.0'
