@@ -1,17 +1,21 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
+from enum import Flag
 
 import ida_bytes
+import ida_frame
 import ida_funcs
 import ida_hexrays
 import ida_lines
 import ida_name
 import ida_typeinf
+import ida_ua
 from ida_funcs import func_t
 from ida_idaapi import BADADDR, ea_t
 from ida_ua import insn_t
-from typing_extensions import TYPE_CHECKING, Iterator, List, Optional
+from typing_extensions import TYPE_CHECKING, Dict, Iterator, List, Optional
 
 from .base import (
     DatabaseEntity,
@@ -20,12 +24,62 @@ from .base import (
     check_db_open,
     decorate_all_methods,
 )
-from .basic_blocks import _FlowChart
+from .basic_blocks import FlowChart
 
 if TYPE_CHECKING:
     from .database import Database
 
 logger = logging.getLogger(__name__)
+
+
+class FunctionFlags(Flag):
+    """Function attribute flags from IDA SDK."""
+
+    NORET = ida_funcs.FUNC_NORET  # Function doesn't return
+    FAR = ida_funcs.FUNC_FAR  # Far function
+    LIB = ida_funcs.FUNC_LIB  # Library function
+    STATICDEF = ida_funcs.FUNC_STATICDEF  # Static function
+    FRAME = ida_funcs.FUNC_FRAME  # Function uses frame pointer (BP)
+    USERFAR = ida_funcs.FUNC_USERFAR  # User has specified far-ness of the function
+    HIDDEN = ida_funcs.FUNC_HIDDEN  # A hidden function chunk
+    THUNK = ida_funcs.FUNC_THUNK  # Thunk (jump) function
+    BOTTOMBP = ida_funcs.FUNC_BOTTOMBP  # BP points to the bottom of the stack frame
+    NORET_PENDING = ida_funcs.FUNC_NORET_PENDING  # Function 'non-return' analysis needed
+    SP_READY = ida_funcs.FUNC_SP_READY  # SP-analysis has been performed
+    FUZZY_SP = ida_funcs.FUNC_FUZZY_SP  # Function changes SP in untraceable way
+    PROLOG_OK = ida_funcs.FUNC_PROLOG_OK  # Prolog analysis has been performed
+    PURGED_OK = ida_funcs.FUNC_PURGED_OK  # 'argsize' field has been validated
+    TAIL = ida_funcs.FUNC_TAIL  # This is a function tail
+    LUMINA = ida_funcs.FUNC_LUMINA  # Function info is provided by Lumina
+    OUTLINE = ida_funcs.FUNC_OUTLINE  # Outlined code, not a real function
+    REANALYZE = ida_funcs.FUNC_REANALYZE  # Function frame changed, request to reanalyze
+    UNWIND = ida_funcs.FUNC_UNWIND  # Function is an exception unwind handler
+    CATCH = ida_funcs.FUNC_CATCH  # Function is an exception catch handler
+
+
+@dataclass
+class StackPoint:
+    """Stack pointer change information."""
+
+    ea: ea_t  # Address where SP changes
+    sp_delta: int  # Stack pointer delta at this point
+
+
+@dataclass
+class TailInfo:
+    """Function tail chunk information."""
+
+    owner_ea: ea_t  # Address of owning function
+    owner_name: str  # Name of owning function
+
+
+@dataclass
+class FunctionChunk:
+    """Represents a function chunk (main or tail)."""
+
+    start_ea: ea_t
+    end_ea: ea_t
+    is_main: bool
 
 
 @decorate_all_methods(check_db_open)
@@ -144,9 +198,10 @@ class Functions(DatabaseEntity):
         flags = ida_name.SN_NOCHECK if auto_correct else ida_name.SN_CHECK
         return ida_name.set_name(func.start_ea, name, flags)
 
-    def get_basic_blocks(self, func: func_t) -> Optional[_FlowChart]:
+    def get_flowchart(self, func: func_t) -> Optional[FlowChart]:
         """
-        Retrieves the basic blocks that compose the given function.
+        Retrieves the flowchart of the specified function,
+        which the user can use to retrieve basic blocks.
 
         Args:
             func: The function instance.
@@ -242,42 +297,7 @@ class Functions(DatabaseEntity):
         Raises:
             RuntimeError: If microcode generation fails for the function.
         """
-        mbr = ida_hexrays.mba_ranges_t(func)
-        hf = ida_hexrays.hexrays_failure_t()
-        ml = ida_hexrays.mlist_t()
-        mba = ida_hexrays.gen_microcode(
-            mbr, hf, ml, ida_hexrays.DECOMP_WARNINGS, ida_hexrays.MMAT_GENERATED
-        )
-
-        if not mba:
-            raise RuntimeError(f'Failed to generate microcode for function at 0x{func.start_ea:x}')
-
-        mba.build_graph()
-        total = mba.qty
-        for i in range(total):
-            if i == 0:
-                continue
-
-            block = mba.get_mblock(i)
-            if block.type == ida_hexrays.BLT_STOP:
-                continue
-
-            vp = ida_hexrays.qstring_printer_t(None, True)
-            block._print(vp)
-            src = vp.s
-            lines = src.splitlines()
-
-            if not remove_tags:
-                return lines
-
-            microcode = []
-            for line in lines:
-                new_line = ida_lines.tag_remove(line)
-                if new_line:
-                    microcode.append(new_line)
-
-            return microcode
-        return []
+        return self.database.bytes.get_microcode_between(func.start_ea, func.end_ea, remove_tags)
 
     def get_signature(self, func: func_t) -> str:
         """
@@ -339,6 +359,100 @@ class Functions(DatabaseEntity):
             raise InvalidEAError(ea)
         return ida_funcs.del_func(ea)
 
+    def get_next(self, ea: int) -> Optional[func_t]:
+        """
+        Get the next function after the given address.
+
+        Args:
+            ea: Address to search from
+
+        Returns:
+            Next function after ea, or None if no more functions
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+        """
+        if not self.database.is_valid_ea(ea, strict_check=False):
+            raise InvalidEAError(ea)
+        return ida_funcs.get_next_func(ea)
+
+    def get_chunk_at(self, ea: int) -> Optional[func_t]:
+        """
+        Get function chunk at exact address.
+
+        Args:
+            ea: Address within function chunk
+
+        Returns:
+            Function chunk or None
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+        return ida_funcs.get_fchunk(ea)
+
+    def is_entry_chunk(self, chunk: func_t) -> bool:
+        """
+        Check if chunk is entry chunk.
+
+        Args:
+            chunk: Function chunk to check
+
+        Returns:
+            True if this is an entry chunk, False otherwise
+        """
+        return ida_funcs.is_func_entry(chunk)
+
+    def is_tail_chunk(self, chunk: func_t) -> bool:
+        """
+        Check if chunk is tail chunk.
+
+        Args:
+            chunk: Function chunk to check
+
+        Returns:
+            True if this is a tail chunk, False otherwise
+        """
+        return ida_funcs.is_func_tail(chunk)
+
+    def get_flags(self, func: func_t) -> FunctionFlags:
+        """
+        Get function attribute flags.
+
+        Args:
+            func: Function object
+
+        Returns:
+            FunctionFlags enum with all active flags
+        """
+        return FunctionFlags(func.flags)
+
+    def is_far(self, func: func_t) -> bool:
+        """
+        Check if function is far.
+
+        Args:
+            func: Function object
+
+        Returns:
+            True if function is far, False otherwise
+        """
+        return func.is_far()
+
+    def does_return(self, func: func_t) -> bool:
+        """
+        Check if function returns.
+
+        Args:
+            func: Function object
+
+        Returns:
+            True if function returns, False if it's noreturn
+        """
+        return func.does_return()
+
     def get_callers(self, func: func_t) -> List[func_t]:
         """
         Gets all functions that call this function.
@@ -353,9 +467,9 @@ class Functions(DatabaseEntity):
         caller_addrs = set()  # Use set to avoid duplicates
 
         # Get all call references to this function
-        for xref in self.database.xrefs.get_calls_to(func.start_ea):
+        for caller_ea in self.database.xrefs.calls_to_ea(func.start_ea):
             # Get the function containing this call site
-            caller_func = self.get_at(xref.frm)
+            caller_func = self.get_at(caller_ea)
             if caller_func and caller_func.start_ea not in caller_addrs:
                 caller_addrs.add(caller_func.start_ea)
                 callers.append(caller_func)
@@ -378,9 +492,9 @@ class Functions(DatabaseEntity):
         # Iterate through all instructions in the function to find calls and jumps
         for inst in self.database.instructions.get_between(func.start_ea, func.end_ea):
             # Get call references from this instruction
-            for xref in self.database.xrefs.get_calls_from(inst.ea):
+            for target_ea in self.database.xrefs.calls_from_ea(inst.ea):
                 # Get the target function
-                target_func = self.get_at(xref.to)
+                target_func = self.get_at(target_ea)
                 if target_func and target_func.start_ea not in callee_addrs:
                     # Make sure we're not including the same function (recursive calls)
                     if target_func.start_ea != func.start_ea:
@@ -388,9 +502,9 @@ class Functions(DatabaseEntity):
                         callees.append(target_func)
 
             # Also get jump references for tail calls
-            for xref in self.database.xrefs.get_jumps_from(inst.ea):
+            for target_ea in self.database.xrefs.jumps_from_ea(inst.ea):
                 # Get the target function
-                target_func = self.get_at(xref.to)
+                target_func = self.get_at(target_ea)
                 if target_func and target_func.start_ea not in callee_addrs:
                     # Make sure we're not including the same function (recursive calls)
                     if target_func.start_ea != func.start_ea:
@@ -398,3 +512,132 @@ class Functions(DatabaseEntity):
                         callees.append(target_func)
 
         return callees
+
+    def get_function_by_name(self, name: str) -> Optional[func_t]:
+        """
+        Find a function by its name.
+
+        Args:
+            name: Function name to search for
+
+        Returns:
+            Function object if found, None otherwise
+        """
+        func_ea = ida_name.get_name_ea(BADADDR, name)
+        if func_ea != BADADDR:
+            return ida_funcs.get_func(func_ea)
+        return None
+
+    def get_tails(self, func: func_t) -> List[func_t]:
+        """
+        Get all tail chunks of a function.
+
+        Args:
+            func: Function object (must be entry chunk)
+
+        Returns:
+            List of tail chunks, empty if not entry chunk
+        """
+        if not ida_funcs.is_func_entry(func):
+            return []
+
+        tails = []
+        for i in range(func.tailqty):
+            tails.append(func.tails[i])
+        return tails
+
+    def get_stack_points(self, func: func_t) -> List[StackPoint]:
+        """
+        Get function stack points for SP tracking.
+
+        Args:
+            func: Function object
+
+        Returns:
+            List of StackPoint objects showing where SP changes
+        """
+        points = []
+        for i in range(func.pntqty):
+            pnt = func.points[i]
+            points.append(StackPoint(ea=pnt.ea, sp_delta=pnt.spd))
+        return points
+
+    def get_tail_info(self, chunk: func_t) -> Optional[TailInfo]:
+        """
+        Get information about tail chunk's owner function.
+
+        Args:
+            chunk: Function chunk (must be tail chunk)
+
+        Returns:
+            TailInfo with owner details, or None if not a tail chunk
+        """
+        if not ida_funcs.is_func_tail(chunk):
+            return None
+
+        owner_name = ''
+        if chunk.owner != BADADDR:
+            owner_name = self.database.names.get_at(chunk.owner) or ''
+
+        return TailInfo(owner_ea=chunk.owner, owner_name=owner_name)
+
+    def get_data_items(self, func: func_t) -> Iterator[ea_t]:
+        """
+        Iterate over data items within the function.
+
+        This method finds all addresses within the function that are defined
+        as data (not code). Useful for finding embedded data, jump tables,
+        or other non-code items within function boundaries.
+
+        Args:
+            func: The function object
+
+        Yields:
+            Addresses of data items within the function
+
+        Example:
+            ```python
+            >>> func = db.functions.get_at(0x401000)
+            >>> for data_ea in db.functions.get_data_items(func):
+            ...     size = ida_bytes.get_item_size(data_ea)
+            ...     print(f"Data at 0x{data_ea:x}, size: {size}")
+            ```
+        """
+        ea = func.start_ea
+        while ea < func.end_ea and ea != BADADDR:
+            flags = ida_bytes.get_flags(ea)
+            if ida_bytes.is_data(flags):
+                yield ea
+            ea = ida_bytes.next_head(ea, func.end_ea)
+
+    def get_chunks(self, func: func_t) -> Iterator[FunctionChunk]:
+        """
+        Get all chunks (main and tail) of a function.
+
+        Args:
+            func: The function to analyze.
+
+        Yields:
+            FunctionChunk objects representing each chunk.
+        """
+        # Main chunk
+        yield FunctionChunk(start_ea=func.start_ea, end_ea=func.end_ea, is_main=True)
+
+        # Tail chunks
+        for tail in ida_funcs.func_tail_iterator_t(func):
+            if tail.start_ea != func.start_ea:  # Skip main chunk
+                yield FunctionChunk(start_ea=tail.start_ea, end_ea=tail.end_ea, is_main=False)
+
+    def is_chunk_at(self, ea: ea_t) -> bool:
+        """
+        Check if the given address belongs to a function chunk.
+
+        Args:
+            ea: The address to check.
+
+        Returns:
+            True if the address is in a function chunk.
+        """
+        func = ida_funcs.get_func(ea)
+        chunk = ida_funcs.get_fchunk(ea)
+        return chunk is not None and (func != chunk)

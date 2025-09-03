@@ -50,34 +50,6 @@ class StringInfo:
     length: int
     type: StringType
 
-    def is_c_string(self) -> bool:
-        """Check if this is a C-style null-terminated string."""
-        return self.type in (StringType.C, StringType.C_16, StringType.C_32)
-
-    def is_pascal_string(self) -> bool:
-        """Check if this is a Pascal-style string."""
-        return self.type in (StringType.PASCAL, StringType.PASCAL_16, StringType.PASCAL_32)
-
-    def is_unicode(self) -> bool:
-        """Check if this is a Unicode string."""
-        return self.type in (
-            StringType.C_16,
-            StringType.C_32,
-            StringType.PASCAL_16,
-            StringType.PASCAL_32,
-            StringType.LEN2_16,
-            StringType.LEN2_32,
-        )
-
-    def get_encoding_info(self) -> str:
-        """Get a human-readable description of the string encoding."""
-        if self.type in (StringType.C_16, StringType.PASCAL_16, StringType.LEN2_16):
-            return 'UTF-16'
-        elif self.type in (StringType.C_32, StringType.PASCAL_32, StringType.LEN2_32):
-            return 'UTF-32'
-        else:
-            return 'ASCII/UTF-8'
-
 
 @decorate_all_methods(check_db_open)
 class Strings(DatabaseEntity):
@@ -136,7 +108,7 @@ class Strings(DatabaseEntity):
                 )
         raise IndexError(f'String index {index} out of range [0, {self.get_count()})')
 
-    def get_at(self, ea: ea_t) -> StringInfo | None:
+    def get_at(self, ea: ea_t) -> Optional[StringInfo]:
         """
         Retrieves detailed string information at the specified address.
 

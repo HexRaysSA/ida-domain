@@ -61,7 +61,7 @@ def import_types(db: Database, library_path: Path):
     for item in sorted(list(db.types), key=lambda i: i.get_ordinal()):
         print(f'{item.get_ordinal()}. {item}')
 
-    db.types.import_types_from_library(til)
+    db.types.import_from_library(til)
 
     print_subsection_header('Type information objects in local library (after import)')
     for item in sorted(list(db.types), key=lambda i: i.get_ordinal()):
@@ -74,7 +74,7 @@ def export_types(db: Database, library_path: Path):
     """Export all types from database to external library"""
 
     til = db.types.create_library(library_path, 'Exported type library')
-    db.types.export_types_to_library(til)
+    db.types.export_to_library(til)
     db.types.save_library(til, library_path)
     db.types.unload_library(til)
 

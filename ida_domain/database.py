@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
+from enum import Enum
 from types import TracebackType
 
 import ida_bytes
@@ -11,17 +12,9 @@ import ida_idaapi
 import ida_kernwin
 import ida_loader
 import ida_nalt
+import ida_typeinf
 from ida_idaapi import ea_t
-from typing_extensions import (
-    TYPE_CHECKING,
-    List,
-    Literal,
-    LiteralString,
-    Optional,
-    Self,
-    Type,
-    Union,
-)
+from typing_extensions import TYPE_CHECKING, List, Literal, Optional, Tuple, Type, Union
 
 from .base import check_db_open
 from .basic_blocks import BasicBlocks
@@ -64,6 +57,44 @@ class DatabaseMetadata:
     bitness: Optional[int] = None
     format: Optional[str] = None
     load_time: Optional[str] = None
+    compiler_information: Optional[str] = None
+    execution_mode: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class CompilerInformation:
+    """
+    Compiler information for the current database.
+    """
+
+    name: str
+    byte_size_bits: int
+    short_size_bits: int
+    enum_size_bits: int
+    int_size_bits: int
+    long_size_bits: int
+    double_size_bits: int
+    long_long_size_bits: int
+
+    def __str__(self) -> str:
+        size_fields = [
+            field for field in self.__dataclass_fields__ if field.endswith('_size_bits')
+        ]
+        sizes = [
+            f'{field.replace("_size_bits", "")}: {getattr(self, field)}' for field in size_fields
+        ]
+        sizes_str = ', '.join(sizes)
+        return f'Name: {self.name}, sizes in bits: ({sizes_str})'
+
+
+class ExecutionMode(Enum):
+    """Enumeration Execution Modes"""
+
+    User = 'User Mode'
+    Kernel = 'Kernel Mode'
+
+    def __str__(self) -> str:
+        return self.value
 
 
 @dataclass(frozen=True)
@@ -373,9 +404,9 @@ class Database:
         ```
     """
 
-    def __init__(self, hooks: HooksList = []) -> None:
+    def __init__(self, hooks: Optional[HooksList] = None) -> None:
         self.save_on_close = False
-        self._hooks = hooks
+        self._hooks = hooks if hooks is not None else []
 
     def __enter__(self) -> Database:
         """
@@ -418,7 +449,7 @@ class Database:
         path: str = '',
         args: Optional[IdaCommandOptions] = None,
         save_on_close: bool = False,
-        hooks: HooksList = [],
+        hooks: Optional[HooksList] = None,
     ) -> Database:
         """
         Database factory, opens a database from the specified file path.
@@ -444,33 +475,44 @@ class Database:
         """
         db = Database(hooks=hooks)
         db.save_on_close = save_on_close
-        db.hook()  # hook before load to also catch potential preload events
+        db.hook()  # hook before load to catch potential preload events
 
         try:
-            if ida_kernwin.is_ida_library(None, 0, None):
-                # Running  as library
-                if args is None:
-                    args = IdaCommandOptions()
+            is_library_mode = ida_kernwin.is_ida_library(None, 0, None)
 
-                # We can open a new database only in the context of idalib
-                import idapro
-
-                res = idapro.open_database(path, args.auto_analysis, args.build_args())
-                if res != 0:
-                    raise DatabaseError(f'Failed to open database {path}')
+            if is_library_mode and path:
+                cls._open_new_database(path, args)
             else:
-                # Running in IDA GUI
-                if path:
-                    raise DatabaseError('Opening a new database is not available in IDA GUI')
+                cls._use_current_database(path, is_library_mode)
 
-                idb_path = ida_loader.get_path(ida_loader.PATH_TYPE_IDB)
-                if not idb_path:
-                    raise DatabaseError('There is no database currently loaded.')
-        except Exception as _:
+        except Exception:
             db.unhook()
-        db.hook()  # decompiler hooks need to be installed after database open
+            raise
 
+        db.hook()  # decompiler hooks need to be installed after database open
         return db
+
+    @classmethod
+    def _open_new_database(cls, path: str, args: Optional[IdaCommandOptions]) -> None:
+        """Open a new database file in library mode."""
+        if args is None:
+            args = IdaCommandOptions()
+
+        import idapro
+
+        result = idapro.open_database(path, args.auto_analysis, args.build_args())
+        if result != 0:
+            raise DatabaseError(f'Failed to open database {path}')
+
+    @classmethod
+    def _use_current_database(cls, path: str, is_library_mode: bool) -> None:
+        """Use the currently loaded database."""
+        if not is_library_mode and path:
+            raise DatabaseError('Opening a new database is not available in IDA GUI')
+
+        loaded_idb = ida_loader.get_path(ida_loader.PATH_TYPE_IDB)
+        if not loaded_idb:
+            raise DatabaseError('There is no database currently loaded.')
 
     def is_open(self) -> bool:
         """
@@ -506,6 +548,20 @@ class Database:
             logger.error('Close is available only when running as a library.')
 
         self.unhook()
+
+    @check_db_open
+    def execute_script(self, file_path: str) -> Tuple[bool, str]:
+        """
+        Execute the specified python script
+
+        Args:
+            file_path: The script file path
+
+        Returns:
+            A tuple (success, error), if succeeded error is None.
+        """
+        compiler_error = ida_idaapi.IDAPython_ExecScript(file_path, globals())
+        return compiler_error is None, compiler_error
 
     def is_valid_ea(self, ea: ea_t, strict_check: bool = True) -> bool:
         """
@@ -566,7 +622,7 @@ class Database:
 
     @current_ea.setter
     @check_db_open
-    def current_ea(self, ea: int) -> None:
+    def current_ea(self, ea: ea_t) -> None:
         """
         Sets the current effective address (equivalent to the "screen EA" in IDA GUI).
         """
@@ -576,6 +632,22 @@ class Database:
             idapro.set_screen_ea(ea)
         else:
             ida_kernwin.jumpto(ea)
+
+    @property
+    @check_db_open
+    def start_ip(self) -> ea_t:
+        """
+        The start instruction pointer value
+        """
+        return ida_ida.inf_get_start_ip()
+
+    @start_ip.setter
+    @check_db_open
+    def start_ip(self, ea: ea_t) -> None:
+        """
+        Sets the instruction pointer value
+        """
+        ida_ida.inf_set_start_ip(ea)
 
     @property
     @check_db_open
@@ -675,6 +747,30 @@ class Database:
 
     @property
     @check_db_open
+    def execution_mode(self) -> ExecutionMode:
+        """The execution mode, user or kernel mode."""
+        return ExecutionMode.Kernel if ida_ida.inf_is_kernel_mode() else ExecutionMode.User
+
+    @property
+    @check_db_open
+    def compiler_information(self) -> CompilerInformation:
+        """Compiler information for current database."""
+        cc = ida_ida.compiler_info_t()
+        ida_ida.inf_get_cc(cc)
+
+        return CompilerInformation(
+            name=ida_typeinf.get_compiler_name(cc.id),
+            byte_size_bits=ida_ida.inf_get_cc_size_b() * 8,
+            short_size_bits=ida_ida.inf_get_cc_size_s() * 8,
+            enum_size_bits=ida_ida.inf_get_cc_size_e() * 8,
+            int_size_bits=ida_ida.inf_get_cc_size_i() * 8,
+            long_size_bits=ida_ida.inf_get_cc_size_l() * 8,
+            double_size_bits=ida_ida.inf_get_cc_size_ldbl() * 8,
+            long_long_size_bits=ida_ida.inf_get_cc_size_ll() * 8,
+        )
+
+    @property
+    @check_db_open
     def metadata(self) -> DatabaseMetadata:
         """
         Map of key-value metadata about the current database.
@@ -691,6 +787,8 @@ class Database:
             try:
                 value = getattr(self, prop_name)
                 if value is not None:
+                    if not isinstance(value, (int, float)):
+                        value = str(value)
                     # Store the original value with its original type
                     metadata_values[prop_name] = value
             except Exception:

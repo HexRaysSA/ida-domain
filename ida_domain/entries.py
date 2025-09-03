@@ -109,7 +109,7 @@ class Entries(DatabaseEntity):
             forwarder_name=forwarder,
         )
 
-    def get_by_ordinal(self, ordinal: int) -> EntryInfo | None:
+    def get_by_ordinal(self, ordinal: int) -> Optional[EntryInfo]:
         """Get entry point by its ordinal number.
 
         Args:
@@ -132,17 +132,17 @@ class Entries(DatabaseEntity):
             forwarder_name=forwarder,
         )
 
-    def get_by_address(self, address: ea_t) -> EntryInfo | None:
+    def get_at(self, ea: ea_t) -> Optional[EntryInfo]:
         """Get entry point by its address.
 
         Args:
-            address: Linear address to search for
+            ea: Linear address to search for
 
         Returns:
             Entry: The entry point at the specified address, or None if not found
         """
         for entry in self.get_all():
-            if entry.address == address:
+            if entry.address == ea:
                 return entry
         return None
 
@@ -207,7 +207,7 @@ class Entries(DatabaseEntity):
             if entry.has_forwarder():
                 yield ForwarderInfo(ordinal=entry.ordinal, name=entry.forwarder_name)
 
-    def get_by_name(self, name: str) -> EntryInfo | None:
+    def get_by_name(self, name: str) -> Optional[EntryInfo]:
         """Find entry point by name.
 
         Args:

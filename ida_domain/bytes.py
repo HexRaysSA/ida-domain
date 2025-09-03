@@ -5,13 +5,15 @@ import struct
 from enum import IntEnum, IntFlag
 
 import ida_bytes
+import ida_hexrays
 import ida_ida
 import ida_lines
 import ida_nalt
+import ida_range
 import ida_search
 import idc
 from ida_idaapi import BADADDR, ea_t
-from typing_extensions import TYPE_CHECKING, Optional
+from typing_extensions import TYPE_CHECKING, List, Optional
 
 from .base import (
     DatabaseEntity,
@@ -41,6 +43,7 @@ class StringType(IntEnum):
     PASCAL_32 = ida_nalt.STRTYPE_PASCAL_32
     """Pascal-style, four-byte length prefix."""
 
+
 class SearchFlags(IntFlag):
     """Search flags for text and pattern searching."""
 
@@ -66,115 +69,114 @@ class SearchFlags(IntFlag):
 class ByteFlags(IntFlag):
     """Byte flag constants for flag checking operations."""
 
-    # === Value and Initialization ===
     IVL = ida_bytes.FF_IVL
-    """Value and Initialization: Byte has value."""
+    """Byte has value."""
     MS_VAL = ida_bytes.MS_VAL
-    """Value and Initialization: Mask for byte value."""
+    """Mask for byte value."""
 
-    # === Item State Flags ===
+    # Item State Flags
     CODE = ida_bytes.FF_CODE
-    """Item State Flags: Code?"""
+    """Code?"""
     DATA = ida_bytes.FF_DATA
-    """Item State Flags: Data?"""
+    """Data?"""
     TAIL = ida_bytes.FF_TAIL
     """Tail?"""
     UNK = ida_bytes.FF_UNK
-    """Item State Flags: Unknown?"""
+    """Unknown?"""
 
-    # === Common State Information ===
+    # Common State Information
     COMM = ida_bytes.FF_COMM
-    """Common State Information: Has comment?"""
+    """Has comment?"""
     REF = ida_bytes.FF_REF
-    """Common State Information: Has references"""
+    """Has references"""
     LINE = ida_bytes.FF_LINE
-    """Common State Information: Has next or prev lines?"""
+    """Has next or prev lines?"""
     NAME = ida_bytes.FF_NAME
-    """Common State Information: Has name?"""
+    """Has name?"""
     LABL = ida_bytes.FF_LABL
-    """Common State Information: Has dummy name?"""
+    """Has dummy name?"""
     FLOW = ida_bytes.FF_FLOW
-    """Common State Information: Exec flow from prev instruction"""
+    """Exec flow from prev instruction"""
     SIGN = ida_bytes.FF_SIGN
-    """Common State Information: Inverted sign of operands"""
+    """Inverted sign of operands"""
     BNOT = ida_bytes.FF_BNOT
-    """Common State Information: Bitwise negation of operands"""
+    """Bitwise negation of operands"""
     UNUSED = ida_bytes.FF_UNUSED
-    """Common State Information: Unused bit"""
+    """Unused bit"""
 
-    # === Data Type Flags ===
+    # Data Type Flags
     BYTE = ida_bytes.FF_BYTE
-    """Data Type Flag: Byte"""
+    """Byte"""
     WORD = ida_bytes.FF_WORD
-    """Data Type Flag: Word"""
+    """Word"""
     DWORD = ida_bytes.FF_DWORD
-    """Data Type Flag: Double word"""
+    """Double word"""
     QWORD = ida_bytes.FF_QWORD
-    """Data Type Flag: Quad word"""
+    """Quad word"""
     TBYTE = ida_bytes.FF_TBYTE
-    """Data Type Flag: TByte"""
+    """TByte"""
     OWORD = ida_bytes.FF_OWORD
-    """Data Type Flag: Octaword/XMM word (16 bytes)"""
+    """Octaword/XMM word (16 bytes)"""
     YWORD = ida_bytes.FF_YWORD
-    """Data Type Flag: YMM word (32 bytes)"""
+    """YMM word (32 bytes)"""
     ZWORD = ida_bytes.FF_ZWORD
-    """Data Type Flag: ZMM word (64 bytes)"""
+    """ZMM word (64 bytes)"""
     FLOAT = ida_bytes.FF_FLOAT
-    """Data Type Flag: Float"""
+    """Float"""
     DOUBLE = ida_bytes.FF_DOUBLE
-    """Data Type Flag: Double"""
+    """Double"""
     PACKREAL = ida_bytes.FF_PACKREAL
-    """Data Type Flag: Packed decimal real"""
+    """Packed decimal real"""
     STRLIT = ida_bytes.FF_STRLIT
-    """Data Type Flag: String literal"""
+    """String literal"""
     STRUCT = ida_bytes.FF_STRUCT
-    """Data Type Flag: Struct variable"""
+    """Struct variable"""
     ALIGN = ida_bytes.FF_ALIGN
-    """Data Type Flag: Alignment directive"""
+    """Alignment directive"""
     CUSTOM = ida_bytes.FF_CUSTOM
-    """Data Type Flag: Custom data type"""
+    """Custom data type"""
 
-    # === Code-Specific Flags ===
+    # Code-Specific Flags
     FUNC = ida_bytes.FF_FUNC
-    """Code-Specific Flags: Function start?"""
+    """Function start?"""
     IMMD = ida_bytes.FF_IMMD
-    """Code-Specific Flags: Has immediate value?"""
+    """Has immediate value?"""
     JUMP = ida_bytes.FF_JUMP
-    """Code-Specific Flags: Has jump table or switch_info?"""
+    """Has jump table or switch_info?"""
 
-    # === Composite Flags ===
+    # Composite Flags
     ANYNAME = ida_bytes.FF_ANYNAME
-    """Composite Flags: Has name or dummy name?"""
+    """Has name or dummy name?"""
 
-    # === Operand Type Flags (for operand representation) ===
+    # Operand Type Flags (for operand representation)
     N_VOID = ida_bytes.FF_N_VOID
-    """Operand Type Flags: Void (unknown)?"""
+    """Void (unknown)?"""
     N_NUMH = ida_bytes.FF_N_NUMH
-    """Operand Type Flags: Hexadecimal number?"""
+    """Hexadecimal number?"""
     N_NUMD = ida_bytes.FF_N_NUMD
-    """Operand Type Flags: Decimal number?"""
+    """Decimal number?"""
     N_CHAR = ida_bytes.FF_N_CHAR
-    """Operand Type Flags: Char ('x')?"""
+    """Char ('x')?"""
     N_SEG = ida_bytes.FF_N_SEG
-    """Operand Type Flags: Segment?"""
+    """Segment?"""
     N_OFF = ida_bytes.FF_N_OFF
-    """Operand Type Flags: Offset?"""
+    """Offset?"""
     N_NUMB = ida_bytes.FF_N_NUMB
-    """Operand Type Flags: Binary number?"""
+    """Binary number?"""
     N_NUMO = ida_bytes.FF_N_NUMO
-    """Operand Type Flags: Octal number?"""
+    """Octal number?"""
     N_ENUM = ida_bytes.FF_N_ENUM
-    """Operand Type Flags: Enumeration?"""
+    """Enumeration?"""
     N_FOP = ida_bytes.FF_N_FOP
-    """Operand Type Flags: Forced operand?"""
+    """Forced operand?"""
     N_STRO = ida_bytes.FF_N_STRO
-    """Operand Type Flags: Struct offset?"""
+    """Struct offset?"""
     N_STK = ida_bytes.FF_N_STK
-    """Operand Type Flags: Stack variable?"""
+    """Stack variable?"""
     N_FLT = ida_bytes.FF_N_FLT
-    """Operand Type Flags: Floating point number?"""
+    """Floating point number?"""
     N_CUST = ida_bytes.FF_N_CUST
-    """Operand Type Flags: Custom representation?"""
+    """Custom representation?"""
 
 
 class NoValueError(ValueError):
@@ -359,7 +361,7 @@ class Bytes(DatabaseEntity):
                 f'Unsupported float value size {size} for floating-point data at 0x{ea:x}'
             )
 
-    def get_float_at(self, ea: ea_t, allow_uninitialized: bool = False) -> float | None:
+    def get_float_at(self, ea: ea_t, allow_uninitialized: bool = False) -> Optional[float]:
         """
         Retrieves a single-precision floating-point value at the specified address.
 
@@ -392,7 +394,7 @@ class Bytes(DatabaseEntity):
 
         return self._read_floating_point(ea, ida_bytes.float_flag())
 
-    def get_double_at(self, ea: ea_t, allow_uninitialized: bool = False) -> float | None:
+    def get_double_at(self, ea: ea_t, allow_uninitialized: bool = False) -> Optional[float]:
         """
         Retrieves a double-precision floating-point value at the specified address.
 
@@ -425,7 +427,7 @@ class Bytes(DatabaseEntity):
 
         return self._read_floating_point(ea, ida_bytes.double_flag())
 
-    def get_disassembly_at(self, ea: ea_t, remove_tags: bool = True) -> str | None:
+    def get_disassembly_at(self, ea: ea_t, remove_tags: bool = True) -> Optional[str]:
         """
         Retrieves the disassembly text at the specified address.
 
@@ -696,7 +698,7 @@ class Bytes(DatabaseEntity):
 
         return ida_bytes.revert_byte(ea)
 
-    def get_original_byte_at(self, ea: ea_t) -> int | None:
+    def get_original_byte_at(self, ea: ea_t) -> Optional[int]:
         """
         Get original byte value (that was before patching).
 
@@ -714,7 +716,7 @@ class Bytes(DatabaseEntity):
 
         return ida_bytes.get_original_byte(ea)
 
-    def get_original_word_at(self, ea: ea_t) -> int | None:
+    def get_original_word_at(self, ea: ea_t) -> Optional[int]:
         """
         Get original word value (that was before patching).
 
@@ -732,7 +734,7 @@ class Bytes(DatabaseEntity):
 
         return ida_bytes.get_original_word(ea)
 
-    def get_original_dword_at(self, ea: ea_t) -> int | None:
+    def get_original_dword_at(self, ea: ea_t) -> Optional[int]:
         """
         Get original dword value (that was before patching).
 
@@ -750,7 +752,7 @@ class Bytes(DatabaseEntity):
 
         return ida_bytes.get_original_dword(ea)
 
-    def get_original_qword_at(self, ea: ea_t) -> int | None:
+    def get_original_qword_at(self, ea: ea_t) -> Optional[int]:
         """
         Get original qword value (that was before patching).
 
@@ -770,7 +772,7 @@ class Bytes(DatabaseEntity):
 
     def find_bytes_between(
         self, pattern: bytes, start_ea: ea_t = None, end_ea: ea_t = None
-    ) -> ea_t | None:
+    ) -> Optional[ea_t]:
         """
         Finds a byte pattern in memory.
 
@@ -814,7 +816,7 @@ class Bytes(DatabaseEntity):
         start_ea: ea_t = None,
         end_ea: ea_t = None,
         flags: SearchFlags = SearchFlags.DOWN,
-    ) -> ea_t | None:
+    ) -> Optional[ea_t]:
         """
         Finds a text string in memory.
 
@@ -855,7 +857,7 @@ class Bytes(DatabaseEntity):
 
     def find_immediate_between(
         self, value: int, start_ea: ea_t = None, end_ea: ea_t = None
-    ) -> ea_t | None:
+    ) -> Optional[ea_t]:
         """
         Finds an immediate value in instructions.
 
@@ -1215,7 +1217,7 @@ class Bytes(DatabaseEntity):
 
         # Get struct size from type info
         element_size = idc.get_struc_size(tid)
-        if element_size <= 0:
+        if element_size is None or element_size <= 0:
             raise InvalidParameterError('tid', tid, 'invalid struct type ID')
 
         length = element_size * count
@@ -1749,7 +1751,7 @@ class Bytes(DatabaseEntity):
 
         return ida_bytes.is_forced_operand(ea, n)
 
-    def get_string_at(self, ea: ea_t, max_length: Optional[int] = None) -> str | None:
+    def get_string_at(self, ea: ea_t, max_length: Optional[int] = None) -> Optional[str]:
         """
         Gets a string from the specified address.
 
@@ -1793,7 +1795,7 @@ class Bytes(DatabaseEntity):
         else:
             return None
 
-    def get_cstring_at(self, ea: ea_t, max_length: int = 1024) -> str | None:
+    def get_cstring_at(self, ea: ea_t, max_length: int = 1024) -> Optional[str]:
         """
         Gets a C-style null-terminated string.
 
@@ -1837,7 +1839,7 @@ class Bytes(DatabaseEntity):
         else:
             return None
 
-    def get_original_bytes_at(self, ea: ea_t, size: int) -> bytes | None:
+    def get_original_bytes_at(self, ea: ea_t, size: int) -> Optional[bytes]:
         """
         Gets the original bytes before any patches by reading individual bytes.
 
@@ -1864,7 +1866,7 @@ class Bytes(DatabaseEntity):
             original_bytes.append(orig_byte & 0xFF)  # Ensure it's a byte value
         return bytes(original_bytes) if original_bytes else None
 
-    def get_bytes_at(self, ea: ea_t, size: int) -> bytes | None:
+    def get_bytes_at(self, ea: ea_t, size: int) -> Optional[bytes]:
         """
         Gets the specified number of bytes of the program.
 
@@ -1966,7 +1968,7 @@ class Bytes(DatabaseEntity):
         ret = ida_bytes.next_head(ea, max_ea)
         return ret if ret != BADADDR else None
 
-    def get_prev_head(self, ea: ea_t, min_ea: ea_t = None) -> Optional[ea_t]:
+    def get_previous_head(self, ea: ea_t, min_ea: ea_t = None) -> Optional[ea_t]:
         """
         Gets the previous head (start of data item) before the specified address.
 
@@ -1991,7 +1993,7 @@ class Bytes(DatabaseEntity):
         ret = ida_bytes.prev_head(ea, min_ea)
         return ret if ret != BADADDR else None
 
-    def get_next_addr(self, ea: ea_t) -> ea_t | None:
+    def get_next_address(self, ea: ea_t) -> Optional[ea_t]:
         """
         Gets the next valid address after the specified address.
 
@@ -2010,7 +2012,7 @@ class Bytes(DatabaseEntity):
         ret = ida_bytes.next_addr(ea)
         return ret if ret != BADADDR else None
 
-    def get_prev_addr(self, ea: ea_t) -> ea_t | None:
+    def get_previous_address(self, ea: ea_t) -> Optional[ea_t]:
         """
         Gets the previous valid address before the specified address.
 
@@ -2068,3 +2070,100 @@ class Bytes(DatabaseEntity):
 
         flags = ida_bytes.get_flags(ea)
         return (flags & flag_mask) != 0
+
+    def find_binary_sequence(
+        self, pattern: bytes, start_ea: ea_t = None, end_ea: ea_t = None
+    ) -> List[ea_t]:
+        """
+        Find all occurrences of a binary pattern.
+
+        Args:
+            pattern: Binary pattern to search for.
+            start_ea: Search start address; defaults to database minimum ea if None.
+            end_ea: Search end address; defaults to database maximum ea if None.
+
+        Returns:
+            List of addresses where pattern was found.
+
+        Raises:
+            InvalidParameterError: If pattern is invalid.
+            InvalidEAError: If start_ea or end_ea are specified but invalid.
+        """
+        if not isinstance(pattern, bytes):
+            raise InvalidParameterError('pattern', type(pattern), 'must be bytes')
+
+        if len(pattern) == 0:
+            raise InvalidParameterError('pattern', len(pattern), 'cannot be empty')
+
+        if start_ea is None:
+            start_ea = self.database.minimum_ea
+        elif not self.database.is_valid_ea(start_ea, strict_check=False):
+            raise InvalidEAError(start_ea)
+
+        if end_ea is None:
+            end_ea = self.database.maximum_ea
+        elif not self.database.is_valid_ea(end_ea, strict_check=False):
+            raise InvalidEAError(end_ea)
+
+        results = []
+        ea = ida_bytes.find_bytes(pattern, start_ea, None, end_ea)
+        while ea != BADADDR:
+            results.append(ea)
+            ea = ida_bytes.find_bytes(pattern, ea + 1, None, end_ea)
+        return results
+
+    def get_microcode_between(
+        self, start_ea: ea_t, end_ea: ea_t, remove_tags: bool = True
+    ) -> List[str]:
+        """
+        Retrieves the microcode of the given range.
+
+        Args:
+            start_ea: The range start.
+            end_ea: The range end.
+            remove_tags: If True, removes IDA color/formatting tags from the output.
+
+        Returns:
+            A list of strings, each representing a line of microcode. Returns empty list if
+            range is invalid or decompilation fails.
+
+        Raises:
+            RuntimeError: If microcode generation fails for the range.
+        """
+        mbr = ida_hexrays.mba_ranges_t()
+        mbr.ranges.push_back(ida_range.range_t(start_ea, end_ea))
+        hf = ida_hexrays.hexrays_failure_t()
+        ml = ida_hexrays.mlist_t()
+        mba = ida_hexrays.gen_microcode(
+            mbr, hf, ml, ida_hexrays.DECOMP_WARNINGS, ida_hexrays.MMAT_GENERATED
+        )
+
+        if not mba:
+            raise RuntimeError(f'Failed to generate microcode for range {start_ea:x}:{end_ea:x}')
+
+        mba.build_graph()
+        total = mba.qty
+        for i in range(total):
+            if i == 0:
+                continue
+
+            block = mba.get_mblock(i)
+            if block.type == ida_hexrays.BLT_STOP:
+                continue
+
+            vp = ida_hexrays.qstring_printer_t(None, True)
+            block._print(vp)
+            src = vp.s
+            lines = src.splitlines()
+
+            if not remove_tags:
+                return lines
+
+            microcode = []
+            for line in lines:
+                new_line = ida_lines.tag_remove(line)
+                if new_line:
+                    microcode.append(new_line)
+
+            return microcode
+        return []

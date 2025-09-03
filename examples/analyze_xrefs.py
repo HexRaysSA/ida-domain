@@ -20,9 +20,9 @@ def analyze_xrefs(db_path, target_addr):
 
         # Get references TO the target address
         xref_to_count = 0
-        for xref in db.xrefs.get_to(target_addr):
-            xref_type_name = db.xrefs.get_name(xref)
-            print(f'  From {hex(xref.frm)} to {hex(xref.to)} (type: {xref_type_name})')
+        for xref in db.xrefs.to_ea(target_addr):
+            xref_type_name = xref.type.name
+            print(f'  From {hex(xref.from_ea)} to {hex(xref.to_ea)} (type: {xref_type_name})')
             xref_to_count += 1
 
         if xref_to_count == 0:
@@ -34,9 +34,9 @@ def analyze_xrefs(db_path, target_addr):
 
         # Get references FROM the target address
         xref_from_count = 0
-        for xref in db.xrefs.get_from(target_addr):
-            xref_type_name = db.xrefs.get_name(xref)
-            print(f'  From {hex(xref.frm)} to {hex(xref.to)} (type: {xref_type_name})')
+        for xref in db.xrefs.from_ea(target_addr):
+            xref_type_name = xref.type.name
+            print(f'  From {hex(xref.from_ea)} to {hex(xref.to_ea)} (type: {xref_type_name})')
             xref_from_count += 1
 
         if xref_from_count == 0:
@@ -45,10 +45,10 @@ def analyze_xrefs(db_path, target_addr):
             print(f'  Total: {xref_from_count} outgoing references')
 
         # Use convenience methods for specific xref types
-        call_count = sum(1 for _ in db.xrefs.get_calls_to(target_addr))
-        jump_count = sum(1 for _ in db.xrefs.get_jumps_to(target_addr))
-        read_count = sum(1 for _ in db.xrefs.get_data_reads_of(target_addr))
-        write_count = sum(1 for _ in db.xrefs.get_data_writes_to(target_addr))
+        call_count = sum(1 for _ in db.xrefs.calls_to_ea(target_addr))
+        jump_count = sum(1 for _ in db.xrefs.jumps_to_ea(target_addr))
+        read_count = sum(1 for _ in db.xrefs.reads_of_ea(target_addr))
+        write_count = sum(1 for _ in db.xrefs.writes_to_ea(target_addr))
 
         # Summary
         print(f'\nSummary for {hex(target_addr)}:')

@@ -138,7 +138,7 @@ class Names(DatabaseEntity):
             return ida_name.get_nlist_ea(index), ida_name.get_nlist_name(index)
         raise IndexError(f'Name index {index} out of range [0, {self.get_count()})')
 
-    def get_at(self, ea: ea_t) -> str | None:
+    def get_at(self, ea: ea_t) -> Optional[str]:
         """
         Retrieves the name at the specified address.
 
@@ -330,7 +330,7 @@ class Names(DatabaseEntity):
 
     def get_demangled_name(
         self, ea: ea_t, inhibitor: Union[int, DemangleFlags] = 0, demform: int = 0
-    ) -> str | None:
+    ) -> Optional[str]:
         """
         Get demangled name at address.
 

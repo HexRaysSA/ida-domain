@@ -6,8 +6,15 @@ from enum import Enum
 from itertools import repeat
 
 import ida_bytes
+import ida_funcs
+import ida_lines
+import ida_segment
+import ida_typeinf
+from ida_funcs import func_t
 from ida_ida import inf_get_max_ea, inf_get_min_ea
 from ida_idaapi import BADADDR, ea_t
+from ida_segment import segment_t
+from ida_typeinf import tinfo_t
 from typing_extensions import TYPE_CHECKING, Iterator, Optional
 
 from .base import DatabaseEntity, InvalidEAError, check_db_open, decorate_all_methods
@@ -26,6 +33,15 @@ class CommentKind(Enum):
     REGULAR = 'regular'
     REPEATABLE = 'repeatable'
     ALL = 'all'
+
+
+class ExtraCommentKind(Enum):
+    """
+    Enumeration for extra comment positions.
+    """
+
+    ANTERIOR = 'anterior'  # Comments before the line (E_PREV)
+    POSTERIOR = 'posterior'  # Comments after the line (E_NEXT)
 
 
 @dataclass(frozen=True)
@@ -60,7 +76,9 @@ class Comments(DatabaseEntity):
     def __iter__(self) -> Iterator[CommentInfo]:
         return self.get_all()
 
-    def get(self, ea: ea_t, comment_kind: CommentKind = CommentKind.REGULAR) -> CommentInfo | None:
+    def get_at(
+        self, ea: ea_t, comment_kind: CommentKind = CommentKind.REGULAR
+    ) -> Optional[CommentInfo]:
         """
         Retrieves the comment at the specified address.
 
@@ -90,7 +108,7 @@ class Comments(DatabaseEntity):
         comment = ida_bytes.get_cmt(ea, is_repeatable)
         return CommentInfo(ea, comment, is_repeatable) if comment else None
 
-    def get_any(self, ea: ea_t) -> CommentInfo | None:
+    def get_any(self, ea: ea_t) -> Optional[CommentInfo]:
         """
         Retrieves any comment at the specified address, checking both regular and repeatable.
 
@@ -106,9 +124,11 @@ class Comments(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return self.get(ea, CommentKind.ALL)
+        return self.get_at(ea, CommentKind.ALL)
 
-    def set(self, ea: int, comment: str, comment_kind: CommentKind = CommentKind.REGULAR) -> bool:
+    def set_at(
+        self, ea: int, comment: str, comment_kind: CommentKind = CommentKind.REGULAR
+    ) -> bool:
         """
         Sets a comment at the specified address.
 
@@ -129,7 +149,7 @@ class Comments(DatabaseEntity):
         repeatable = comment_kind == CommentKind.REPEATABLE
         return ida_bytes.set_cmt(ea, comment, repeatable)
 
-    def delete(self, ea: int, comment_kind: CommentKind = CommentKind.REGULAR) -> bool:
+    def delete_at(self, ea: int, comment_kind: CommentKind = CommentKind.REGULAR) -> bool:
         """
         Deletes a comment at the specified address.
 
@@ -183,3 +203,188 @@ class Comments(DatabaseEntity):
             if next_addr == current or next_addr == BADADDR:
                 break
             current = next_addr
+
+    def set_extra_at(self, ea: int, index: int, comment: str, kind: ExtraCommentKind) -> bool:
+        """
+        Sets an extra comment at the specified address and index.
+
+        Args:
+            ea: The effective address.
+            index: The comment index (0-based).
+            comment: The comment text.
+            kind: ANTERIOR or POSTERIOR.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+
+        Returns:
+            True if successful.
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        base_idx = ida_lines.E_PREV if kind == ExtraCommentKind.ANTERIOR else ida_lines.E_NEXT
+        ida_lines.update_extra_cmt(ea, base_idx + index, comment)
+        return True
+
+    def get_extra_at(self, ea: int, index: int, kind: ExtraCommentKind) -> Optional[str]:
+        """
+        Gets a specific extra comment.
+
+        Args:
+            ea: The effective address.
+            index: The comment index (0-based).
+            kind: ANTERIOR or POSTERIOR.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+
+        Returns:
+            The comment text or None if not found.
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        base_idx = ida_lines.E_PREV if kind == ExtraCommentKind.ANTERIOR else ida_lines.E_NEXT
+        return ida_lines.get_extra_cmt(ea, base_idx + index)
+
+    def get_extra_all(self, ea: int, kind: ExtraCommentKind) -> Iterator[str]:
+        """
+        Gets all extra comments of a specific kind.
+
+        Args:
+            ea: The effective address.
+            kind: ANTERIOR or POSTERIOR.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+
+        Yields:
+            Comment strings in order.
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        base_idx = ida_lines.E_PREV if kind == ExtraCommentKind.ANTERIOR else ida_lines.E_NEXT
+        index = 0
+        while True:
+            comment = ida_lines.get_extra_cmt(ea, base_idx + index)
+            if comment is None:
+                break
+            yield comment
+            index += 1
+
+    def delete_extra_at(self, ea: int, index: int, kind: ExtraCommentKind) -> bool:
+        """
+        Deletes a specific extra comment.
+
+        Args:
+            ea: The effective address.
+            index: The comment index (0-based).
+            kind: ANTERIOR or POSTERIOR.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+
+        Returns:
+            True if successful.
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        base_idx = ida_lines.E_PREV if kind == ExtraCommentKind.ANTERIOR else ida_lines.E_NEXT
+        ida_lines.del_extra_cmt(ea, base_idx + index)
+        return True
+
+    def set_function_comment(self, func: func_t, comment: str, repeatable: bool = False) -> bool:
+        """
+        Set comment for function.
+
+        Args:
+            func: The function to set comment for.
+            comment: Comment text to set.
+            repeatable: If True, creates a repeatable comment (shows at all identical operands).
+                        If False, creates a non-repeatable comment (shows only at this function).
+
+        Returns:
+            True if successful, False otherwise.
+        """
+        return ida_funcs.set_func_cmt(func, comment, repeatable)
+
+    def get_function_comment(self, func: func_t, repeatable: bool = False) -> str:
+        """
+        Get comment for function.
+
+        Args:
+            func: The function to get comment from.
+            repeatable: If True, retrieves repeatable comment (shows at all identical operands).
+                        If False, retrieves non-repeatable comment (shows only at this function).
+
+        Returns:
+            Comment text, or empty string if no comment exists.
+        """
+        return ida_funcs.get_func_cmt(func, repeatable) or ''
+
+    def set_segment_comment(
+        self, segment: segment_t, comment: str, repeatable: bool = False
+    ) -> bool:
+        """
+        Set comment for segment.
+
+        Args:
+            segment: The segment to set comment for.
+            comment: Comment text to set.
+            repeatable: If True, creates a repeatable comment (shows at all identical operands).
+                        If False, creates a non-repeatable comment (shows only at this segment).
+
+        Returns:
+            True if successful, False otherwise.
+        """
+        try:
+            ida_segment.set_segment_cmt(segment, comment, repeatable)
+            return True
+        except Exception:
+            return False
+
+    def get_segment_comment(self, segment: segment_t, repeatable: bool = False) -> str:
+        """
+        Get comment for segment.
+
+        Args:
+            segment: The segment to get comment from.
+            repeatable: If True, retrieves repeatable comment (shows at all identical operands).
+                        If False, retrieves non-repeatable comment (shows only at this segment).
+
+        Returns:
+            Comment text, or empty string if no comment exists.
+        """
+        return ida_segment.get_segment_cmt(segment, repeatable) or ''
+
+    def set_type_comment(self, type_info: tinfo_t, comment: str) -> bool:
+        """
+        Set comment for type.
+        This function works only for non-trivial types
+
+        Args:
+            type_info: The type info object to set comment for.
+            comment: Comment text to set.
+
+        Returns:
+            True if successful, False otherwise.
+        """
+        if type_info.set_type_cmt(comment) == 0:
+            return True
+        else:
+            return False
+
+    def get_type_comment(self, type_info: tinfo_t) -> str:
+        """
+        Get comment for type.
+
+        Args:
+            type_info: The type info object to get comment from.
+
+        Returns:
+            Comment text, or empty string if no comment exists.
+        """
+        return type_info.get_type_cmt() or ''

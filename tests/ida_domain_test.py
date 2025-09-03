@@ -9,12 +9,13 @@ from pathlib import Path
 import pytest
 
 import ida_domain  # isort: skip
-from ida_idaapi import BADADDR  # isort: skip
 import ida_typeinf
+from ida_idaapi import BADADDR
 
 from ida_domain.database import IdaCommandOptions
 from ida_domain.instructions import Instructions
 from ida_domain.segments import *
+from ida_domain.types import TypeDetails
 
 idb_path: str = ''
 logger = logging.getLogger(__name__)
@@ -79,7 +80,7 @@ def test_database(test_env):
     metadata = db.metadata
     from dataclasses import fields
 
-    assert len(fields(metadata)) == 11
+    assert len(fields(metadata)) == 13
 
     assert 'test.bin' in metadata.path
     assert metadata.module == 'test.bin'
@@ -92,6 +93,23 @@ def test_database(test_env):
     assert metadata.bitness == 0x40
     assert metadata.format == 'ELF64 for x86-64 (Relocatable)'
     assert len(metadata.load_time) == 19  # dummy check, expect "YYYY-MM-DD HH:MM:SS"
+    assert metadata.execution_mode == 'User Mode'
+    assert metadata.compiler_information == (
+        'Name: GNU C++, sizes in bits: '
+        '(byte: 8, short: 16, enum: 32, int: 32, long: 64, double: 128, long_long: 64)'
+    )
+
+    compiler_info = db.compiler_information
+    assert compiler_info.name == 'GNU C++'
+    assert compiler_info.byte_size_bits == 8
+    assert compiler_info.short_size_bits == 16
+    assert compiler_info.enum_size_bits == 32
+    assert compiler_info.int_size_bits == 32
+    assert compiler_info.long_size_bits == 64
+    assert compiler_info.double_size_bits == 128
+    assert compiler_info.long_long_size_bits == 64
+
+    assert db.execution_mode == ida_domain.database.ExecutionMode.User
     db.close(False)
 
     # Test context manager protocol
@@ -137,10 +155,11 @@ def test_database(test_env):
 def test_segment(test_env):
     db = test_env
 
-    seg = db.segments.append(0, 0x100, ".test", PredefinedClass.CODE, AddSegmentFlags.NONE)
+    seg = db.segments.append(0, 0x100, '.test', PredefinedClass.CODE, AddSegmentFlags.NONE)
     assert seg is not None
-    assert db.segments.set_permissions(seg, SegmentPermissions.READ 
-                                       | SegmentPermissions.EXEC) == True
+    assert (
+        db.segments.set_permissions(seg, SegmentPermissions.READ | SegmentPermissions.EXEC) == True
+    )
     assert db.segments.add_permissions(seg, SegmentPermissions.WRITE) == True
     assert db.segments.remove_permissions(seg, SegmentPermissions.EXEC) == True
     assert db.segments.set_addressing_mode(seg, AddressingMode.BIT64) == True
@@ -160,6 +179,27 @@ def test_segment(test_env):
             assert seg is not None
             assert db.segments.get_name(seg) == '.data'
             assert seg.start_ea == 0x330
+
+    # Test segment comment methods
+    test_segment = db.segments.get_at(0x330)  # Use .data segment
+    assert test_segment is not None
+    test_comment = 'Test segment comment'
+    test_repeatable_comment = 'Test repeatable segment comment'
+
+    # Test non-repeatable segment comment
+    assert db.comments.set_segment_comment(test_segment, test_comment, False)
+    retrieved_comment = db.comments.get_segment_comment(test_segment, False)
+    assert retrieved_comment == test_comment
+
+    # Test repeatable segment comment
+    assert db.comments.set_segment_comment(test_segment, test_repeatable_comment, True)
+    retrieved_repeatable_comment = db.comments.get_segment_comment(test_segment, True)
+    assert retrieved_repeatable_comment == test_repeatable_comment
+
+    # Test getting non-existent comment returns empty string
+    text_segment = db.segments.get_at(0x0)  # Use .text segment
+    empty_comment = db.comments.get_segment_comment(text_segment, False)
+    assert empty_comment == ''
 
 
 def test_function(test_env):
@@ -183,7 +223,7 @@ def test_function(test_env):
     assert db.functions.set_name(func, 'add_numbers')
     assert func.name == 'add_numbers'
 
-    blocks = db.functions.get_basic_blocks(func)
+    blocks = db.functions.get_flowchart(func)
     assert blocks.size == 1
     assert blocks[0].start_ea == 0x2A3
     assert blocks[0].end_ea == 0x2AF
@@ -266,6 +306,115 @@ def test_function(test_env):
     assert len(callees) == 1
     assert callees[0].name == 'level3_func'
 
+    func = db.functions.get_at(0xC4)
+    next_func = db.functions.get_next(func.start_ea)
+    assert next_func is not None
+    assert next_func.name == 'add_numbers'
+    assert next_func.start_ea == 0x2A3
+
+    from ida_domain.base import InvalidEAError
+
+    with pytest.raises(InvalidEAError):
+        db.functions.get_next(0xFFFFFFFF)
+
+    func = db.functions.get_at(0x2A3)
+    chunk = db.functions.get_chunk_at(0x2A3)
+    assert chunk is not None
+    assert chunk.start_ea == func.start_ea
+    assert db.functions.is_entry_chunk(chunk) is True
+    assert db.functions.is_tail_chunk(chunk) is False
+    assert db.functions.is_chunk_at(0x2A3) is False
+
+    chunks = list(db.functions.get_chunks(func))
+    assert len(chunks) >= 1
+    assert chunks[0].start_ea == func.start_ea
+    assert chunks[0].end_ea == func.end_ea
+    assert chunks[0].is_main is True
+
+    func = db.functions.get_at(0x2A3)
+    assert func is not None
+    flags = db.functions.get_flags(func)
+    assert flags is not None
+    from ida_domain.functions import FunctionFlags
+
+    assert isinstance(flags, FunctionFlags)
+    assert db.functions.is_far(func) is False
+    assert db.functions.does_return(func) is True
+
+    func = db.functions.get_at(0x2A3)
+    assert func is not None
+
+    tails = db.functions.get_tails(func)
+    assert len(tails) == 0
+
+    stack_points = db.functions.get_stack_points(func)
+    assert len(stack_points) == 0
+
+    tail_info = db.functions.get_tail_info(func)
+    assert tail_info is None
+
+    func = db.functions.get_at(0x2A3)
+    assert func is not None
+
+    data_items = list(db.functions.get_data_items(func))
+    assert len(data_items) == 0
+
+    from ida_domain.base import InvalidEAError, InvalidParameterError
+
+    with pytest.raises(InvalidEAError):
+        db.functions.get_at(0xFFFFFFFF)
+
+    with pytest.raises(InvalidEAError):
+        db.functions.create(0xFFFFFFFF)
+
+    with pytest.raises(InvalidEAError):
+        db.functions.remove(0xFFFFFFFF)
+
+    with pytest.raises(InvalidEAError):
+        db.functions.get_next(0xFFFFFFFF)
+
+    with pytest.raises(InvalidEAError):
+        db.functions.get_chunk_at(0xFFFFFFFF)
+
+    with pytest.raises(InvalidEAError):
+        list(db.functions.get_between(0xFFFFFFFF, 0x1000))
+
+    with pytest.raises(InvalidEAError):
+        list(db.functions.get_between(0x1000, 0xFFFFFFFF))
+
+    with pytest.raises(InvalidEAError):
+        list(db.functions.get_between(0xFFFFFFFF, 0xEEEEEEEE))
+
+    func = db.functions.get_at(0x2A3)
+    with pytest.raises(InvalidParameterError):
+        db.functions.set_name(func, '')
+
+    with pytest.raises(InvalidParameterError):
+        db.functions.set_name(func, '   ')
+
+    with pytest.raises(InvalidParameterError):
+        db.functions.set_name(func, '\t\n')
+
+    # Test function comment methods
+    func = db.functions.get_at(0x2A3)
+    test_comment = 'Test function comment'
+    test_repeatable_comment = 'Test repeatable function comment'
+
+    # Test non-repeatable function comment
+    assert db.comments.set_function_comment(func, test_comment, False)
+    retrieved_comment = db.comments.get_function_comment(func, False)
+    assert retrieved_comment == test_comment
+
+    # Test repeatable function comment
+    assert db.comments.set_function_comment(func, test_repeatable_comment, True)
+    retrieved_repeatable_comment = db.comments.get_function_comment(func, True)
+    assert retrieved_repeatable_comment == test_repeatable_comment
+
+    # Test getting non-existent comment returns empty string
+    func_no_comment = db.functions.get_at(0x311)
+    empty_comment = db.comments.get_function_comment(func_no_comment, False)
+    assert empty_comment == ''
+
 
 def test_entries(test_env):
     db = test_env
@@ -280,7 +429,7 @@ def test_entries(test_env):
     assert db.entries[0] == ida_domain.entries.EntryInfo(0, 0, '_start', None)
     assert db.entries.get_at_index(0) == ida_domain.entries.EntryInfo(0, 0, '_start', None)
     assert db.entries.get_by_ordinal(0) == ida_domain.entries.EntryInfo(0, 0, '_start', None)
-    assert db.entries.get_by_address(0) == ida_domain.entries.EntryInfo(0, 0, '_start', None)
+    assert db.entries.get_at(0) == ida_domain.entries.EntryInfo(0, 0, '_start', None)
 
     assert db.entries.add(address=0xCC, name='test_entry', ordinal=1)
     assert db.entries.get_count() == 2
@@ -288,9 +437,7 @@ def test_entries(test_env):
     assert db.entries.get_by_ordinal(1) == ida_domain.entries.EntryInfo(
         1, 0xCC, 'test_entry', None
     )
-    assert db.entries.get_by_address(0xCC) == ida_domain.entries.EntryInfo(
-        1, 0xCC, 'test_entry', None
-    )
+    assert db.entries.get_at(0xCC) == ida_domain.entries.EntryInfo(1, 0xCC, 'test_entry', None)
 
     assert db.entries.rename(0, '_new_start')
     assert db.entries.get_at_index(0) == ida_domain.entries.EntryInfo(0, 0, '_new_start', None)
@@ -298,6 +445,59 @@ def test_entries(test_env):
     assert db.entries.get_by_name('_new_start') == ida_domain.entries.EntryInfo(
         0, 0, '_new_start', None
     )
+
+    assert db.entries.exists(0) is True
+    assert db.entries.exists(1) is True
+    assert db.entries.exists(999) is False
+
+    ordinals = list(db.entries.get_ordinals())
+    assert ordinals == [0, 1]
+
+    addresses = list(db.entries.get_addresses())
+    assert addresses == [0, 0xCC]
+
+    names = list(db.entries.get_names())
+    assert '_new_start' in names
+    assert 'test_entry' in names
+    assert len(names) == 2
+
+    assert db.entries.set_forwarder(1, 'kernel32.CreateFile')
+    entry_with_forwarder = db.entries.get_by_ordinal(1)
+    assert entry_with_forwarder.forwarder_name == 'kernel32.CreateFile'
+    assert entry_with_forwarder.has_forwarder() is True
+
+    forwarders = list(db.entries.get_forwarders())
+    assert len(forwarders) == 1
+    assert forwarders[0].ordinal == 1
+    assert forwarders[0].name == 'kernel32.CreateFile'
+
+    entry_no_forwarder = db.entries.get_by_ordinal(0)
+    assert entry_no_forwarder.has_forwarder() is False
+
+    with pytest.raises(IndexError):
+        db.entries.get_at_index(-1)
+
+    with pytest.raises(IndexError):
+        db.entries.get_at_index(999)
+
+    with pytest.raises(IndexError):
+        _ = db.entries[999]
+
+    assert db.entries.get_by_ordinal(999) is None
+    assert db.entries.get_at(0xFFFF) is None
+    assert db.entries.get_by_name('non_existent_entry') is None
+
+    assert db.entries.add(address=0xDD, name='auto_ordinal')
+    auto_entry = db.entries.get_at(0xDD)
+    assert auto_entry is not None
+    assert auto_entry.address == 0xDD
+    assert auto_entry.name == 'auto_ordinal'
+
+    assert db.entries.add(address=0xEE, name='no_code', ordinal=100, make_code=False)
+    no_code_entry = db.entries.get_by_ordinal(100)
+    assert no_code_entry is not None
+    assert no_code_entry.address == 0xEE
+    assert no_code_entry.name == 'no_code'
 
 
 def test_heads(test_env):
@@ -309,7 +509,7 @@ def test_heads(test_env):
         count += 1
     assert count == 201
 
-    assert db.heads.get_prev(db.minimum_ea) is None
+    assert db.heads.get_previous(db.minimum_ea) is None
     assert db.heads.get_next(db.maximum_ea) is None
 
     expected = [0xC8, 0xC9, 0xCB, 0xCD, 0xCF, 0xD1, 0xD4]
@@ -319,8 +519,79 @@ def test_heads(test_env):
         actual.append(ea)
     assert actual == expected
 
-    assert db.heads.get_prev(0xCB) == 0xC9
+    assert db.heads.get_previous(0xCB) == 0xC9
     assert db.heads.get_next(0xC9) == 0xCB
+
+    assert db.heads.is_head(0x67) is True  # Start of an instruction
+    assert db.heads.is_head(0x68) is False  # Middle of an instruction
+    assert db.heads.is_head(0x330) is True  # Start of data
+
+    assert db.heads.is_tail(0x67) is False  # Start of an instruction
+    assert db.heads.is_tail(0x68) is True  # Middle of an instruction
+    assert db.heads.is_tail(0x330) is False  # Start of data
+
+    assert db.heads.size(0x67) == 2
+    assert db.heads.size(0x330) == 8
+
+    from ida_domain.base import InvalidEAError, InvalidParameterError
+
+    with pytest.raises(InvalidParameterError):
+        db.heads.size(0x68)  # Not a head
+
+    start, end = db.heads.bounds(0x67)
+    assert start == 0x67 and end == 0x69
+
+    start, end = db.heads.bounds(0x68)  # Middle of instruction
+    assert start == 0x67
+    assert end == 0x69
+
+    start, end = db.heads.bounds(0x330)
+    assert start == 0x330 and end == 0x338
+
+    assert db.heads.is_code(0x67) is True  # Instruction address
+    assert db.heads.is_code(0x330) is False  # Data address
+    assert db.heads.is_code(0x3D4) is False  # String data
+
+    assert db.heads.is_data(0x67) is False  # Instruction address
+    assert db.heads.is_data(0x330) is True  # Data address
+    assert db.heads.is_data(0x3D4) is True  # String data
+
+    all_heads_list = list(db.heads.get_all())
+    assert len(all_heads_list) == 201  # Same count as iterator
+
+    with pytest.raises(InvalidEAError):
+        db.heads.get_next(0xFFFFFFFF)
+
+    with pytest.raises(InvalidEAError):
+        db.heads.get_previous(0xFFFFFFFF)
+
+    with pytest.raises(InvalidEAError):
+        db.heads.is_head(0xFFFFFFFF)
+
+    with pytest.raises(InvalidEAError):
+        db.heads.is_tail(0xFFFFFFFF)
+
+    with pytest.raises(InvalidEAError):
+        db.heads.size(0xFFFFFFFF)
+
+    with pytest.raises(InvalidEAError):
+        db.heads.bounds(0xFFFFFFFF)
+
+    with pytest.raises(InvalidEAError):
+        db.heads.is_code(0xFFFFFFFF)
+
+    with pytest.raises(InvalidEAError):
+        db.heads.is_data(0xFFFFFFFF)
+
+    with pytest.raises(InvalidEAError):
+        list(db.heads.get_between(0xFFFFFFFF, 0xFFFFFFFF))
+
+    with pytest.raises(InvalidParameterError):
+        list(db.heads.get_between(0x100, 0x50))  # start > end
+
+    bounds_result = db.heads.bounds(0x400)  # May be in undefined area
+    assert isinstance(bounds_result, tuple) and len(bounds_result) == 2
+    assert bounds_result[0] <= 0x400 <= bounds_result[1]
 
 
 def test_instruction(test_env):
@@ -330,6 +601,9 @@ def test_instruction(test_env):
     for _ in db.instructions:
         count += 1
     assert count == 197
+
+    instructions = list(db.instructions.get_all())
+    assert len(instructions) == 197
 
     instruction = db.instructions.get_at(0xD6)
     assert instruction is not None
@@ -342,12 +616,19 @@ def test_instruction(test_env):
     assert isinstance(operands[0], ida_domain.operands.RegisterOperand)
     assert isinstance(operands[1], ida_domain.operands.RegisterOperand)
 
+    assert isinstance(
+        db.instructions.get_operand(instruction, 0), ida_domain.operands.RegisterOperand
+    )
+    assert isinstance(
+        db.instructions.get_operand(instruction, 1), ida_domain.operands.RegisterOperand
+    )
+
     operands = db.instructions.get_operands(instruction)
     assert len(operands) == 2
     assert isinstance(operands[0], ida_domain.operands.RegisterOperand)
     assert isinstance(operands[1], ida_domain.operands.RegisterOperand)
 
-    instruction = db.instructions.get_prev(0xD6)
+    instruction = db.instructions.get_previous(0xD6)
     assert instruction is not None
     assert instruction.ea == 0xD4
     assert db.instructions.is_valid(instruction)
@@ -359,13 +640,58 @@ def test_instruction(test_env):
     assert isinstance(operands[0], ida_domain.operands.RegisterOperand)
     assert isinstance(operands[1], ida_domain.operands.RegisterOperand)
 
+    instructions = list(db.instructions.get_between(0xD0, 0xE0))
+    assert len(instructions) == 7
+
+    instruction = db.instructions.get_at(0xD6)
+    assert instruction is not None
+    mnemonic = db.instructions.get_mnemonic(instruction)
+    assert mnemonic == 'mov'
+
+    # Test get_operand with valid index
+    operand0 = db.instructions.get_operand(instruction, 0)
+    assert operand0 is not None
+    assert isinstance(operand0, ida_domain.operands.RegisterOperand)
+
+    operand1 = db.instructions.get_operand(instruction, 1)
+    assert operand1 is not None
+    assert isinstance(operand1, ida_domain.operands.RegisterOperand)
+
+    # Find a call instruction at 0x262
+    call_insn = db.instructions.get_at(0x262)
+    assert call_insn is not None
+    assert db.instructions.is_call_instruction(call_insn) is True
+    assert db.instructions.is_indirect_jump_or_call(call_insn) is True
+    assert db.instructions.breaks_sequential_flow(call_insn) is False
+
+    # Find a jump instruction at 0x269
+    jmp_insn = db.instructions.get_at(0x269)
+    assert jmp_insn is not None
+    assert db.instructions.is_call_instruction(jmp_insn) is False
+    assert db.instructions.is_indirect_jump_or_call(jmp_insn) is True
+    assert db.instructions.breaks_sequential_flow(jmp_insn) is True
+
+    from ida_domain.base import InvalidEAError, InvalidParameterError
+
+    with pytest.raises(InvalidEAError):
+        list(db.instructions.get_between(0xFFFFFFFF, 0xFFFFFFFF))
+
+    with pytest.raises(InvalidParameterError):
+        list(db.instructions.get_between(0x200, 0x100))
+
+    with pytest.raises(InvalidEAError):
+        db.instructions.get_at(0xFFFFFFFF)
+
+    with pytest.raises(InvalidEAError):
+        db.instructions.get_previous(0xFFFFFFFF)
+
 
 def test_basic_block(test_env):
     db = test_env
     func = db.functions.get_at(0x29E)
     assert func is not None
 
-    blocks = db.functions.get_basic_blocks(func)
+    blocks = db.functions.get_flowchart(func)
     assert blocks.size == 4
 
     # Validate expected blocks
@@ -389,10 +715,100 @@ def test_basic_block(test_env):
         (0x269, 'jmp     rax'),
     ]
 
-    instructions = db.basic_blocks.get_instructions(blocks[1])
+    instructions = db.instructions.get_between(blocks[1].start_ea, blocks[1].end_ea)
     for i, instruction in enumerate(instructions):
         assert expected_instructions[i][0] == instruction.ea
         assert expected_instructions[i][1] == db.instructions.get_disassembly(instruction)
+
+    # Test FlowChart iteration and length
+    assert len(blocks) == 4
+    block_count = 0
+    for block in blocks:
+        assert hasattr(block, 'start_ea')
+        assert hasattr(block, 'end_ea')
+        block_count += 1
+    assert block_count == 4
+
+    # Test FlowChart indexing with __getitem__
+    assert blocks[0].start_ea == 0xC4
+    assert blocks[3].end_ea == 0x2A3
+    with pytest.raises(IndexError):
+        blocks[4]  # Should raise IndexError
+
+    # Test successor and predecessor relationships
+    # First block (0xC4-0x262) should have one successor
+    first_block = blocks[0]
+    successors = list(first_block.get_successors())
+    assert len(successors) == 1
+    assert successors[0].start_ea == 0x272
+
+    instructions = list(first_block.get_instructions())
+    assert len(instructions) == 77
+
+    # Count successors
+    assert first_block.count_successors() == 1
+
+    # Last block (0x272-0x2A3) should have predecessors
+    last_block = blocks[3]
+    predecessors = list(last_block.get_predecessors())
+    assert len(predecessors) >= 1
+    # Check that at least one predecessor is from our function
+    assert any(pred.start_ea == 0xC4 for pred in predecessors)
+
+    # Count predecessors
+    assert last_block.count_predecessors() >= 1
+
+    # Test get_between method
+    flowchart = db.basic_blocks.get_between(0xC4, 0x2A3)
+    assert len(flowchart) == 4
+    assert flowchart[0].start_ea == 0xC4
+    assert flowchart[3].end_ea == 0x2A3
+
+    # Test get_between error handling
+    from ida_domain.base import InvalidEAError, InvalidParameterError
+
+    with pytest.raises(InvalidEAError):
+        db.basic_blocks.get_between(0xFFFFFFFF, 0xFFFFFFFF)
+
+    with pytest.raises(InvalidParameterError):
+        db.basic_blocks.get_between(0x200, 0x100)
+
+    # Test get_from_function method (same as db.functions.get_basic_blocks)
+    func_blocks = db.basic_blocks.get_from_function(func)
+    assert len(func_blocks) == 4
+    assert func_blocks[0].start_ea == blocks[0].start_ea
+    assert func_blocks[3].end_ea == blocks[3].end_ea
+
+    # Test with flags parameter
+    from ida_domain.basic_blocks import FlowChartFlags
+
+    func_blocks_with_flags = db.basic_blocks.get_from_function(func, flags=FlowChartFlags.NONE)
+    assert len(func_blocks_with_flags) == 4
+
+    # Test with NOEXT flag
+    func_blocks_noext = db.basic_blocks.get_from_function(func, flags=FlowChartFlags.NOEXT)
+    assert len(func_blocks_noext) == 4
+
+    # Test flowchart iteration for a different range
+    small_flowchart = db.basic_blocks.get_between(0x10, 0x20)
+    # Just verify iteration works regardless of block count
+    count = 0
+    for block in small_flowchart:
+        assert hasattr(block, 'start_ea')
+        assert hasattr(block, 'end_ea')
+        count += 1
+    assert count == len(small_flowchart)
+
+    # Test that successor/predecessor references are properly maintained
+    # Use the first block which we know has a successor
+    test_block_with_successor = blocks[0]
+    test_successors = list(test_block_with_successor.get_successors())
+    assert len(test_successors) > 0
+
+    for succ in test_successors:
+        # Check that we can get predecessors of the successor
+        succ_preds = list(succ.get_predecessors())
+        assert any(pred.start_ea == test_block_with_successor.start_ea for pred in succ_preds)
 
 
 def test_operands(test_env):
@@ -537,6 +953,7 @@ def test_operands(test_env):
 
 def test_strings(test_env):
     db = test_env
+    from ida_domain.base import InvalidEAError, InvalidParameterError
 
     assert db.strings.get_count() == 3
     assert len(db.strings) == 3
@@ -596,8 +1013,45 @@ def test_strings(test_env):
     assert 0x3E1 in found_addrs
 
     original_count = db.strings.get_count()
-    db.strings.build_string_list()  # Rebuild string list
+    db.strings.build_string_list()
     assert db.strings.get_count() == original_count  # Should be same count
+
+    string_info = db.strings.get_at(0x3D4)
+    assert string_info.type == StringType.C
+    assert string_info.content == 'Hello, IDA!\n'
+
+    with pytest.raises(InvalidEAError):
+        db.strings.get_at(0xFFFFFFFF)
+
+    with pytest.raises(InvalidEAError):
+        list(db.strings.get_between(0xFFFFFFFF, 0xFFFFFFFF))
+
+    with pytest.raises(InvalidParameterError):
+        list(db.strings.get_between(0x200, 0x100))
+
+    non_string_info = db.strings.get_at(0x100)
+    assert non_string_info is None
+
+    assert db.strings.get_length(0x100) == -1
+    assert db.strings.get_type(0x100) == -1
+
+    assert db.strings.exists_at(0x3A0) is True
+    assert db.strings.exists_at(0x100) is False
+
+    with pytest.raises(IndexError):
+        db.strings[100]
+
+    with pytest.raises(IndexError):
+        db.strings.get_at_index(-1)
+
+    for addr in [0x3A0, 0x3D4, 0x3E1]:
+        info = db.strings.get_at(addr)
+        assert info is not None
+        assert info.address == addr
+        assert len(info.content) > 0
+        assert info.length > 0
+        assert isinstance(info.type, StringType)
+        assert info.type == StringType.C
 
 
 def test_names(test_env):
@@ -731,31 +1185,168 @@ def test_names(test_env):
 def test_xrefs(test_env):
     db = test_env
     expected_xrefs = [0xC4]
-    expected_names = ['Ordinary_Flow']
-    xrefs_to = db.xrefs.get_to(0xC6)
-    for i, xrefblk in enumerate(xrefs_to):
-        assert xrefblk.frm == expected_xrefs[i]
-        assert db.xrefs.get_name(xrefblk) == expected_names[i]
+    expected_names = ['ORDINARY_FLOW']
+    xrefs_to = db.xrefs.to_ea(0xC6)
+    for i, xref in enumerate(xrefs_to):
+        assert xref.from_ea == expected_xrefs[i]
+        assert xref.type.name == expected_names[i]
 
     expected_xrefs = [0xD9]
-    expected_names = ['Ordinary_Flow']
-    xrefs_from = db.xrefs.get_from(0xD6)
-    for i, xrefblk in enumerate(xrefs_from):
-        assert xrefblk.to == expected_xrefs[i]
-        assert db.xrefs.get_name(xrefblk) == expected_names[i]
+    expected_names = ['ORDINARY_FLOW']
+    xrefs_from = db.xrefs.from_ea(0xD6)
+    for i, xref in enumerate(xrefs_from):
+        assert xref.to_ea == expected_xrefs[i]
+        assert xref.type.name == expected_names[i]
+
+    from ida_domain.xrefs import XrefsFlags
+
+    # Test to() with different XrefsFlags options
+    all_xrefs = list(db.xrefs.to_ea(0x2A3))
+    assert len(all_xrefs) >= 1
+
+    code_xrefs = list(db.xrefs.to_ea(0x2A3, XrefsFlags.CODE))
+    assert isinstance(code_xrefs, list)
+
+    code_xrefs_noflow = list(db.xrefs.to_ea(0x2A3, XrefsFlags.CODE_NOFLOW))
+    assert isinstance(code_xrefs_noflow, list)
+
+    data_xrefs = list(db.xrefs.to_ea(0x330, XrefsFlags.DATA))
+    assert isinstance(data_xrefs, list)
+
+    # Test from_() with different options
+    from_xrefs = list(db.xrefs.from_ea(0x27))
+    assert len(from_xrefs) >= 1
+
+    from_code = list(db.xrefs.from_ea(0x27, XrefsFlags.CODE))
+    assert isinstance(from_code, list)
+
+    from_data = list(db.xrefs.from_ea(0xFF, XrefsFlags.DATA))
+    assert isinstance(from_data, list)
+
+    from ida_domain.xrefs import CallerInfo
+
+    # Test call references
+    calls_to = list(db.xrefs.calls_to_ea(0x2A3))  # add_numbers
+    assert len(calls_to) == 1
+    assert calls_to[0] == 0x27
+
+    # Test callers with detailed info
+    callers = list(db.xrefs.get_callers(0x2A3))
+    assert isinstance(callers, list)
+    assert len(callers) == 1
+    assert isinstance(callers[0], CallerInfo)
+    assert callers[0].ea == 0x27
+
+    calls_from = list(db.xrefs.calls_from_ea(0x27))
+    assert len(calls_from) >= 1
+
+    # Test jump references
+    jumps_to = list(db.xrefs.jumps_to_ea(0x272))  # skip_jumps
+    assert isinstance(jumps_to, list)
+
+    jumps_from = list(db.xrefs.jumps_from_ea(0x270))
+    assert isinstance(jumps_from, list)
+
+    # Test data reads and writes
+    reads = list(db.xrefs.reads_of_ea(0x330))  # test_data
+    assert isinstance(reads, list)
+
+    writes = list(db.xrefs.writes_to_ea(0x330))
+    assert isinstance(writes, list)
+
+    # Test code refs to/from (now returns iterators)
+    code_refs_to = list(db.xrefs.code_refs_to_ea(0x2A3))
+    assert isinstance(code_refs_to, list)
+    assert len(code_refs_to) >= 1
+    assert all(isinstance(ea, int) for ea in code_refs_to)
+
+    code_refs_from = list(db.xrefs.code_refs_from_ea(0x27))
+    assert isinstance(code_refs_from, list)
+
+    # Test data refs to/from (now returns iterators)
+    data_refs_to = list(db.xrefs.data_refs_to_ea(0x330))
+    assert isinstance(data_refs_to, list)
+
+    data_refs_from = list(db.xrefs.data_refs_from_ea(0xFF))
+    assert isinstance(data_refs_from, list)
+
+    from ida_domain.xrefs import XrefType
+
+    # Test enhanced xref info
+    xrefs_info = list(db.xrefs.to_ea(0x2A3))
+    assert len(xrefs_info) == 1
+    assert xrefs_info[0].from_ea == 39
+    assert xrefs_info[0].is_code == True
+    assert xrefs_info[0].type == XrefType.CALL_NEAR
+    assert xrefs_info[0].user == False
+    assert xrefs_info[0].to_ea == 0x2A3
+    assert xrefs_info[0].is_call == True
+
+    # Test with custom flags
+    xrefs_custom = list(db.xrefs.to_ea(0x2A3, flags=XrefsFlags.CODE))
+    assert isinstance(xrefs_custom, list)
+
+    xrefs_from = list(db.xrefs.from_ea(0x27))
+    assert isinstance(xrefs_from, list)
+
+    # Test function callers
+    callers = list(db.xrefs.get_callers(0x2A3))
+    assert isinstance(callers, list)
+    assert len(callers) == 1
+    assert callers[0].ea == 0x27
+    assert callers[0].name == '.text:0000000000000027'
+    assert callers[0].xref_type == XrefType.CALL_NEAR
+    assert callers[0].function_ea is None
+
+    from ida_domain.base import InvalidEAError
+
+    invalid_ea = 0xFFFFFFFF
+
+    # Test all methods with invalid addresses
+    with pytest.raises(InvalidEAError):
+        list(db.xrefs.to_ea(invalid_ea))
+
+    with pytest.raises(InvalidEAError):
+        list(db.xrefs.from_ea(invalid_ea))
+
+    with pytest.raises(InvalidEAError):
+        list(db.xrefs.calls_to_ea(invalid_ea))
+
+    with pytest.raises(InvalidEAError):
+        list(db.xrefs.calls_from_ea(invalid_ea))
+
+    with pytest.raises(InvalidEAError):
+        list(db.xrefs.jumps_to_ea(invalid_ea))
+
+    with pytest.raises(InvalidEAError):
+        list(db.xrefs.jumps_from_ea(invalid_ea))
+
+    with pytest.raises(InvalidEAError):
+        list(db.xrefs.reads_of_ea(invalid_ea))
+
+    with pytest.raises(InvalidEAError):
+        list(db.xrefs.writes_to_ea(invalid_ea))
+
+    with pytest.raises(InvalidEAError):
+        list(db.xrefs.code_refs_to_ea(invalid_ea))
+
+    with pytest.raises(InvalidEAError):
+        list(db.xrefs.code_refs_from_ea(invalid_ea))
+
+    with pytest.raises(InvalidEAError):
+        list(db.xrefs.data_refs_to_ea(invalid_ea))
+
+    with pytest.raises(InvalidEAError):
+        list(db.xrefs.data_refs_from_ea(invalid_ea))
+
+    with pytest.raises(InvalidEAError):
+        list(db.xrefs.get_callers(invalid_ea))
 
 
 def test_types(test_env):
     db = test_env
     all_types = db.types
     assert len(list(all_types)) == 0
-
-    type_name = db.types.get_type_name_at(0xB3)
-    assert type_name is None
-
-    assert not db.types.apply_named_type_at('int', 0xB3)
-    type_name = db.types.get_type_name_at(0xB3)
-    assert type_name is None
 
     til_path = Path(__file__).parent / 'resources' / 'example.til'
     assert til_path.exists()
@@ -767,6 +1358,69 @@ def test_types(test_env):
 
     assert db.types.import_type(til, 'STRUCT_EXAMPLE')
     assert len(list(db.types)) == 2
+
+    tif = db.types.get_by_name('STRUCT_EXAMPLE')
+    assert not db.types.apply_at(tif, 0xB3)
+
+    type_info = db.types.get_at(0xB3)
+    assert type_info is None
+
+    assert not db.types.apply_at(tif, 0xB3)
+
+    from ida_domain.types import TypeAttr, TypeDetailsVisitor
+
+    # Print details via visitor
+    visitor = TypeDetailsVisitor(db)
+    db.types.traverse(tif, visitor)
+    for item in visitor.output:
+        logger.debug(vars(item))
+        if item.udt:
+            logger.debug(vars(item.udt))
+
+    # Check for missing attr handlers
+    for i in TypeAttr:
+        assert i in TypeDetails._HANDLERS
+
+    for k, _ in TypeDetails._HANDLERS.items():
+        assert k in TypeAttr
+
+    # Check details
+    type_details: TypeDetails = db.types.get_details(tif)
+    assert type_details
+    assert type_details.name == 'STRUCT_EXAMPLE'
+    assert type_details.udt
+    assert type_details.udt.num_members == 3
+    assert not type_details.array
+    assert not type_details.ptr
+    assert not type_details.enum
+    assert not type_details.bitfield
+    assert not type_details.func
+
+    # Check attributes
+    attrs = type_details.attributes
+    assert attrs
+    assert TypeAttr.ATTACHED in attrs
+    assert TypeAttr.UDT in attrs
+    assert TypeAttr.COMPLEX in attrs
+    assert TypeAttr.DECL_TYPEDEF in attrs
+    assert TypeAttr.STRUCT in attrs
+    assert TypeAttr.WELL_DEFINED in attrs
+    assert not TypeAttr.ARRAY in attrs
+    assert not TypeAttr.PTR in attrs
+
+    # Test type comment methods
+    test_comment = 'Test type comment'
+
+    # Test setting comment for the STRUCT_EXAMPLE type
+    assert db.comments.set_type_comment(tif, test_comment)
+    retrieved_comment = db.comments.get_type_comment(tif)
+    assert retrieved_comment == test_comment
+
+    # Test getting non-existent comment returns empty string
+    # Create a simple type without comment
+    simple_type = ida_typeinf.tinfo_t()
+    empty_comment = db.comments.get_type_comment(simple_type)
+    assert empty_comment == ''
 
     db.types.unload_library(til)
 
@@ -787,9 +1441,40 @@ def test_signature_files(test_env):
     assert sig_files[0] == f'{db.path}.sig'
     assert sig_files[1] == f'{db.path}.pat'
 
+    # Test applying a single signature file
+    sig_path = Path(sig_files[0])
+    assert sig_path.exists()
+    results = db.signature_files.apply(sig_path)
+    assert isinstance(results, list)
+    assert len(results) == 1
+
+    file_info = results[0]
+    assert isinstance(file_info, ida_domain.signature_files.FileInfo)
+    assert file_info.path == str(sig_path)
+    assert isinstance(file_info.matches, int)
+    assert isinstance(file_info.functions, list)
+    assert file_info.matches == 6
+    match_info = file_info.functions[0]
+    assert isinstance(match_info, ida_domain.signature_files.MatchInfo)
+    assert isinstance(match_info.addr, int)
+    assert isinstance(match_info.name, str)
+    assert 'test.bin.i64' in match_info.lib
+
+    # Apply with probe_only=True
+    results_probe = db.signature_files.apply(sig_path, probe_only=True)
+    assert isinstance(results_probe, list)
+    assert len(results_probe) == 1
+
+    index = db.signature_files.get_index(sig_path)
+    assert isinstance(index, int)
+    assert index >= 0
+
 
 def test_comments(test_env):
     db = test_env
+
+    all_comments = list(db.comments.get_all())
+    assert len(all_comments) == 10
 
     # Validate expected comments and their addresses
     expected_comments = [
@@ -810,26 +1495,101 @@ def test_comments(test_env):
         assert expected_comments[i][1] == comment_info.comment
         assert False == comment_info.repeatable
 
-    assert db.comments.set(0xAE, 'Testing adding regular comment')
-    assert db.comments.get(0xAE).comment == 'Testing adding regular comment'
-    assert not db.comments.get(0xAE, ida_domain.comments.CommentKind.REPEATABLE)
+    assert db.comments.set_at(0xAE, 'Testing adding regular comment')
+    assert db.comments.get_at(0xAE).comment == 'Testing adding regular comment'
+    assert not db.comments.get_at(0xAE, ida_domain.comments.CommentKind.REPEATABLE)
     assert (
-        db.comments.get(0xAE, ida_domain.comments.CommentKind.ALL).comment
+        db.comments.get_at(0xAE, ida_domain.comments.CommentKind.ALL).comment
         == 'Testing adding regular comment'
     )
 
-    assert db.comments.set(
+    assert db.comments.set_at(
         0xD1, 'Testing adding repeatable comment', ida_domain.comments.CommentKind.REPEATABLE
     )
     assert (
-        db.comments.get(0xD1, ida_domain.comments.CommentKind.REPEATABLE).comment
+        db.comments.get_at(0xD1, ida_domain.comments.CommentKind.REPEATABLE).comment
         == 'Testing adding repeatable comment'
     )
-    assert not db.comments.get(0xD1, ida_domain.comments.CommentKind.REGULAR)
+    assert not db.comments.get_at(0xD1, ida_domain.comments.CommentKind.REGULAR)
     assert (
-        db.comments.get(0xD1, ida_domain.comments.CommentKind.ALL).comment
+        db.comments.get_at(0xD1, ida_domain.comments.CommentKind.ALL).comment
         == 'Testing adding repeatable comment'
     )
+
+    test_ea = 0x100
+    assert db.comments.set_extra_at(
+        test_ea, 0, 'First anterior comment', ida_domain.comments.ExtraCommentKind.ANTERIOR
+    )
+    assert db.comments.set_extra_at(
+        test_ea, 1, 'Second anterior comment', ida_domain.comments.ExtraCommentKind.ANTERIOR
+    )
+
+    assert (
+        db.comments.get_extra_at(test_ea, 0, ida_domain.comments.ExtraCommentKind.ANTERIOR)
+        == 'First anterior comment'
+    )
+    assert (
+        db.comments.get_extra_at(test_ea, 1, ida_domain.comments.ExtraCommentKind.ANTERIOR)
+        == 'Second anterior comment'
+    )
+    assert (
+        db.comments.get_extra_at(test_ea, 2, ida_domain.comments.ExtraCommentKind.ANTERIOR) is None
+    )
+
+    assert db.comments.set_extra_at(
+        test_ea, 0, 'First posterior comment', ida_domain.comments.ExtraCommentKind.POSTERIOR
+    )
+    assert db.comments.set_extra_at(
+        test_ea, 1, 'Second posterior comment', ida_domain.comments.ExtraCommentKind.POSTERIOR
+    )
+
+    anterior_comments = list(
+        db.comments.get_extra_all(test_ea, ida_domain.comments.ExtraCommentKind.ANTERIOR)
+    )
+    assert len(anterior_comments) == 2
+    assert anterior_comments[0] == 'First anterior comment'
+    assert anterior_comments[1] == 'Second anterior comment'
+
+    posterior_comments = list(
+        db.comments.get_extra_all(test_ea, ida_domain.comments.ExtraCommentKind.POSTERIOR)
+    )
+    assert len(posterior_comments) == 2
+    assert posterior_comments[0] == 'First posterior comment'
+    assert posterior_comments[1] == 'Second posterior comment'
+
+    assert db.comments.delete_extra_at(test_ea, 1, ida_domain.comments.ExtraCommentKind.ANTERIOR)
+    remaining_anterior = list(
+        db.comments.get_extra_all(test_ea, ida_domain.comments.ExtraCommentKind.ANTERIOR)
+    )
+    assert len(remaining_anterior) == 1
+    assert remaining_anterior[0] == 'First anterior comment'
+
+    # Note: if you delete an extra comment at a position,
+    # all the subsequent ones are becoming "invisible" also
+    assert db.comments.delete_extra_at(test_ea, 0, ida_domain.comments.ExtraCommentKind.POSTERIOR)
+    remaining_posterior = list(
+        db.comments.get_extra_all(test_ea, ida_domain.comments.ExtraCommentKind.POSTERIOR)
+    )
+    assert len(remaining_posterior) == 0
+
+    with pytest.raises(ida_domain.base.InvalidEAError):
+        db.comments.get_at(0xFFFFFFFF)
+    with pytest.raises(ida_domain.base.InvalidEAError):
+        db.comments.set_at(0xFFFFFFFF, 'Invalid comment')
+    with pytest.raises(ida_domain.base.InvalidEAError):
+        db.comments.delete_at(0xFFFFFFFF)
+    with pytest.raises(ida_domain.base.InvalidEAError):
+        db.comments.get_any(0xFFFFFFFF)
+    with pytest.raises(ida_domain.base.InvalidEAError):
+        db.comments.set_extra_at(
+            0xFFFFFFFF, 0, 'Invalid', ida_domain.comments.ExtraCommentKind.ANTERIOR
+        )
+    with pytest.raises(ida_domain.base.InvalidEAError):
+        db.comments.get_extra_at(0xFFFFFFFF, 0, ida_domain.comments.ExtraCommentKind.ANTERIOR)
+    with pytest.raises(ida_domain.base.InvalidEAError):
+        list(db.comments.get_extra_all(0xFFFFFFFF, ida_domain.comments.ExtraCommentKind.ANTERIOR))
+    with pytest.raises(ida_domain.base.InvalidEAError):
+        db.comments.delete_extra_at(0xFFFFFFFF, 0, ida_domain.comments.ExtraCommentKind.ANTERIOR)
 
 
 def test_bytes(test_env):
@@ -926,6 +1686,11 @@ def test_bytes(test_env):
     assert db.bytes.create_float_at(0x3F0)
     assert db.bytes.is_float_at(0x3F0)
 
+    # Test comment methods
+    test_comment_addr = 0x3F0
+    test_comment = 'Test comment'
+    test_repeatable_comment = 'Test repeatable comment'
+
     assert db.bytes.create_double_at(0x3F4)
     assert db.bytes.is_double_at(0x3F4)
 
@@ -990,13 +1755,13 @@ def test_bytes(test_env):
     next_head = db.bytes.get_next_head(0x330)
     assert isinstance(next_head, int) and next_head == 0x332
 
-    prev_head = db.bytes.get_prev_head(0x340)
+    prev_head = db.bytes.get_previous_head(0x340)
     assert isinstance(prev_head, int) and prev_head == 0x338
 
-    next_addr = db.bytes.get_next_addr(0x330)
+    next_addr = db.bytes.get_next_address(0x330)
     assert isinstance(next_addr, int) and next_addr == 0x331
 
-    prev_addr = db.bytes.get_prev_addr(0x340)
+    prev_addr = db.bytes.get_previous_address(0x340)
     assert isinstance(prev_addr, int) and prev_addr == 0x33F
 
     test_patch_addr = 0x330  # Use test_data address for patching tests
@@ -1077,6 +1842,252 @@ def test_bytes(test_env):
 
     db.bytes.delete_value_at(string_addr)
     assert not db.bytes.is_value_initialized_at(string_addr)
+
+    byte_value = db.bytes.get_byte_at(0x3FA)
+    assert byte_value == 0x19
+
+    uninit_byte = db.bytes.get_byte_at(0x400, allow_uninitialized=True)
+    assert isinstance(uninit_byte, int)
+
+    assert db.bytes.is_string_literal_at(0x3D4)  # String location
+    assert not db.bytes.is_string_literal_at(0x67)  # Code location
+
+    assert db.bytes.get_next_address(db.maximum_ea - 1) is None
+    assert db.bytes.get_previous_address(db.minimum_ea) is None
+
+    next_head_limited = db.bytes.get_next_head(0x330, max_ea=0x335)
+    assert next_head_limited == 0x332 or next_head_limited is None
+
+    prev_head_limited = db.bytes.get_previous_head(0x340, min_ea=0x335)
+    assert prev_head_limited == 0x338 or prev_head_limited is None
+
+    string_result = db.bytes.create_string_at(0x3D4, length=5)
+    assert string_result
+
+    db.bytes.patch_bytes_at(0x330, b'\x90\x90')
+    assert db.bytes.get_byte_at(0x330) == 0x90
+
+    for addr in range(0x330, 0x338):
+        db.bytes.revert_byte_at(addr)
+
+    imm_found = db.bytes.find_immediate_between(0x1234, start_ea=0x0, end_ea=0x400)
+    assert imm_found is None or isinstance(imm_found, int)
+
+    text_found_case = db.bytes.find_text_between(
+        'hello', start_ea=0x3D0, end_ea=0x3E0, flags=SearchFlags.DOWN
+    )
+    assert text_found_case == 0x3D4
+
+    assert db.bytes.create_byte_at(0x400, count=2, force=True)
+    assert db.bytes.create_word_at(0x404, force=True)
+
+    test_flags = ByteFlags.CODE | ByteFlags.FUNC
+    assert db.bytes.check_flags_at(0x67, test_flags) or db.bytes.has_any_flags_at(0x67, test_flags)
+
+    # Test edge cases for string methods
+    # max_length=0 should raise InvalidParameterError
+    from ida_domain.base import InvalidParameterError
+
+    with pytest.raises(InvalidParameterError):
+        db.bytes.get_string_at(0x400, max_length=0)
+
+    # Test cstring with very small max_length
+    short_cstring = db.bytes.get_cstring_at(0x3D4, max_length=2)
+    assert len(short_cstring) == 2
+
+    from ida_domain.base import InvalidEAError
+
+    with pytest.raises(InvalidEAError):
+        db.bytes.get_byte_at(0xFFFFFFFF)
+
+    with pytest.raises(InvalidEAError):
+        db.bytes.get_word_at(0xFFFFFFFF)
+
+    with pytest.raises(InvalidEAError):
+        db.bytes.get_dword_at(0xFFFFFFFF)
+
+    with pytest.raises(InvalidEAError):
+        db.bytes.get_qword_at(0xFFFFFFFF)
+
+    with pytest.raises(InvalidEAError):
+        db.bytes.get_float_at(0xFFFFFFFF)
+
+    with pytest.raises(InvalidEAError):
+        db.bytes.get_double_at(0xFFFFFFFF)
+
+    with pytest.raises(InvalidEAError):
+        db.bytes.set_byte_at(0xFFFFFFFF, 0xFF)
+
+    with pytest.raises(InvalidEAError):
+        db.bytes.get_disassembly_at(0xFFFFFFFF)
+
+    with pytest.raises(InvalidEAError):
+        db.bytes.get_string_at(0xFFFFFFFF)
+
+    with pytest.raises(InvalidEAError):
+        db.bytes.is_string_literal_at(0xFFFFFFFF)
+
+    with pytest.raises(InvalidEAError):
+        db.bytes.delete_value_at(0xFFFFFFFF)
+
+    # Test basic functionality - find prologue pattern
+    prologue_pattern = b'\x48\x89\xe5'  # push rbp; mov rbp,rsp
+    results = db.bytes.find_binary_sequence(prologue_pattern)
+    assert isinstance(results, list)
+    assert len(results) > 0
+    for addr in results:
+        assert isinstance(addr, int)
+        assert db.bytes.get_bytes_at(addr, 3) == prologue_pattern
+
+    # Test with address range
+    results_range = db.bytes.find_binary_sequence(prologue_pattern, start_ea=0x0, end_ea=0x100)
+    assert isinstance(results_range, list)
+    assert all(0x0 <= addr < 0x100 for addr in results_range)
+
+    # Test with non-existent pattern
+    non_existent = b'\xff\xee\xdd\xcc\xbb\xaa'
+    empty_results = db.bytes.find_binary_sequence(non_existent)
+    assert isinstance(empty_results, list)
+    assert len(empty_results) == 0
+
+    # Test with specific known pattern in data section
+    data_pattern = b'\xef\xcd\xab\x90'  # Known pattern at 0x330
+    data_results = db.bytes.find_binary_sequence(data_pattern, start_ea=0x300, end_ea=0x400)
+    assert len(data_results) >= 1
+    assert 0x330 in data_results
+
+    with pytest.raises(InvalidParameterError):
+        db.bytes.find_binary_sequence('not bytes')  # Wrong type
+
+    with pytest.raises(InvalidParameterError):
+        db.bytes.find_binary_sequence(b'')  # Empty pattern
+
+    with pytest.raises(InvalidEAError):
+        db.bytes.find_binary_sequence(b'\x90', start_ea=0xFFFFFFFF)
+
+    with pytest.raises(InvalidEAError):
+        db.bytes.find_binary_sequence(b'\x90', end_ea=0xFFFFFFFF)
+
+    from ida_domain.bytes import NoValueError
+
+    # Delete a value to create an uninitialized location
+    test_addr_uninit = 0x400
+    db.bytes.delete_value_at(test_addr_uninit)
+    assert not db.bytes.is_value_initialized_at(test_addr_uninit)
+
+    with pytest.raises(NoValueError):
+        db.bytes.get_byte_at(test_addr_uninit, allow_uninitialized=False)
+
+    with pytest.raises(NoValueError):
+        db.bytes.get_word_at(test_addr_uninit, allow_uninitialized=False)
+
+    with pytest.raises(NoValueError):
+        db.bytes.get_dword_at(test_addr_uninit, allow_uninitialized=False)
+
+    with pytest.raises(NoValueError):
+        db.bytes.get_qword_at(test_addr_uninit, allow_uninitialized=False)
+
+    with pytest.raises(NoValueError):
+        db.bytes.get_float_at(test_addr_uninit, allow_uninitialized=False)
+
+    with pytest.raises(NoValueError):
+        db.bytes.get_double_at(test_addr_uninit, allow_uninitialized=False)
+
+    with pytest.raises(InvalidParameterError):
+        db.bytes.create_byte_at(0x400, count=0)
+
+    with pytest.raises(InvalidParameterError):
+        db.bytes.create_word_at(0x400, count=-1)
+
+    with pytest.raises(InvalidParameterError):
+        db.bytes.create_dword_at(0x400, count=0)
+
+    with pytest.raises(InvalidParameterError):
+        db.bytes.find_text_between('', start_ea=0x0)  # Empty text
+
+    with pytest.raises(InvalidParameterError):
+        db.bytes.find_text_between(123, start_ea=0x0)  # Wrong type
+
+    with pytest.raises(InvalidParameterError):
+        db.bytes.find_immediate_between('not int')  # Wrong type
+
+    with pytest.raises(InvalidParameterError):
+        db.bytes.get_bytes_at(0x330, size=0)
+
+    with pytest.raises(InvalidParameterError):
+        db.bytes.get_bytes_at(0x330, size=-5)
+
+    with pytest.raises(InvalidParameterError):
+        db.bytes.set_byte_at(0x330, -1)  # Negative value
+
+    with pytest.raises(InvalidParameterError):
+        db.bytes.set_byte_at(0x330, 256)  # Too large
+
+    with pytest.raises(InvalidParameterError):
+        db.bytes.set_word_at(0x330, -1)
+
+    with pytest.raises(InvalidParameterError):
+        db.bytes.set_word_at(0x330, 0x10000)  # Too large
+
+    with pytest.raises(InvalidParameterError):
+        db.bytes.set_dword_at(0x330, -1)
+
+    with pytest.raises(InvalidParameterError):
+        db.bytes.set_dword_at(0x330, 0x100000000)  # Too large
+
+    with pytest.raises(InvalidParameterError):
+        db.bytes.set_qword_at(0x330, -1)
+
+    with pytest.raises(InvalidParameterError):
+        db.bytes.set_qword_at(0x330, 0x10000000000000000)  # Too large
+
+    with pytest.raises(InvalidParameterError):
+        db.bytes.set_bytes_at(0x330, 'not bytes')
+
+    with pytest.raises(InvalidParameterError):
+        db.bytes.set_bytes_at(0x330, b'')  # Empty bytes
+
+    with pytest.raises(InvalidParameterError):
+        db.bytes.patch_bytes_at(0x330, 'not bytes')
+
+    with pytest.raises(InvalidParameterError):
+        db.bytes.patch_bytes_at(0x330, b'')  # Empty bytes
+
+    with pytest.raises(InvalidParameterError):
+        db.bytes.find_bytes_between(b'\x90', start_ea=0x100, end_ea=0x50)  # start > end
+
+    with pytest.raises(InvalidParameterError):
+        db.bytes.find_text_between('test', start_ea=0x100, end_ea=0x50)
+
+    with pytest.raises(InvalidParameterError):
+        db.bytes.find_immediate_between(0x1234, start_ea=0x100, end_ea=0x50)
+
+    with pytest.raises(InvalidParameterError):
+        db.bytes.create_struct_at(0x330, 1, -1)  # Negative tid
+
+    with pytest.raises(InvalidParameterError):
+        db.bytes.create_struct_at(0x330, 1, 999999)  # Non-existent tid
+
+    with pytest.raises(InvalidParameterError):
+        db.bytes.create_alignment_at(0x330, -1, 2)  # Negative length
+
+    with pytest.raises(InvalidParameterError):
+        db.bytes.create_alignment_at(0x330, 10, -1)  # Negative alignment
+
+    with pytest.raises(InvalidParameterError):
+        db.bytes.get_cstring_at(0x3D4, max_length=0)
+
+    with pytest.raises(InvalidParameterError):
+        db.bytes.get_cstring_at(0x3D4, max_length=-10)
+
+    with pytest.raises(InvalidParameterError):
+        db.bytes.get_original_bytes_at(0x330, size=0)
+
+    with pytest.raises(InvalidParameterError):
+        db.bytes.get_original_bytes_at(0x330, size=-5)
+
+    with pytest.raises(InvalidParameterError):
+        db.bytes.is_forced_operand_at(0x67, -1)
 
 
 def test_ida_command_options():
@@ -1431,3 +2442,58 @@ def test_readme_examples():
 
     # Check if example exists in readme
     assert example_content in readme_content, f'Example from {example_path} not found in README'
+
+
+def test_migrated_examples():
+    """
+    Make sure the migrated examples are running fine
+    """
+
+    # These examples are working in "standalone" mode
+    standalon_examples = [
+        Path('decompiler/decompile_entry_points.py'),
+        Path('decompiler/produce_c_file.py'),
+    ]
+    for example in standalon_examples:
+        script_path = (
+            Path(__file__).parent.parent / 'examples' / 'ida-python-equivalents' / example
+        )
+        cmd = [sys.executable, str(script_path), '-f', str(idb_path)]
+
+        result = subprocess.run(cmd, capture_output=True, text=True)
+
+        print(f'Example {script_path} outputs')
+        print('\n[STDOUT]')
+        print(result.stdout)
+        print('[STDERR]')
+        print(result.stderr)
+
+        assert result.returncode == 0, f'Example {script_path} failed to run'
+
+    # These examples are runing inside IDA, emulate the envirnoment with IDA Domain
+    inside_ida_examples_at_ea = [
+        (Path('decompiler/vds1.py'), 0xC4),
+        (Path('decompiler/vds13.py'), 0xC4),
+        (Path('disassembler/dump_flowchart.py'), 0xC4),
+        (Path('disassembler/assemble.py'), 0x30),
+        (Path('debugger/automatic_steps.py'), 0x307),
+        (Path('disassembler/dump_extra_comments.py'), 0x307),
+        (Path('disassembler/list_function_items.py'), 0xC4),
+        (Path('disassembler/list_segment_functions.py'), 0xC4),
+        (Path('disassembler/list_strings.py'), 0xC4),
+        (Path('disassembler/log_idb_events.py'), 0xC4),
+        (Path('types/create_libssh2_til.py'), 0xC4),
+        (Path('types/create_struct_by_parsing.py'), 0xC4),
+    ]
+    ida_options = IdaCommandOptions(auto_analysis=True, new_database=True)
+    for example, ea in inside_ida_examples_at_ea:
+        script_path = (
+            Path(__file__).parent.parent / 'examples' / 'ida-python-equivalents' / example
+        )
+        with ida_domain.Database.open(str(idb_path), ida_options, save_on_close=False) as db:
+            db.current_ea = ea
+            db.start_ip = ea
+            print(f'>>>========\nExecuting migrated IDA Python example {script_path.name}')
+            ret, error = db.execute_script(script_path)
+            print(f'Executing migrated IDA Python example {script_path.name} finised\n<<<=====')
+            assert ret, f'Example {script_path.name} failed to run, error {error}'

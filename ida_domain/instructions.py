@@ -7,7 +7,6 @@ import ida_idaapi
 import ida_idp
 import ida_lines
 import ida_ua
-from ida_ida import inf_get_max_ea, inf_get_min_ea
 from ida_ua import insn_t
 from typing_extensions import TYPE_CHECKING, Iterator, List, Optional
 
@@ -57,7 +56,7 @@ class Instructions(DatabaseEntity):
         """
         return insn and insn.itype != 0
 
-    def get_disassembly(self, insn: insn_t, remove_tags: bool = True) -> str | None:
+    def get_disassembly(self, insn: insn_t, remove_tags: bool = True) -> Optional[str]:
         """
         Retrieves the disassembled string representation of the given instruction.
 
@@ -73,7 +72,7 @@ class Instructions(DatabaseEntity):
             options |= ida_lines.GENDSM_REMOVE_TAGS
         return ida_lines.generate_disasm_line(insn.ea, options)
 
-    def get_at(self, ea: ea_t) -> insn_t | None:
+    def get_at(self, ea: ea_t) -> Optional[insn_t]:
         """
         Decodes the instruction at the specified address.
 
@@ -93,9 +92,9 @@ class Instructions(DatabaseEntity):
             return insn
         return None
 
-    def get_prev(self, ea: ea_t) -> insn_t | None:
+    def get_previous(self, ea: ea_t) -> Optional[insn_t]:
         """
-        Decodes prev instruction of the one at specified address.
+        Decodes previous instruction of the one at specified address.
 
         Args:
             ea: The effective address of the instruction.
@@ -119,7 +118,7 @@ class Instructions(DatabaseEntity):
         Returns:
             An iterator over the instructions.
         """
-        return self.get_between(inf_get_min_ea(), inf_get_max_ea())
+        return self.get_between(self.database.minimum_ea, self.database.maximum_ea)
 
     def get_between(self, start: ea_t, end: ea_t) -> Iterator[insn_t]:
         """
@@ -151,7 +150,7 @@ class Instructions(DatabaseEntity):
             # Move to next instruction for next call
             current = ida_bytes.next_head(current, end)
 
-    def get_mnemonic(self, insn: insn_t) -> str | None:
+    def get_mnemonic(self, insn: insn_t) -> Optional[str]:
         """
         Retrieves the mnemonic of the given instruction.
 
@@ -236,30 +235,35 @@ class Instructions(DatabaseEntity):
         feature = insn.get_canon_feature()
         return bool(feature & ida_idp.CF_CALL)
 
-    def is_jump_instruction(self, insn: insn_t) -> bool:
+    def is_indirect_jump_or_call(self, insn: insn_t) -> bool:
         """
-        Check if the instruction is a jump instruction.
+        Check if the instruction passes execution using indirect jump or call
 
         Args:
             insn: The instruction to analyze.
-
         Returns:
-            True if this is a jump instruction.
+            True if this instruction has the CF_JUMP flag set.
         """
+
         # Get canonical feature flags for the instruction
         feature = insn.get_canon_feature()
         return bool(feature & ida_idp.CF_JUMP)
 
-    def is_return_instruction(self, insn: insn_t) -> bool:
+    def breaks_sequential_flow(self, insn: insn_t) -> bool:
         """
-        Check if the instruction is a return instruction.
+        Check if the instruction stops sequential control flow.
+
+        This includes return instructions, unconditional jumps,
+        halt instructions, and any other instruction that doesn't
+        pass execution to the next sequential instruction.
 
         Args:
             insn: The instruction to analyze.
 
         Returns:
-            True if this is a return instruction.
+            True if this instruction has the CF_STOP flag set.
         """
+
         # Get canonical feature flags for the instruction
         feature = insn.get_canon_feature()
         return bool(feature & ida_idp.CF_STOP)

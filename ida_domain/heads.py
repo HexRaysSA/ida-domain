@@ -77,15 +77,15 @@ class Heads(DatabaseEntity):
             yield ea
             ea = ida_bytes.next_head(ea, end_ea)
 
-    def get_next(self, ea: ea_t) -> ea_t | None:
+    def get_next(self, ea: ea_t) -> Optional[ea_t]:
         """
-        Retrieves the next head.
+        Get the next head address.
 
         Args:
-            ea: Current head address.
+            ea: Current address.
 
         Returns:
-            Next head, on error returns None.
+            Next head address, or None if no next head exists.
 
         Raises:
             InvalidEAError: If the effective address is not in the database range.
@@ -93,18 +93,18 @@ class Heads(DatabaseEntity):
         if not self.database.is_valid_ea(ea, strict_check=False):
             raise InvalidEAError(ea)
 
-        ea = ida_bytes.next_head(ea, ida_ida.inf_get_max_ea())
+        ea = ida_bytes.next_head(ea, self.database.maximum_ea)
         return ea if ea != ida_idaapi.BADADDR else None
 
-    def get_prev(self, ea: ea_t) -> ea_t | None:
+    def get_previous(self, ea: ea_t) -> Optional[ea_t]:
         """
-        Retrieves the prev head.
+        Get the previous head address.
 
         Args:
-            ea: Current head address.
+            ea: Current address.
 
         Returns:
-            Prev head, on error returns None.
+            Previous head address, or None if no previous head exists.
 
         Raises:
             InvalidEAError: If the effective address is not in the database range.
@@ -112,5 +112,139 @@ class Heads(DatabaseEntity):
         if not self.database.is_valid_ea(ea, strict_check=False):
             raise InvalidEAError(ea)
 
-        ea = ida_bytes.prev_head(ea, ida_ida.inf_get_min_ea())
+        ea = ida_bytes.prev_head(ea, self.database.minimum_ea)
         return ea if ea != ida_idaapi.BADADDR else None
+
+    def is_head(self, ea: ea_t) -> bool:
+        """
+        Check if the given address is a head (start of an item).
+
+        Args:
+            ea: Address to check.
+
+        Returns:
+            True if the address is a head, False otherwise.
+
+        Raises:
+            InvalidEAError: If the effective address is not in the database range.
+        """
+        if not self.database.is_valid_ea(ea, strict_check=False):
+            raise InvalidEAError(ea)
+
+        return idc.is_head(ida_bytes.get_flags(ea))
+
+    def is_tail(self, ea: ea_t) -> bool:
+        """
+        Check if the given address is a tail (part of an item but not the start).
+
+        Args:
+            ea: Address to check.
+
+        Returns:
+            True if the address is a tail, False otherwise.
+
+        Raises:
+            InvalidEAError: If the effective address is not in the database range.
+        """
+        if not self.database.is_valid_ea(ea, strict_check=False):
+            raise InvalidEAError(ea)
+
+        return idc.is_tail(ida_bytes.get_flags(ea))
+
+    def size(self, ea: ea_t) -> int:
+        """
+        Get the size of the item at the given address.
+
+        Args:
+            ea: Address of the item.
+
+        Returns:
+            Size of the item in bytes.
+
+        Raises:
+            InvalidEAError: If the effective address is not in the database range.
+            InvalidParameterError: If the address is not a head.
+        """
+        if not self.database.is_valid_ea(ea, strict_check=False):
+            raise InvalidEAError(ea)
+
+        if not self.is_head(ea):
+            raise InvalidParameterError('ea', ea, 'must be a head address')
+
+        return ida_bytes.get_item_size(ea)
+
+    def bounds(self, ea: ea_t) -> tuple[ea_t, ea_t]:
+        """
+        Get the bounds (start and end addresses) of the item containing the given address.
+
+        Args:
+            ea: Address within the item.
+
+        Returns:
+            Tuple of (start_address, end_address) of the item.
+
+        Raises:
+            InvalidEAError: If the effective address is not in the database range.
+        """
+        if not self.database.is_valid_ea(ea, strict_check=False):
+            raise InvalidEAError(ea)
+
+        # Find the head of the item containing this address
+        head_ea = ida_bytes.get_item_head(ea)
+        if head_ea == ida_idaapi.BADADDR:
+            # If no item at this address, return single-byte bounds
+            return (ea, ea + 1)
+
+        size = ida_bytes.get_item_size(head_ea)
+        return (head_ea, head_ea + size)
+
+    def is_code(self, ea: ea_t) -> bool:
+        """
+        Check if the item at the given address is code.
+
+        Args:
+            ea: Address to check.
+
+        Returns:
+            True if the item is code, False otherwise.
+
+        Raises:
+            InvalidEAError: If the effective address is not in the database range.
+        """
+        if not self.database.is_valid_ea(ea, strict_check=False):
+            raise InvalidEAError(ea)
+
+        return idc.is_code(ida_bytes.get_flags(ea))
+
+    def is_data(self, ea: ea_t) -> bool:
+        """
+        Check if the item at the given address is data.
+
+        Args:
+            ea: Address to check.
+
+        Returns:
+            True if the item is data, False otherwise.
+
+        Raises:
+            InvalidEAError: If the effective address is not in the database range.
+        """
+        if not self.database.is_valid_ea(ea, strict_check=False):
+            raise InvalidEAError(ea)
+
+        return idc.is_data(ida_bytes.get_flags(ea))
+
+    def is_unknown(self, ea: ea_t) -> bool:
+        """
+        Check if the item at the given address is unknown.
+
+        Args:
+            ea: Address to check.
+
+        Returns:
+            True if the item is data, False otherwise.
+
+        Raises:
+            InvalidEAError: If the effective address is not in the database range.
+        """
+        return self.database.bytes.is_unknown_at(ea)

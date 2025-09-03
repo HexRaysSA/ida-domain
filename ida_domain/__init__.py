@@ -34,7 +34,7 @@ _load_dependencies()
 # Keep the ida kernel version as int, eg: 920
 import ida_ida
 
-__ida_version__ = ida_ida.inf_get_version()
+__ida_version__: int = ida_ida.inf_get_version()
 
 if __ida_version__ < 910:
     raise ImportError('IDA Domain requires IDA 9.1.0 or later')

@@ -268,7 +268,7 @@ def traverse_basic_blocks(db: ida_domain.Database) -> None:
         print(f'Displaying first {display_count} basic blocks:')
 
     for i, bb in enumerate(basic_blocks[:display_count], 1):
-        print(f'  [{i:2d}] Start: 0x{bb.start_ea:08x} | End: 0x{bb.end_ea:08x} | Size: {bb.size}')
+        print(f'  [{i:2d}] Start: 0x{bb.start_ea:08x} | End: 0x{bb.end_ea:08x}')
 
     if display_count < len(basic_blocks):
         print(f'  ... and {len(basic_blocks) - display_count} more basic blocks')
@@ -326,20 +326,20 @@ def traverse_cross_references(db: ida_domain.Database) -> None:
     print('Sample cross-references:')
 
     for addr in sample_addresses[:10]:  # Limit to first 10 addresses
-        xrefs_to = list(db.xrefs.get_to(addr))
-        xrefs_from = list(db.xrefs.get_from(addr))
+        xrefs_to = list(db.xrefs.to_ea(addr))
+        xrefs_from = list(db.xrefs.from_ea(addr))
 
         if xrefs_to or xrefs_from:
             print(f'  Address 0x{addr:08x}:')
 
             for xref in xrefs_to[:3]:  # Show max 3 xrefs to
-                type_name = db.xrefs.get_ref_type_name(xref.type)
-                print(f'    <- FROM 0x{xref.frm:08x} (type: {type_name})')
+                type_name = xref.type.name
+                print(f'    <- FROM 0x{xref.from_ea:08x} (type: {type_name})')
                 xref_count += 1
 
             for xref in xrefs_from[:3]:  # Show max 3 xrefs from
-                type_name = db.xrefs.get_ref_type_name(xref.type)
-                print(f'    -> TO   0x{xref.to:08x} (type: {type_name})')
+                type_name = xref.type.name
+                print(f'    -> TO   0x{xref.to_ea:08x} (type: {type_name})')
                 xref_count += 1
 
     print(f'Total cross-references displayed: {xref_count}')
