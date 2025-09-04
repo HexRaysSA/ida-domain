@@ -146,12 +146,12 @@ class Comments(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        comment_kinds = (
+        comment_types = (
             [False, True]
             if comment_kind == CommentKind.ALL
             else [comment_kind == CommentKind.REPEATABLE]
         )
-        for is_repeatable in comment_kinds:
+        for is_repeatable in comment_types:
             ida_bytes.set_cmt(ea, '', is_repeatable)
 
     def get_all(self, comment_kind: CommentKind = CommentKind.REGULAR) -> Iterator[CommentInfo]:
@@ -170,17 +170,17 @@ class Comments(DatabaseEntity):
         current = inf_get_min_ea()
         max_ea = inf_get_max_ea()
 
-        comment_kinds = (
+        comment_types = (
             [False, True]
             if comment_kind == CommentKind.ALL
             else [comment_kind == CommentKind.REPEATABLE]
         )
         while current < max_ea:
             # Check for regular comment
-            for comment_kind in comment_kinds:
-                comment = ida_bytes.get_cmt(current, comment_kind)
+            for is_repeatable in comment_types:
+                comment = ida_bytes.get_cmt(current, is_repeatable)
                 if comment:
-                    yield CommentInfo(current, comment, comment_kind)
+                    yield CommentInfo(current, comment, is_repeatable)
 
             # Move to next head (instruction or data)
             next_addr = ida_bytes.next_head(current, max_ea)
