@@ -10,9 +10,10 @@ db = ida_domain.Database.open()
 
 # Iterate over all strings, filtering for C and C_16 types
 index = 0
-for ea, str in db.strings.get_all():
+for item in db.strings:
     # Filter for C and C_16 string types (equivalent to the original filter)
-    str_type = db.strings.get_type(ea)
+    str_type = item.type
+    ea = item.address
     if str_type in [ida_domain.strings.StringType.C, ida_domain.strings.StringType.C_16]:
-        print(f"{ea:x}: len={len(str)} type={str_type.name} index={index}-> '{str}'")
+        print(f"{ea:x}: len={item.length} type={str_type.name} index={index}-> '{str(item)}'")
         index += 1
