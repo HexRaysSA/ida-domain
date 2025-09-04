@@ -12,9 +12,11 @@ import ida_domain  # isort: skip
 import ida_typeinf
 from ida_idaapi import BADADDR
 
+from ida_domain.bytes import SearchFlags
 from ida_domain.database import IdaCommandOptions
 from ida_domain.instructions import Instructions
 from ida_domain.segments import *
+from ida_domain.strings import StringListConfig, StringType
 from ida_domain.types import TypeDetails
 
 idb_path: str = ''
@@ -955,7 +957,11 @@ def test_strings(test_env):
     db = test_env
     from ida_domain.base import InvalidEAError, InvalidParameterError
 
-    assert db.strings.get_count() == 3
+    db.strings.rebuild(config=StringListConfig(min_len=5))
+
+    for i in db.strings:
+        logger.debug(i)
+
     assert len(db.strings) == 3
 
     expected_strings = [
@@ -965,20 +971,17 @@ def test_strings(test_env):
     ]
 
     for i, (expected_addr, expected_string) in enumerate(expected_strings):
-        stringsAndAddress = db.strings.get_at_index(i)
-        assert stringsAndAddress[0] == expected_addr
-        assert stringsAndAddress[1] == expected_string
+        string_item = db.strings[i]
+        assert string_item.address == expected_addr
+        assert str(string_item) == expected_string
 
-        stringsAndAddress = db.strings[i]
-        assert stringsAndAddress[0] == expected_addr
-        assert stringsAndAddress[1] == expected_string
-
-    for i, (addr, string) in enumerate(db.strings):
-        assert addr == expected_strings[i][0], (
-            f'String address mismatch at index {i}, {hex(addr)} != {hex(expected_strings[i][0])}'
+    for i, item in enumerate(db.strings):
+        assert item.address == expected_strings[i][0], (
+            f'String address mismatch at index {i}, '
+            f'{hex(item.address)} != {hex(expected_strings[i][0])}'
         )
-        assert string == expected_strings[i][1], (
-            f'String mismatch at index {i}, {string} != {expected_strings[i][1]}'
+        assert str(item) == expected_strings[i][1], (
+            f'String mismatch at index {i}, {str(item)} != {expected_strings[i][1]}'
         )
 
     from ida_domain.strings import StringType
@@ -986,39 +989,42 @@ def test_strings(test_env):
     string_info = db.strings.get_at(0x3D4)
     assert string_info is not None
     assert string_info.address == 0x3D4
-    assert string_info.content == 'Hello, IDA!\n'
+    assert string_info.contents == b'Hello, IDA!\n'
+    assert str(string_info) == 'Hello, IDA!\n'
     assert string_info.length == 13
     assert string_info.type == StringType.C
 
     string_info = db.strings.get_at(0x3E1)
     assert string_info is not None
-    assert string_info.content == 'Sum: Product: \n'
+    assert string_info.contents == b'Sum: Product: \n'
+    assert str(string_info) == 'Sum: Product: \n'
 
-    length = db.strings.get_length(0x3D4)
+    length = db.strings.get_at(0x3D4).length
     assert isinstance(length, int) and length == 13
 
-    str_type = db.strings.get_type(0x3D4)
+    str_type = db.strings.get_at(0x3D4).type
     assert isinstance(str_type, int)
     assert str_type == StringType.C
 
-    assert db.strings.exists_at(0x3D4) is True
-    assert db.strings.exists_at(0x3E1) is True
-    assert db.strings.exists_at(0x3DA) is False
+    assert db.strings.get_at(0x3D4)
+    assert db.strings.get_at(0x3E1)
+    assert not db.strings.get_at(0x3DA)
 
     strings_in_range = list(db.strings.get_between(0x3D0, 0x3F0))
     assert len(strings_in_range) >= 2  # Should include strings at 0x3D4 and 0x3E1
 
-    found_addrs = [addr for addr, content in strings_in_range]
+    found_addrs = [item.address for item in strings_in_range]
     assert 0x3D4 in found_addrs
     assert 0x3E1 in found_addrs
 
-    original_count = db.strings.get_count()
-    db.strings.build_string_list()
-    assert db.strings.get_count() == original_count  # Should be same count
+    original_count = len(db.strings)
+    db.strings.rebuild()
+    assert len(db.strings) == original_count  # Should be same count
 
     string_info = db.strings.get_at(0x3D4)
     assert string_info.type == StringType.C
-    assert string_info.content == 'Hello, IDA!\n'
+    assert string_info.contents == b'Hello, IDA!\n'
+    assert str(string_info) == 'Hello, IDA!\n'
 
     with pytest.raises(InvalidEAError):
         db.strings.get_at(0xFFFFFFFF)
@@ -1032,11 +1038,8 @@ def test_strings(test_env):
     non_string_info = db.strings.get_at(0x100)
     assert non_string_info is None
 
-    assert db.strings.get_length(0x100) == -1
-    assert db.strings.get_type(0x100) == -1
-
-    assert db.strings.exists_at(0x3A0) is True
-    assert db.strings.exists_at(0x100) is False
+    assert db.strings.get_at(0x3A0)
+    assert not db.strings.get_at(0x100)
 
     with pytest.raises(IndexError):
         db.strings[100]
@@ -1048,7 +1051,7 @@ def test_strings(test_env):
         info = db.strings.get_at(addr)
         assert info is not None
         assert info.address == addr
-        assert len(info.content) > 0
+        assert len(info.contents) > 0
         assert info.length > 0
         assert isinstance(info.type, StringType)
         assert info.type == StringType.C
@@ -1831,8 +1834,6 @@ def test_bytes(test_env):
 
     has_any_byte_or_word = db.bytes.has_any_flags_at(data_addr, ByteFlags.BYTE | ByteFlags.WORD)
     assert isinstance(has_any_byte_or_word, bool) and has_any_byte_or_word
-
-    from ida_domain.bytes import SearchFlags, StringType
 
     text_addr_with_flags = db.bytes.find_text_between(
         'Hello', flags=SearchFlags.DOWN | SearchFlags.CASE

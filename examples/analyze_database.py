@@ -160,10 +160,10 @@ def traverse_strings(db: ida_domain.Database) -> None:
     if display_count < len(strings):
         print(f'Displaying first {display_count} strings:')
 
-    for i, (ea, content) in enumerate(strings[:display_count], 1):
+    for i, item in enumerate(strings[:display_count], 1):
         # Truncate very long strings for display
-        display_str = content[:50] + '...' if len(content) > 50 else content
-        print(f'  [{i:2d}] 0x{ea:08x}: "{display_str}"')
+        display_str = str(item)[:50] + '...' if len(str(item)) > 50 else str(i)
+        print(f'  [{i:2d}] 0x{item.address:08x}: "{display_str}"')
 
     if display_count < len(strings):
         print(f'  ... and {len(strings) - display_count} more strings')

@@ -22,26 +22,10 @@ from .base import (
     check_db_open,
     decorate_all_methods,
 )
+from .strings import StringType
 
 if TYPE_CHECKING:
     from .database import Database
-
-
-class StringType(IntEnum):
-    """String type constants for string operations."""
-
-    C = ida_nalt.STRTYPE_C
-    """C-style string."""
-    C16 = ida_nalt.STRTYPE_C_16
-    """Zero-terminated 32bit chars."""
-    C32 = ida_nalt.STRTYPE_C_32
-    """Zero-terminated 32bit chars."""
-    PASCAL = ida_nalt.STRTYPE_PASCAL
-    """Pascal-style, one-byte length prefix."""
-    PASCAL_16 = ida_nalt.STRTYPE_PASCAL_16
-    """Pascal-style, two-byte length prefix."""
-    PASCAL_32 = ida_nalt.STRTYPE_PASCAL_32
-    """Pascal-style, four-byte length prefix."""
 
 
 class SearchFlags(IntFlag):

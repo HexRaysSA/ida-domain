@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import IntEnum
 
 import ida_bytes
@@ -37,18 +37,43 @@ class StringType(IntEnum):
     LEN2 = ida_nalt.STRTYPE_LEN2  # String with 2-byte length prefix
     LEN2_16 = ida_nalt.STRTYPE_LEN2_16  # 16-bit string with 2-byte length prefix
     LEN2_32 = ida_nalt.STRTYPE_LEN2_32  # 32-bit string with 2-byte length prefix
+    LEN4 = ida_nalt.STRTYPE_LEN4  # Pascal-style, four-byte length prefix
+    LEN4_16 = ida_nalt.STRTYPE_LEN4_16  # Pascal-style, 16bit chars, four-byte length prefix
+    LEN4_32 = ida_nalt.STRTYPE_LEN4_32  # Pascal-style, 32bit chars, four-byte length prefix
 
 
 @dataclass(frozen=True)
-class StringInfo:
+class StringItem:
     """
     Represents detailed information about a string in the IDA database.
     """
 
     address: ea_t
-    content: str
     length: int
     type: StringType
+
+    @property
+    def contents(self) -> bytes:
+        return ida_bytes.get_strlit_contents(self.address, self.length, self.type)
+
+    def __str__(self) -> str:
+        return self.contents.decode('UTF-8', 'replace')
+
+    def __bytes__(self) -> bytes:
+        return self.contents
+
+
+@dataclass()
+class StringListConfig:
+    """
+    Configuration for building the internal string list.
+    """
+
+    string_types: list[StringType] = field(default_factory=lambda: [StringType.C])
+    min_len: int = 5
+    only_ascii_7bit: bool = True
+    only_existing: bool = False
+    ignore_instructions: bool = False
 
 
 @decorate_all_methods(check_db_open)
@@ -64,32 +89,21 @@ class Strings(DatabaseEntity):
 
     def __init__(self, database: Database) -> None:
         super().__init__(database)
+        self._si = ida_strlist.string_info_t()
 
-    def __iter__(self) -> Iterator[Tuple[ea_t, str]]:
+    def __iter__(self) -> Iterator[StringItem]:
         return self.get_all()
 
-    def __getitem__(self, index: int) -> Tuple[ea_t, str] | None:
+    def __getitem__(self, index: int) -> StringItem:
         return self.get_at_index(index)
 
     def __len__(self) -> int:
         """
         Returns the total number of extracted strings.
-
-        Returns:
-            The number of stored strings.
         """
         return ida_strlist.get_strlist_qty()
 
-    def get_count(self) -> int:
-        """
-        Retrieves the total number of extracted strings.
-
-        Returns:
-            The number of stored strings.
-        """
-        return ida_strlist.get_strlist_qty()
-
-    def get_at_index(self, index: int) -> Tuple[ea_t, str] | None:
+    def get_at_index(self, index: int) -> StringItem:
         """
         Retrieves the string at the specified index.
 
@@ -97,18 +111,17 @@ class Strings(DatabaseEntity):
             index: Index of the string to retrieve.
 
         Returns:
-            A pair (effective address, string content) at the given index.
+            A StringItem object at the given index.
             In case of error, returns None.
         """
-        if index >= 0 and index < ida_strlist.get_strlist_qty():
-            si = ida_strlist.string_info_t()
-            if ida_strlist.get_strlist_item(si, index):
-                return si.ea, ida_bytes.get_strlit_contents(si.ea, -1, ida_nalt.STRTYPE_C).decode(
-                    'utf-8'
+        if 0 <= index < len(self):
+            if ida_strlist.get_strlist_item(self._si, index):
+                return StringItem(
+                    address=self._si.ea, length=self._si.length, type=StringType(self._si.type)
                 )
-        raise IndexError(f'String index {index} out of range [0, {self.get_count()})')
+        raise IndexError(f'String index {index} out of range [0, {len(self)})')
 
-    def get_at(self, ea: ea_t) -> Optional[StringInfo]:
+    def get_at(self, ea: ea_t) -> Optional[StringItem]:
         """
         Retrieves detailed string information at the specified address.
 
@@ -116,43 +129,31 @@ class Strings(DatabaseEntity):
             ea: The effective address.
 
         Returns:
-            A StringInfo object if found, None otherwise.
+            A StringItem object if found, None otherwise.
 
         Raises:
             InvalidEAError: If the effective address is invalid.
         """
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
+
         # Find the string in the list
-        for index in range(ida_strlist.get_strlist_qty()):
-            si = ida_strlist.string_info_t()
-            if ida_strlist.get_strlist_item(si, index) and si.ea == ea:
-                content = ida_bytes.get_strlit_contents(si.ea, -1, ida_nalt.STRTYPE_C)
-                if content:
-                    return StringInfo(
-                        address=si.ea,
-                        content=content.decode('utf-8', errors='replace'),
-                        length=si.length,
-                        type=StringType(si.type),
-                    )
+        for item in self:
+            if item.address == ea:
+                return item
+
         return None
 
-    def get_all(self) -> Iterator[Tuple[ea_t, str]]:
+    def get_all(self) -> Iterator[StringItem]:
         """
         Retrieves an iterator over all extracted strings in the database.
 
         Returns:
             An iterator over all strings.
         """
-        for current_index in range(0, ida_strlist.get_strlist_qty()):
-            si = ida_strlist.string_info_t()
-            if ida_strlist.get_strlist_item(si, current_index):
-                yield (
-                    si.ea,
-                    ida_bytes.get_strlit_contents(si.ea, -1, ida_nalt.STRTYPE_C).decode('utf-8'),
-                )
+        return (self.get_at_index(index) for index in range(0, ida_strlist.get_strlist_qty()))
 
-    def get_between(self, start_ea: ea_t, end_ea: ea_t) -> Iterator[Tuple[ea_t, str]]:
+    def get_between(self, start_ea: ea_t, end_ea: ea_t) -> Iterator[StringItem]:
         """
         Retrieves strings within the specified address range.
 
@@ -174,70 +175,25 @@ class Strings(DatabaseEntity):
         if start_ea >= end_ea:
             raise InvalidParameterError('start_ea', start_ea, 'must be less than end_ea')
 
-        for index in range(ida_strlist.get_strlist_qty()):
-            si = ida_strlist.string_info_t()
-            if ida_strlist.get_strlist_item(si, index):
-                if start_ea <= si.ea < end_ea:
-                    content = ida_bytes.get_strlit_contents(si.ea, -1, ida_nalt.STRTYPE_C)
-                    if content:
-                        yield si.ea, content.decode('utf-8', errors='replace')
+        for item in self:
+            if start_ea <= item.address < end_ea:
+                yield item
 
-    def build_string_list(self) -> None:
+    def rebuild(self, config: StringListConfig = StringListConfig()) -> None:
         """
         Rebuild the string list from scratch.
         This should be called to get an up-to-date string list.
         """
+        opts = ida_strlist.get_strlist_options()
+        opts.strtypes = config.string_types
+        opts.minlen = config.min_len
+        opts.only_7bit = config.only_ascii_7bit
+        opts.display_only_existing_strings = config.only_existing
+        opts.ignore_heads = config.ignore_instructions
         ida_strlist.build_strlist()
 
-    def clear_string_list(self) -> None:
+    def clear(self) -> None:
         """
-        Clear the string list.
+        Clear the string list, strings will not be saved in the database.
         """
         ida_strlist.clear_strlist()
-
-    def get_length(self, ea: ea_t) -> int:
-        """
-        Get the length at the specified address.
-
-        Args:
-            ea: The effective address.
-
-        Returns:
-            String length or -1 if not a string.
-
-        Raises:
-            InvalidEAError: If the effective address is invalid.
-        """
-        result = self.get_at(ea)
-        return result.length if result else -1
-
-    def get_type(self, ea: ea_t) -> Union[StringType, int]:
-        """
-        Get the type at the specified address.
-
-        Args:
-            ea: The effective address.
-
-        Returns:
-            String type (StringType enum) or -1 if not a string.
-
-        Raises:
-            InvalidEAError: If the effective address is invalid.
-        """
-        result = self.get_at(ea)
-        return result.type if result else -1
-
-    def exists_at(self, ea: ea_t) -> bool:
-        """
-        Check if the specified address contains a string.
-
-        Args:
-            ea: The effective address.
-
-        Returns:
-            True if address contains a string, False otherwise.
-
-        Raises:
-            InvalidEAError: If the effective address is invalid.
-        """
-        return self.get_at(ea) is not None

@@ -22,13 +22,13 @@ def analyze_strings(db_path, min_length=5, max_display=20, show_interesting=True
         all_strings = []
         interesting_strings = []
 
-        for addr, string_value in db.strings:
-            if len(string_value) >= min_length:
-                all_strings.append((addr, string_value))
+        for item in db.strings:
+            if item.length >= min_length:
+                all_strings.append((item.address, str(item)))
 
                 # Check for interesting keywords
                 if show_interesting:
-                    lower_str = string_value.lower()
+                    lower_str = str(item).lower()
                     interesting_keywords = [
                         'password',
                         'passwd',
@@ -56,9 +56,9 @@ def analyze_strings(db_path, min_length=5, max_display=20, show_interesting=True
                     ]
 
                     if any(keyword in lower_str for keyword in interesting_keywords):
-                        interesting_strings.append((addr, string_value))
+                        interesting_strings.append((item.address, str(item)))
 
-        print(f'Total strings: {db.strings.get_count()}')
+        print(f'Total strings: {len(db.strings)}')
         print(f'Strings >= {min_length} chars: {len(all_strings)}')
 
         # Display regular strings
