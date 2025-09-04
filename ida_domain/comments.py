@@ -108,24 +108,6 @@ class Comments(DatabaseEntity):
         comment = ida_bytes.get_cmt(ea, is_repeatable)
         return CommentInfo(ea, comment, is_repeatable) if comment else None
 
-    def get_any(self, ea: ea_t) -> Optional[CommentInfo]:
-        """
-        Retrieves any comment at the specified address, checking both regular and repeatable.
-
-        Args:
-            ea: The effective address.
-
-        Raises:
-            InvalidEAError: If the effective address is invalid.
-
-        Returns:
-            A tuple (success, comment string). If no comment exists, success is False.
-        """
-        if not self.database.is_valid_ea(ea):
-            raise InvalidEAError(ea)
-
-        return self.get_at(ea, CommentKind.ALL)
-
     def set_at(
         self, ea: int, comment: str, comment_kind: CommentKind = CommentKind.REGULAR
     ) -> bool:
@@ -149,7 +131,7 @@ class Comments(DatabaseEntity):
         repeatable = comment_kind == CommentKind.REPEATABLE
         return ida_bytes.set_cmt(ea, comment, repeatable)
 
-    def delete_at(self, ea: int, comment_kind: CommentKind = CommentKind.REGULAR) -> bool:
+    def delete_at(self, ea: int, comment_kind: CommentKind = CommentKind.REGULAR) -> None:
         """
         Deletes a comment at the specified address.
 
@@ -160,14 +142,17 @@ class Comments(DatabaseEntity):
         Raises:
             InvalidEAError: If the effective address is invalid.
 
-        Returns:
-            True if the comment was successfully deleted, False otherwise.
         """
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        repeatable = comment_kind == CommentKind.REPEATABLE
-        return ida_bytes.set_cmt(ea, '', repeatable)
+        comment_kinds = (
+            [False, True]
+            if comment_kind == CommentKind.ALL
+            else [comment_kind == CommentKind.REPEATABLE]
+        )
+        for is_repeatable in comment_kinds:
+            ida_bytes.set_cmt(ea, '', is_repeatable)
 
     def get_all(self, comment_kind: CommentKind = CommentKind.REGULAR) -> Iterator[CommentInfo]:
         """
@@ -185,18 +170,17 @@ class Comments(DatabaseEntity):
         current = inf_get_min_ea()
         max_ea = inf_get_max_ea()
 
+        comment_kinds = (
+            [False, True]
+            if comment_kind == CommentKind.ALL
+            else [comment_kind == CommentKind.REPEATABLE]
+        )
         while current < max_ea:
             # Check for regular comment
-            if comment_kind in [CommentKind.REGULAR, CommentKind.ALL]:
-                regular_comment = ida_bytes.get_cmt(current, False)
-                if regular_comment:
-                    yield CommentInfo(current, regular_comment, False)
-
-            # Check for repeatable comment
-            if comment_kind in [CommentKind.REPEATABLE, CommentKind.ALL]:
-                repeatable_comment = ida_bytes.get_cmt(current, True)
-                if repeatable_comment:
-                    yield CommentInfo(current, repeatable_comment, True)
+            for comment_kind in comment_kinds:
+                comment = ida_bytes.get_cmt(current, comment_kind)
+                if comment:
+                    yield CommentInfo(current, comment, comment_kind)
 
             # Move to next head (instruction or data)
             next_addr = ida_bytes.next_head(current, max_ea)
@@ -224,8 +208,7 @@ class Comments(DatabaseEntity):
             raise InvalidEAError(ea)
 
         base_idx = ida_lines.E_PREV if kind == ExtraCommentKind.ANTERIOR else ida_lines.E_NEXT
-        ida_lines.update_extra_cmt(ea, base_idx + index, comment)
-        return True
+        return ida_lines.update_extra_cmt(ea, base_idx + index, comment)
 
     def get_extra_at(self, ea: int, index: int, kind: ExtraCommentKind) -> Optional[str]:
         """
@@ -293,8 +276,7 @@ class Comments(DatabaseEntity):
             raise InvalidEAError(ea)
 
         base_idx = ida_lines.E_PREV if kind == ExtraCommentKind.ANTERIOR else ida_lines.E_NEXT
-        ida_lines.del_extra_cmt(ea, base_idx + index)
-        return True
+        return ida_lines.del_extra_cmt(ea, base_idx + index)
 
     def set_function_comment(self, func: func_t, comment: str, repeatable: bool = False) -> bool:
         """
@@ -340,11 +322,8 @@ class Comments(DatabaseEntity):
         Returns:
             True if successful, False otherwise.
         """
-        try:
-            ida_segment.set_segment_cmt(segment, comment, repeatable)
-            return True
-        except Exception:
-            return False
+        ida_segment.set_segment_cmt(segment, comment, repeatable)
+        return self.get_segment_comment(segment, repeatable) == comment
 
     def get_segment_comment(self, segment: segment_t, repeatable: bool = False) -> str:
         """
@@ -372,10 +351,7 @@ class Comments(DatabaseEntity):
         Returns:
             True if successful, False otherwise.
         """
-        if type_info.set_type_cmt(comment) == 0:
-            return True
-        else:
-            return False
+        return type_info.set_type_cmt(comment) == 0
 
     def get_type_comment(self, type_info: tinfo_t) -> str:
         """

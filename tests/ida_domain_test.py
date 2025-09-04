@@ -1516,6 +1516,11 @@ def test_comments(test_env):
         == 'Testing adding repeatable comment'
     )
 
+    db.comments.delete_at(0xD1, ida_domain.comments.CommentKind.ALL)
+    assert db.comments.get_at(0xD1, ida_domain.comments.CommentKind.REPEATABLE) is None
+    assert db.comments.get_at(0xD1, ida_domain.comments.CommentKind.REGULAR) is None
+    assert db.comments.get_at(0xD1, ida_domain.comments.CommentKind.ALL) is None
+
     test_ea = 0x100
     assert db.comments.set_extra_at(
         test_ea, 0, 'First anterior comment', ida_domain.comments.ExtraCommentKind.ANTERIOR
@@ -1578,8 +1583,6 @@ def test_comments(test_env):
         db.comments.set_at(0xFFFFFFFF, 'Invalid comment')
     with pytest.raises(ida_domain.base.InvalidEAError):
         db.comments.delete_at(0xFFFFFFFF)
-    with pytest.raises(ida_domain.base.InvalidEAError):
-        db.comments.get_any(0xFFFFFFFF)
     with pytest.raises(ida_domain.base.InvalidEAError):
         db.comments.set_extra_at(
             0xFFFFFFFF, 0, 'Invalid', ida_domain.comments.ExtraCommentKind.ANTERIOR
