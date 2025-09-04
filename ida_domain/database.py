@@ -106,6 +106,7 @@ class IdaCommandOptions:
     the command line string. Attributes correspond to IDA switches.
 
     Example:
+        ```python
         opts = IdaCommandOptions(
             auto_analysis=False,
             processor="arm",
@@ -114,6 +115,7 @@ class IdaCommandOptions:
             debug_flags=["queue", "debugger"]
         )
         args = opts.build_args()
+        ```
 
     Attributes:
         auto_analysis (bool): If False, disables auto analysis (-a).

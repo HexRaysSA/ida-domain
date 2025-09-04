@@ -1185,10 +1185,10 @@ class Bytes(DatabaseEntity):
             InvalidParameterError: If count is not positive or tid is invalid.
 
         Example:
-            til = ida_typeinf.tinfo_t()
-            ida_typeinf.parse_decl(til, None, 'struct Point {int x; int y;};', 0)
-            til.set_named_type(None, 'my_struct')
-            db.bytes.create_struct_at(ea, 1, til.get_tid())
+            ```python
+            tif = db.types.parse_one_declaration(None, 'struct Point {int x; int y;};')
+            db.bytes.create_struct_at(ea, 1, tif.get_tid())
+            ```
         """
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
