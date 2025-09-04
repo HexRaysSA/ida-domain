@@ -7,6 +7,7 @@ NOTE: Partially migrated - uses IDA Domain for comments, legacy API for UI actio
 import ida_domain  # isort: skip
 import ida_kernwin
 
+
 def dump_extra_comments_at_current_ea(anchor):
     """Dump extra comments using IDA Domain API"""
     db = ida_domain.Database.open()

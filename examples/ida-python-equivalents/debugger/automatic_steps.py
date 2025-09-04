@@ -9,6 +9,7 @@ import ida_dbg
 
 db = ida_domain.Database.open()
 
+
 class MyDebugHook(ida_domain.hooks.DebuggerHooks):
     def __init__(self):
         super().__init__()
