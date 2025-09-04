@@ -6,8 +6,8 @@ NOTE: Partially migrated - uses Domain hooks with legacy debugger control
 
 import ida_domain  # isort: skip
 import ida_dbg
-import ida_lines
 
+db = ida_domain.Database.open()
 
 class MyDebugHook(ida_domain.hooks.DebuggerHooks):
     def __init__(self):
@@ -25,7 +25,8 @@ class MyDebugHook(ida_domain.hooks.DebuggerHooks):
 
     def dbg_step_over(self):
         eip = ida_dbg.get_reg_val('EIP')
-        disasm = ida_lines.tag_remove(ida_lines.generate_disasm_line(eip))
+        insn = db.instructions.get_at(eip)
+        disasm = db.instructions.get_disassembly(insn, True)
         self.log(f'Step over: EIP=0x{eip:x}, {disasm}')
 
         self.steps += 1
@@ -43,9 +44,7 @@ class MyDebugHook(ida_domain.hooks.DebuggerHooks):
 hook = MyDebugHook()
 hook.hook()
 
-db = ida_domain.Database.open()
-ep = db.start_ip
-if ida_dbg.request_run_to(ep):
+if ida_dbg.request_run_to(db.start_ip):
     ida_dbg.run_requests()
 else:
     print('Cannot start debugger - is a debugger selected?')

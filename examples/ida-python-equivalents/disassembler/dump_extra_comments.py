@@ -6,26 +6,21 @@ NOTE: Partially migrated - uses IDA Domain for comments, legacy API for UI actio
 
 import ida_domain  # isort: skip
 import ida_kernwin
-import ida_lines
 
-
-def dump_extra_comments_at(ea, anchor):
+def dump_extra_comments_at_current_ea(anchor):
     """Dump extra comments using IDA Domain API"""
     db = ida_domain.Database.open()
 
     # Map legacy anchor values to Domain API
-    if anchor == ida_lines.E_PREV:
-        kind = ida_domain.comments.ExtraCommentKind.ANTERIOR
-    else:
-        kind = ida_domain.comments.ExtraCommentKind.POSTERIOR
+    kind = ida_domain.comments.ExtraCommentKind(anchor)
 
     # Get all extra comments
-    comments = list(db.comments.get_extra_all(ea, kind))
+    comments = list(db.comments.get_extra_all(db.current_ea, kind))
     if comments:
         for i, comment in enumerate(comments):
             print(f"Got [{i}]: '{comment}'")
     else:
-        print(f'No {kind.value} comments at 0x{ea:x}')
+        print(f'No {kind.value} comments at 0x{db.current_ea:x}')
 
 
 # Action handler - minimal legacy code for UI integration
@@ -35,8 +30,7 @@ class dump_at_point_handler_t(ida_kernwin.action_handler_t):
         self.anchor = anchor
 
     def activate(self, ctx):
-        ea = ida_kernwin.get_screen_ea()
-        dump_extra_comments_at(ea, self.anchor)
+        dump_extra_comments_at_current_ea(self.anchor)
         return 1
 
     def update(self, ctx):
