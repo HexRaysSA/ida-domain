@@ -20,7 +20,13 @@ from ida_typeinf import (
 from typing_extensions import TYPE_CHECKING, Callable, ClassVar, Dict, Iterator, Optional
 
 from . import __ida_version__
-from .base import DatabaseEntity, InvalidEAError, check_db_open, decorate_all_methods
+from .base import (
+    DatabaseEntity,
+    InvalidEAError,
+    InvalidParameterError,
+    check_db_open,
+    decorate_all_methods,
+)
 
 if TYPE_CHECKING:
     from ida_idaapi import ea_t
@@ -87,7 +93,7 @@ class TypeManipulationFlags(IntFlag):
             """
     NTF_IDBENC = ida_typeinf.NTF_IDBENC
     """the name is given in the IDB encoding;
-       non-ASCII bytes will be decoded accordingly (set_named_type, set_numbered_type only)
+        non-ASCII bytes will be decoded accordingly (set_named_type, set_numbered_type only)
             """
     NTF_CHKSYNC = ida_typeinf.NTF_CHKSYNC
     """check that synchronization to IDB passed OK (set_numbered_type, set_named_type)
@@ -97,7 +103,7 @@ class TypeManipulationFlags(IntFlag):
             """
     NTF_COPY = ida_typeinf.NTF_COPY
     """save a new type definition, not a typeref
-       (tinfo_t::set_numbered_type, tinfo_t::set_named_type)
+      (tinfo_t::set_numbered_type, tinfo_t::set_named_type)
     """
 
 
@@ -1018,6 +1024,46 @@ class Types(DatabaseEntity):
         """
         return ida_typeinf.parse_decls(library, decl, None, flags)
 
+    def parse_one_declaration(
+        self,
+        library: til_t,
+        decl: str,
+        name: str,
+        flags: TypeFormattingFlags = TypeFormattingFlags.HTI_DCL | TypeFormattingFlags.HTI_PAKDEF,
+    ) -> tinfo_t:
+        """
+        Parse one declaration from string and create a named type.
+
+        Args:
+            library: The type library used for parsing context.
+            decl: C type declaration string to parse.
+            name: The name to assign to the parsed type.
+            flags: Optional combination of TypeFormattingFlags for parsing behavior.
+
+        Returns:
+            The tinfo_t instance on success.
+
+        Raises:
+            InvalidParameterError: If name/decl is empty, decl cannot be parsed,
+                                  or name cannot be used to save the declaration.
+        """
+        if not name:
+            raise InvalidParameterError('name', name, 'cannot be empty')
+
+        if not decl:
+            raise InvalidParameterError('decl', decl, 'cannot be empty')
+
+        tif = ida_typeinf.tinfo_t()
+        if not ida_typeinf.parse_decl(tif, library, decl, flags):
+            raise InvalidParameterError('decl', decl, 'cannot be parsed')
+
+        if tif.set_named_type(library, name) < 0:
+            raise InvalidParameterError(
+                'name', name, f'could not be used to save the parsed declaration {decl}'
+            )
+
+        return tif
+
     def get_by_name(self, name: str, library: til_t = None) -> Optional[tinfo_t]:
         """
         Retrieve a type information object by name.
@@ -1027,7 +1073,7 @@ class Types(DatabaseEntity):
             library: Type library to retrieve from, defaults to local library.
 
         Returns:
-             The named type information object or None if not found.
+            The named type information object or None if not found.
         """
         if not library:
             library = ida_typeinf.get_idati()
@@ -1096,6 +1142,7 @@ class Types(DatabaseEntity):
         if type_kind == TypeKind.NAMED:
             yield from til.named_types()
         elif type_kind == TypeKind.NUMBERED:
+            ida_typeinf.enable_numbered_types(til, True)
             yield from til.numbered_types()
 
     def traverse(self, type_info: tinfo_t, visitor: ida_typeinf.tinfo_visitor_t) -> None:

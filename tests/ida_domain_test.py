@@ -12,12 +12,13 @@ import ida_domain  # isort: skip
 import ida_typeinf
 from ida_idaapi import BADADDR
 
+from ida_domain.base import InvalidParameterError
 from ida_domain.bytes import SearchFlags
 from ida_domain.database import IdaCommandOptions
 from ida_domain.instructions import Instructions
 from ida_domain.segments import *
 from ida_domain.strings import StringListConfig, StringType
-from ida_domain.types import TypeDetails
+from ida_domain.types import TypeDetails, TypeKind
 
 idb_path: str = ''
 logger = logging.getLogger(__name__)
@@ -1356,8 +1357,11 @@ def test_types(test_env):
     til = db.types.load_library(til_path)
     assert til
 
-    til_list = list(db.types.get_all(library=til))
-    assert len(til_list) == 3
+    types_list = list(db.types.get_all(library=til, type_kind=TypeKind.NUMBERED))
+    assert len(types_list) == 3
+
+    types_list = list(db.types.get_all(library=til))
+    assert len(types_list) == 3
 
     assert db.types.import_type(til, 'STRUCT_EXAMPLE')
     assert len(list(db.types)) == 2
@@ -1368,9 +1372,12 @@ def test_types(test_env):
     type_info = db.types.get_at(0xB3)
     assert type_info is None
 
-    assert not db.types.apply_at(tif, 0xB3)
+    assert db.types.apply_at(tif, 0x330)
+    type_info = db.types.get_at(0x330)
+    assert type_info
+    assert type_info.get_tid() == tif.get_tid()
 
-    from ida_domain.types import TypeAttr, TypeDetailsVisitor
+    from ida_domain.types import TypeAttr, TypeDetailsVisitor, UdtAttr
 
     # Print details via visitor
     visitor = TypeDetailsVisitor(db)
@@ -1426,6 +1433,66 @@ def test_types(test_env):
     assert empty_comment == ''
 
     db.types.unload_library(til)
+
+    errors = db.types.parse_declarations(None, 'enum eMyType { first, second };', 0)
+    assert errors == 0
+
+    tif = db.types.get_by_name('eMyType')
+    assert tif is not None
+
+    details = db.types.get_details(tif)
+    assert (
+        details.attributes
+        | TypeAttr.ATTACHED
+        | TypeAttr.COMPLEX
+        | TypeAttr.CORRECT
+        | TypeAttr.DECL_COMPLEX
+        | TypeAttr.DECL_TYPEDEF
+        | TypeAttr.ENUM
+        | TypeAttr.SUE
+        | TypeAttr.UDT
+        | TypeAttr.WELL_DEFINED
+        | TypeAttr.EXT_ARITHMETIC
+        | TypeAttr.EXT_INTEGRAL
+    )
+
+    assert details.size == 4
+
+    tif = db.types.parse_one_declaration(None, 'struct {int x; int y;};', 'Point22')
+    assert tif.get_type_name() == 'Point22'
+    tif = db.types.get_by_name('Point22')
+    assert tif is not None
+    assert tif.get_type_name() == 'Point22'
+
+    tif = db.types.parse_one_declaration(
+        None,
+        'struct Point22 {int x; int y;}; union UserData { int buffer[10]; Point22 point; };',
+        'Union1996',
+    )
+    assert tif is not None
+    assert tif.get_type_name() == 'Union1996'
+
+    with pytest.raises(InvalidParameterError):
+        tif = db.types.parse_one_declaration(None, 'struct {int x; int y;};', '')
+    with pytest.raises(InvalidParameterError):
+        tif = db.types.parse_one_declaration(None, 'struct {int x; int y;};', None)
+    with pytest.raises(InvalidParameterError):
+        tif = db.types.parse_one_declaration(None, '', 'Dummy')
+    with pytest.raises(InvalidParameterError):
+        tif = db.types.parse_one_declaration(None, 'struct', 'Dummy')
+    with pytest.raises(InvalidEAError):
+        db.types.get_at(0xFFFFFFFF)
+    with pytest.raises(InvalidEAError):
+        db.types.apply_at(tif, 0xFFFFFFFF)
+
+    types_list = list(db.types.get_all(library=None, type_kind=TypeKind.NUMBERED))
+    assert len(types_list) == 5
+
+    errors = db.types.parse_declarations(None, 'struct { int first; int second; };', 0)
+    assert errors == 0
+
+    types_list = list(db.types.get_all(library=None, type_kind=TypeKind.NUMBERED))
+    assert len(types_list) == 6
 
 
 def test_signature_files(test_env):
@@ -1662,10 +1729,8 @@ def test_bytes(test_env):
     imm_addr = db.bytes.find_immediate_between(1)
     assert imm_addr is not None
 
-    til = ida_typeinf.tinfo_t()
-    ida_typeinf.parse_decl(til, None, 'struct {int x; int y;};', 0)
-    til.set_named_type(None, 'Point')
-    assert db.bytes.create_struct_at(0x330, 1, til.get_tid())
+    tif = db.types.parse_one_declaration(None, 'struct {int x; int y;};', 'Point')
+    assert db.bytes.create_struct_at(0x330, 1, tif.get_tid())
     assert db.bytes.is_struct_at(0x330)
 
     assert db.bytes.create_zword_at(0x338)
