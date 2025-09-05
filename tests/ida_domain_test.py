@@ -1382,7 +1382,7 @@ def test_types(test_env):
 
     # Print details via visitor
     visitor = TypeDetailsVisitor(db)
-    db.types.traverse(tif, visitor)
+    assert db.types.traverse(tif, visitor)
     for item in visitor.output:
         logger.debug(vars(item))
         if item.udt:

@@ -1147,13 +1147,17 @@ class Types(DatabaseEntity):
 
     def traverse(self, type_info: tinfo_t, visitor: ida_typeinf.tinfo_visitor_t) -> None:
         """
-        Traverse and recursively print the members of a user defined type.
+        Traverse the given type using the provided visitor class.
 
         Args:
             type_info: The type information object to visit.
             visitor: A type visitor subclassed object.
+
+        Returns:
+            True if traversal was successful, False otherwise.
+
         """
-        visitor.apply_to(type_info)
+        return visitor.apply_to(type_info) == 0
 
     def get_details(self, type_info: tinfo_t) -> TypeDetails:
         """
