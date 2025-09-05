@@ -36,7 +36,7 @@ def dump_flowchart(ea, p=True):
         return
 
     # Create flowchart for the function
-    flowchart = ida_domain.functions.FlowChart(db, func)
+    flowchart = db.functions.get_flowchart(func)
 
     # Iterate through all basic blocks
     for block in flowchart:
