@@ -1770,11 +1770,11 @@ class Bytes(DatabaseEntity):
         if string_data is not None:
             try:
                 # Decode bytes to string
-                decoded_string = string_data.decode('utf-8', errors='replace')
+                decoded_string = string_data.decode('utf-8')
                 return decoded_string
             except Exception:
                 # Try latin-1 as fallback
-                decoded_string = string_data.decode('latin-1', errors='replace')
+                decoded_string = string_data.decode('latin-1')
                 return decoded_string
         else:
             return None
@@ -1815,10 +1815,10 @@ class Bytes(DatabaseEntity):
             try:
                 # Convert bytes to string
                 string_data = bytes(data)
-                decoded_string = string_data.decode('utf-8', errors='replace')
+                decoded_string = string_data.decode('utf-8')
                 return decoded_string
             except Exception:
-                decoded_string = string_data.decode('latin-1', errors='replace')
+                decoded_string = string_data.decode('latin-1')
                 return decoded_string
         else:
             return None

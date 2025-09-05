@@ -57,7 +57,7 @@ class StringItem:
         return ida_bytes.get_strlit_contents(self.address, self.length, self.type)
 
     def __str__(self) -> str:
-        return self.contents.decode('UTF-8', 'replace')
+        return self.contents.decode('UTF-8')
 
     def __bytes__(self) -> bytes:
         return self.contents
