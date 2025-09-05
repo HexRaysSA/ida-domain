@@ -35,7 +35,8 @@ class FlowChartFlags(IntFlag):
     PREDS = ida_gdl.FC_PREDS  # Compute predecessor information
 
 
-class BasicBlock(ida_gdl.BasicBlock):
+@decorate_all_methods(check_db_open)
+class BasicBlock(ida_gdl.BasicBlock, DatabaseEntity):
     """
     Basic block class wrapper around ida_gdl.BasicBlock.
     Provides access to basic block properties and navigation.
@@ -50,8 +51,8 @@ class BasicBlock(ida_gdl.BasicBlock):
             bb: The underlying qbasic_block_t object
             fc: Parent flowchart
         """
-        self.m_database = database
-        super().__init__(id, bb, fc)
+        DatabaseEntity.__init__(self, database)
+        ida_gdl.BasicBlock.__init__(self, id, bb, fc)
 
     def get_successors(self) -> Iterator[BasicBlock]:
         """Iterator over successor blocks."""
@@ -76,12 +77,11 @@ class BasicBlock(ida_gdl.BasicBlock):
         Returns:
             An instruction iterator for this block.
         """
-        if not self.m_database:
-            raise DatabaseNotLoadedError('Database is not loaded. Please open a database first.')
-        return self.m_database.instructions.get_between(self.start_ea, self.end_ea)
+        return self.database.instructions.get_between(self.start_ea, self.end_ea)
 
 
-class FlowChart(ida_gdl.FlowChart):
+@decorate_all_methods(check_db_open)
+class FlowChart(ida_gdl.FlowChart, DatabaseEntity):
     """
     Flowchart class wrapper around ida_gdl.FlowChart.
     Used to analyze and iterate through basic blocks within
@@ -95,8 +95,8 @@ class FlowChart(ida_gdl.FlowChart):
         bounds: Optional[tuple[ea_t, ea_t]] = None,
         flags: FlowChartFlags = FlowChartFlags.NONE,
     ) -> None:
-        self.m_database = database
-        super().__init__(f, bounds, int(flags))
+        DatabaseEntity.__init__(self, database)
+        ida_gdl.FlowChart.__init__(self, f, bounds, int(flags))
 
     def __getitem__(self, index: int) -> BasicBlock:
         """
@@ -136,24 +136,9 @@ class FlowChart(ida_gdl.FlowChart):
         """
         return self.size
 
-
-@decorate_all_methods(check_db_open)
-class BasicBlocks(DatabaseEntity):
-    """
-    Interface for working with basic blocks in functions.
-
-    Basic blocks are sequences of instructions with a single entry point and single exit point,
-    used for control flow analysis and optimization.
-
-    Args:
-        database: Reference to the active IDA database.
-    """
-
-    def __init__(self, database: Database):
-        super().__init__(database)
-
-    def get_from_function(
-        self, func: func_t, flags: FlowChartFlags = FlowChartFlags.NONE
+    @classmethod
+    def from_function(
+        cls, db: Database, func: func_t, flags: FlowChartFlags = FlowChartFlags.NONE
     ) -> FlowChart:
         """
         Retrieves the basic blocks within a given function.
@@ -165,10 +150,17 @@ class BasicBlocks(DatabaseEntity):
         Returns:
             An iterable flowchart containing the basic blocks of the function.
         """
-        return FlowChart(self.m_database, func, None, flags)
+        if not db or not db.is_open():
+            raise DatabaseNotLoadedError('Database is not loaded. Please open a database first.')
+        return FlowChart(db, func, None, flags)
 
-    def get_between(
-        self, start_ea: ea_t, end_ea: ea_t, flags: FlowChartFlags = FlowChartFlags.NONE
+    @classmethod
+    def from_range(
+        cls,
+        db: Database,
+        start_ea: ea_t,
+        end_ea: ea_t,
+        flags: FlowChartFlags = FlowChartFlags.NONE,
     ) -> FlowChart:
         """
         Retrieves the basic blocks within a given address range.
@@ -186,11 +178,13 @@ class BasicBlocks(DatabaseEntity):
             InvalidParameterError: If the input range is invalid.
         """
 
-        if not self.database.is_valid_ea(start_ea, strict_check=False):
+        if not db or not db.is_open():
+            raise DatabaseNotLoadedError('Database is not loaded. Please open a database first.')
+        if not db.is_valid_ea(start_ea, strict_check=False):
             raise InvalidEAError(start_ea)
-        if not self.database.is_valid_ea(end_ea, strict_check=False):
+        if not db.is_valid_ea(end_ea, strict_check=False):
             raise InvalidEAError(end_ea)
         if start_ea >= end_ea:
             raise InvalidParameterError('start_ea', start_ea, 'must be less than end_ea')
 
-        return FlowChart(self.m_database, None, (start_ea, end_ea), flags)
+        return FlowChart(db, None, (start_ea, end_ea), flags)

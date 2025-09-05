@@ -15,7 +15,10 @@ import ida_ua
 from ida_funcs import func_t
 from ida_idaapi import BADADDR, ea_t
 from ida_ua import insn_t
-from typing_extensions import TYPE_CHECKING, Dict, Iterator, List, Optional
+from typing_extensions import TYPE_CHECKING, Iterator, List, Optional
+
+import ida_domain
+import ida_domain.flowchart
 
 from .base import (
     DatabaseEntity,
@@ -24,7 +27,7 @@ from .base import (
     check_db_open,
     decorate_all_methods,
 )
-from .basic_blocks import FlowChart
+from .flowchart import FlowChart, FlowChartFlags
 
 if TYPE_CHECKING:
     from .database import Database
@@ -198,7 +201,9 @@ class Functions(DatabaseEntity):
         flags = ida_name.SN_NOCHECK if auto_correct else ida_name.SN_CHECK
         return ida_name.set_name(func.start_ea, name, flags)
 
-    def get_flowchart(self, func: func_t) -> Optional[FlowChart]:
+    def get_flowchart(
+        self, func: func_t, flags: FlowChartFlags = FlowChartFlags.NONE
+    ) -> Optional[FlowChart]:
         """
         Retrieves the flowchart of the specified function,
         which the user can use to retrieve basic blocks.
@@ -209,7 +214,7 @@ class Functions(DatabaseEntity):
         Returns:
             An iterator over the function's basic blocks, or empty iterator if function is invalid.
         """
-        return self.database.basic_blocks.get_from_function(func)
+        return ida_domain.flowchart.FlowChart.from_function(self.database, func)
 
     def get_instructions(self, func: func_t) -> Optional[Iterator[insn_t]]:
         """

@@ -11,6 +11,7 @@ import argparse
 from dataclasses import asdict
 
 import ida_domain
+import ida_domain.flowchart
 from ida_domain.database import IdaCommandOptions
 
 
@@ -259,7 +260,8 @@ def traverse_basic_blocks(db: ida_domain.Database) -> None:
     """
     print_section_header('BASIC BLOCKS')
 
-    basic_blocks = list(db.basic_blocks.get_between(db.minimum_ea, db.maximum_ea))
+    flowchart = ida_domain.flowchart.FlowChart.from_range(db, db.minimum_ea, db.maximum_ea)
+    basic_blocks = list(flowchart)
     print(f'Total basic blocks: {len(basic_blocks)}')
 
     # Show first 15 basic blocks to avoid overwhelming output

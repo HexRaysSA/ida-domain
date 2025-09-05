@@ -12,6 +12,7 @@ import ida_domain  # isort: skip
 import ida_typeinf
 from ida_idaapi import BADADDR
 
+import ida_domain.flowchart
 from ida_domain.base import InvalidParameterError
 from ida_domain.bytes import SearchFlags
 from ida_domain.database import IdaCommandOptions
@@ -762,7 +763,7 @@ def test_basic_block(test_env):
     assert last_block.count_predecessors() >= 1
 
     # Test get_between method
-    flowchart = db.basic_blocks.get_between(0xC4, 0x2A3)
+    flowchart = ida_domain.flowchart.FlowChart.from_range(db, 0xC4, 0x2A3)
     assert len(flowchart) == 4
     assert flowchart[0].start_ea == 0xC4
     assert flowchart[3].end_ea == 0x2A3
@@ -771,29 +772,29 @@ def test_basic_block(test_env):
     from ida_domain.base import InvalidEAError, InvalidParameterError
 
     with pytest.raises(InvalidEAError):
-        db.basic_blocks.get_between(0xFFFFFFFF, 0xFFFFFFFF)
+        ida_domain.flowchart.FlowChart.from_range(db, 0xFFFFFFFF, 0xFFFFFFFF)
 
     with pytest.raises(InvalidParameterError):
-        db.basic_blocks.get_between(0x200, 0x100)
+        ida_domain.flowchart.FlowChart.from_range(db, 0x200, 0x100)
 
-    # Test get_from_function method (same as db.functions.get_basic_blocks)
-    func_blocks = db.basic_blocks.get_from_function(func)
+    # Test function_flowchart method (same as db.functions.get_basic_blocks)
+    func_blocks = db.functions.get_flowchart(func)
     assert len(func_blocks) == 4
     assert func_blocks[0].start_ea == blocks[0].start_ea
     assert func_blocks[3].end_ea == blocks[3].end_ea
 
     # Test with flags parameter
-    from ida_domain.basic_blocks import FlowChartFlags
+    from ida_domain.flowchart import FlowChartFlags
 
-    func_blocks_with_flags = db.basic_blocks.get_from_function(func, flags=FlowChartFlags.NONE)
+    func_blocks_with_flags = db.functions.get_flowchart(func, flags=FlowChartFlags.NONE)
     assert len(func_blocks_with_flags) == 4
 
     # Test with NOEXT flag
-    func_blocks_noext = db.basic_blocks.get_from_function(func, flags=FlowChartFlags.NOEXT)
+    func_blocks_noext = db.functions.get_flowchart(func, flags=FlowChartFlags.NOEXT)
     assert len(func_blocks_noext) == 4
 
     # Test flowchart iteration for a different range
-    small_flowchart = db.basic_blocks.get_between(0x10, 0x20)
+    small_flowchart = ida_domain.flowchart.FlowChart.from_range(db, 0x10, 0x20)
     # Just verify iteration works regardless of block count
     count = 0
     for block in small_flowchart:

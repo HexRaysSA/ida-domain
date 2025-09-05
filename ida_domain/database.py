@@ -17,7 +17,6 @@ from ida_idaapi import ea_t
 from typing_extensions import TYPE_CHECKING, List, Literal, Optional, Tuple, Type, Union
 
 from .base import check_db_open
-from .basic_blocks import BasicBlocks
 from .bytes import Bytes
 from .comments import Comments
 from .entries import Entries
@@ -33,7 +32,6 @@ from .types import Types
 from .xrefs import Xrefs
 
 if TYPE_CHECKING:
-    from .basic_blocks import BasicBlocks
     from .instructions import Instructions
 
 
@@ -809,11 +807,6 @@ class Database:
     def functions(self) -> Functions:
         """Handler that provides access to function-related operations."""
         return Functions(self)
-
-    @property
-    def basic_blocks(self) -> BasicBlocks:
-        """Handler that provides access to basic block-related operations."""
-        return BasicBlocks(self)
 
     @property
     def instructions(self) -> Instructions:
