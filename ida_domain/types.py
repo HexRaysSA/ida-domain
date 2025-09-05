@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
-from enum import Enum, Flag, IntEnum, IntFlag, auto
+import warnings
+from enum import Enum, EnumMeta, Flag, IntEnum, IntFlag, auto
 from pathlib import Path
 
 import ida_nalt
@@ -17,7 +17,7 @@ from ida_typeinf import (
     tinfo_t,
     udt_type_data_t,
 )
-from typing_extensions import TYPE_CHECKING, Callable, ClassVar, Dict, Iterator, Optional
+from typing_extensions import TYPE_CHECKING, Callable, Dict, Iterator, Optional, Tuple
 
 from . import __ida_version__
 from .base import (
@@ -35,6 +35,38 @@ if TYPE_CHECKING:
 
 
 logger = logging.getLogger(__name__)
+
+
+class NotSupportedWarning(Warning):
+    """Warning for unsupported features in the underlying idapython API"""
+
+    pass
+
+
+warnings.simplefilter('ignore', category=NotSupportedWarning)
+
+_VERSION_SUPPORT_CHECK: Dict[Tuple[str, str], Callable[[], bool]] = {
+    ('UdtAttr', 'TUPLE'): lambda: __ida_version__ >= 930
+}
+
+
+def _is_not_supported(type_name: str, attr: str, warn: bool = True) -> bool:
+    checker = _VERSION_SUPPORT_CHECK.get((type_name, attr))
+    not_supported = checker is not None and not checker()
+    if not_supported and warn:
+        warnings.warn(
+            f'{type_name}.{attr} is not supported in IDA version {__ida_version__}',
+            category=NotSupportedWarning,
+            stacklevel=1,
+        )
+    return not_supported
+
+
+class _CheckAttrSupport(EnumMeta):
+    def __getattribute__(cls, name):  # type: ignore
+        obj = super().__getattribute__(name)
+        _is_not_supported(type(obj).__name__, name)
+        return obj
 
 
 class LibraryAddFlags(IntFlag):
@@ -184,7 +216,7 @@ class TypeKind(Enum):
     NUMBERED = 2
 
 
-class UdtAttr(Flag):
+class UdtAttr(Flag, metaclass=_CheckAttrSupport):
     """User Defined Type flags"""
 
     CPP_OBJ = auto()
@@ -193,12 +225,18 @@ class UdtAttr(Flag):
     UNALIGNED = auto()
     VFTABLE = auto()
     UNION = auto()
-    if __ida_version__ >= 920:
-        TUPLE = auto()
+    TUPLE = auto()
 
 
 class UdtDetails:
     """User Defined Type details"""
+
+    @staticmethod
+    def _is_tuple(u: udt_type_data_t) -> bool:
+        attr_name = str(UdtAttr.TUPLE.name)
+        if not _is_not_supported(type(UdtAttr).__name__, attr_name, warn=False):
+            return u.is_tuple()
+        return False
 
     _HANDLERS: Dict[UdtAttr, Callable[[udt_type_data_t], bool]] = {
         UdtAttr.FIXED: lambda t: t.is_fixed(),
@@ -206,9 +244,8 @@ class UdtDetails:
         UdtAttr.MS_STRUCT: lambda t: t.is_msstruct(),
         UdtAttr.CPP_OBJ: lambda t: t.is_cppobj(),
         UdtAttr.VFTABLE: lambda t: t.is_vftable(),
+        UdtAttr.TUPLE: _is_tuple,
     }
-    if __ida_version__ >= 920:
-        _HANDLERS[UdtAttr.TUPLE] = lambda t: t.is_tuple()
 
     def __init__(self) -> None:
         self._attributes: Optional[UdtAttr] = None
