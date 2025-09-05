@@ -260,7 +260,7 @@ def traverse_basic_blocks(db: ida_domain.Database) -> None:
     """
     print_section_header('BASIC BLOCKS')
 
-    flowchart = ida_domain.flowchart.FlowChart.from_range(db, db.minimum_ea, db.maximum_ea)
+    flowchart = ida_domain.flowchart.FlowChart(db, None, (db.minimum_ea, db.maximum_ea))
     basic_blocks = list(flowchart)
     print(f'Total basic blocks: {len(basic_blocks)}')
 

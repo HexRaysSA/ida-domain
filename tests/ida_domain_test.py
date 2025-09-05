@@ -763,7 +763,7 @@ def test_basic_block(test_env):
     assert last_block.count_predecessors() >= 1
 
     # Test get_between method
-    flowchart = ida_domain.flowchart.FlowChart.from_range(db, 0xC4, 0x2A3)
+    flowchart = ida_domain.flowchart.FlowChart(db, None, (0xC4, 0x2A3))
     assert len(flowchart) == 4
     assert flowchart[0].start_ea == 0xC4
     assert flowchart[3].end_ea == 0x2A3
@@ -772,10 +772,10 @@ def test_basic_block(test_env):
     from ida_domain.base import InvalidEAError, InvalidParameterError
 
     with pytest.raises(InvalidEAError):
-        ida_domain.flowchart.FlowChart.from_range(db, 0xFFFFFFFF, 0xFFFFFFFF)
+        ida_domain.flowchart.FlowChart(db, None, (0xFFFFFFFF, 0xFFFFFFFF))
 
     with pytest.raises(InvalidParameterError):
-        ida_domain.flowchart.FlowChart.from_range(db, 0x200, 0x100)
+        ida_domain.flowchart.FlowChart(db, None, (0x200, 0x100))
 
     # Test function_flowchart method (same as db.functions.get_basic_blocks)
     func_blocks = db.functions.get_flowchart(func)
@@ -794,7 +794,7 @@ def test_basic_block(test_env):
     assert len(func_blocks_noext) == 4
 
     # Test flowchart iteration for a different range
-    small_flowchart = ida_domain.flowchart.FlowChart.from_range(db, 0x10, 0x20)
+    small_flowchart = ida_domain.flowchart.FlowChart(db, None, (0x10, 0x20))
     # Just verify iteration works regardless of block count
     count = 0
     for block in small_flowchart:

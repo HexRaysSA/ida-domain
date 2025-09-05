@@ -5,12 +5,12 @@ from enum import IntFlag
 from typing import Any
 
 import ida_gdl
+from ida_gdl import qbasic_block_t, qflow_chart_t
 from ida_ua import insn_t
 from typing_extensions import TYPE_CHECKING, Iterator, Optional
 
 from .base import (
     DatabaseEntity,
-    DatabaseNotLoadedError,
     InvalidEAError,
     InvalidParameterError,
     check_db_open,
@@ -42,17 +42,23 @@ class BasicBlock(ida_gdl.BasicBlock, DatabaseEntity):
     Provides access to basic block properties and navigation.
     """
 
-    def __init__(self, database: Optional[Database], id: int, bb: Any, fc: Any) -> None:
+    def __init__(
+        self,
+        database: Optional[Database],
+        id: int,
+        block: qbasic_block_t,
+        flowchart: qflow_chart_t,
+    ) -> None:
         """
         Initialize basic block.
 
         Args:
             id: Block ID within the flowchart
-            bb: The underlying qbasic_block_t object
-            fc: Parent flowchart
+            block: The underlying qbasic_block_t object
+            flowchart: Parent flowchart
         """
         DatabaseEntity.__init__(self, database)
-        ida_gdl.BasicBlock.__init__(self, id, bb, fc)
+        ida_gdl.BasicBlock.__init__(self, id, block, flowchart)
 
     def get_successors(self) -> Iterator[BasicBlock]:
         """Iterator over successor blocks."""
@@ -91,12 +97,34 @@ class FlowChart(ida_gdl.FlowChart, DatabaseEntity):
     def __init__(
         self,
         database: Optional[Database],
-        f: func_t = None,
+        func: func_t = None,
         bounds: Optional[tuple[ea_t, ea_t]] = None,
         flags: FlowChartFlags = FlowChartFlags.NONE,
     ) -> None:
+        """
+        Initialize FlowChart for analyzing basic blocks within functions or address ranges.
+
+        Args:
+            database: Database instance to associate with this flowchart. Can be None.
+            func: IDA function object (func_t) to analyze. Defaults to None.
+            bounds: Address range tuple (start_ea, end_ea) defining the analysis scope.
+                Defaults to None.
+            flags: FlowChart creation flags controlling analysis behavior.
+                Defaults to FlowChartFlags.NONE.
+
+        Note:
+            At least one of `func` or `bounds` must be specified.
+        """
         DatabaseEntity.__init__(self, database)
-        ida_gdl.FlowChart.__init__(self, f, bounds, int(flags))
+        if bounds:
+            if not self.database.is_valid_ea(bounds[0], strict_check=False):
+                raise InvalidEAError(bounds[0])
+            if not self.database.is_valid_ea(bounds[1], strict_check=False):
+                raise InvalidEAError(bounds[1])
+            if bounds[0] >= bounds[1]:
+                raise InvalidParameterError('bounds', bounds, 'must be a valid range')
+
+        ida_gdl.FlowChart.__init__(self, func, bounds, int(flags))
 
     def __getitem__(self, index: int) -> BasicBlock:
         """
@@ -135,56 +163,3 @@ class FlowChart(ida_gdl.FlowChart, DatabaseEntity):
             int: Number of basic blocks.
         """
         return self.size
-
-    @classmethod
-    def from_function(
-        cls, db: Database, func: func_t, flags: FlowChartFlags = FlowChartFlags.NONE
-    ) -> FlowChart:
-        """
-        Retrieves the basic blocks within a given function.
-
-        Args:
-            func: The function to retrieve basic blocks from.
-            flags: Optional flowchart generation flags (default: FlowChartFlags.NONE).
-
-        Returns:
-            An iterable flowchart containing the basic blocks of the function.
-        """
-        if not db or not db.is_open():
-            raise DatabaseNotLoadedError('Database is not loaded. Please open a database first.')
-        return FlowChart(db, func, None, flags)
-
-    @classmethod
-    def from_range(
-        cls,
-        db: Database,
-        start_ea: ea_t,
-        end_ea: ea_t,
-        flags: FlowChartFlags = FlowChartFlags.NONE,
-    ) -> FlowChart:
-        """
-        Retrieves the basic blocks within a given address range.
-
-        Args:
-            start_ea: The start address of the range.
-            end_ea: The end address of the range.
-            flags: Optional flowchart generation flags (default: FlowChartFlags.NONE).
-
-        Returns:
-            An iterable flowchart containing the basic blocks within the specified range.
-
-        Raises:
-            InvalidEAError: If the effective address is not in the database range.
-            InvalidParameterError: If the input range is invalid.
-        """
-
-        if not db or not db.is_open():
-            raise DatabaseNotLoadedError('Database is not loaded. Please open a database first.')
-        if not db.is_valid_ea(start_ea, strict_check=False):
-            raise InvalidEAError(start_ea)
-        if not db.is_valid_ea(end_ea, strict_check=False):
-            raise InvalidEAError(end_ea)
-        if start_ea >= end_ea:
-            raise InvalidParameterError('start_ea', start_ea, 'must be less than end_ea')
-
-        return FlowChart(db, None, (start_ea, end_ea), flags)

@@ -214,7 +214,7 @@ class Functions(DatabaseEntity):
         Returns:
             An iterator over the function's basic blocks, or empty iterator if function is invalid.
         """
-        return ida_domain.flowchart.FlowChart.from_function(self.database, func)
+        return ida_domain.flowchart.FlowChart(self.database, func, None, flags)
 
     def get_instructions(self, func: func_t) -> Optional[Iterator[insn_t]]:
         """
