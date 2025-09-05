@@ -46,7 +46,7 @@ class NotSupportedWarning(Warning):
 warnings.simplefilter('ignore', category=NotSupportedWarning)
 
 _VERSION_SUPPORT_CHECK: Dict[Tuple[str, str], Callable[[], bool]] = {
-    ('UdtAttr', 'TUPLE'): lambda: __ida_version__ >= 930
+    ('UdtAttr', 'TUPLE'): lambda: __ida_version__ >= 920
 }
 
 
@@ -233,8 +233,9 @@ class UdtDetails:
 
     @staticmethod
     def _is_tuple(u: udt_type_data_t) -> bool:
+        type_name = UdtAttr.__name__
         attr_name = str(UdtAttr.TUPLE.name)
-        if not _is_not_supported(type(UdtAttr).__name__, attr_name, warn=False):
+        if not _is_not_supported(type_name, attr_name, warn=False):
             return u.is_tuple()
         return False
 
