@@ -552,18 +552,19 @@ class Database:
         self.unhook()
 
     @check_db_open
-    def execute_script(self, file_path: str) -> Tuple[bool, str]:
+    def execute_script(self, file_path: str) -> None:
         """
         Execute the specified python script
 
         Args:
             file_path: The script file path
 
-        Returns:
-            A tuple (success, error), if succeeded error is None.
+        Raises:
+            RuntimeError: If script execution fails.
         """
         compiler_error = ida_idaapi.IDAPython_ExecScript(file_path, globals())
-        return compiler_error is None, compiler_error
+        if compiler_error is not None:
+            raise RuntimeError(f'script execution {str} failed with error {compiler_error}')
 
     def is_valid_ea(self, ea: ea_t, strict_check: bool = True) -> bool:
         """

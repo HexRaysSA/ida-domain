@@ -1166,3 +1166,29 @@ class Types(DatabaseEntity):
             Type details object.
         """
         return TypeDetails.extract(type_info)
+
+    def set_comment(self, type_info: tinfo_t, comment: str) -> bool:
+        """
+        Set comment for type.
+        This function works only for non-trivial types
+
+        Args:
+            type_info: The type info object to set comment for.
+            comment: Comment text to set.
+
+        Returns:
+            True if successful, False otherwise.
+        """
+        return type_info.set_type_cmt(comment) == 0
+
+    def get_comment(self, type_info: tinfo_t) -> str:
+        """
+        Get comment for type.
+
+        Args:
+            type_info: The type info object to get comment from.
+
+        Returns:
+            Comment text, or empty string if no comment exists.
+        """
+        return type_info.get_type_cmt() or ''

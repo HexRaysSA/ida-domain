@@ -190,18 +190,18 @@ def test_segment(test_env):
     test_repeatable_comment = 'Test repeatable segment comment'
 
     # Test non-repeatable segment comment
-    assert db.comments.set_segment_comment(test_segment, test_comment, False)
-    retrieved_comment = db.comments.get_segment_comment(test_segment, False)
+    assert db.segments.set_comment(test_segment, test_comment, False)
+    retrieved_comment = db.segments.get_comment(test_segment, False)
     assert retrieved_comment == test_comment
 
     # Test repeatable segment comment
-    assert db.comments.set_segment_comment(test_segment, test_repeatable_comment, True)
-    retrieved_repeatable_comment = db.comments.get_segment_comment(test_segment, True)
+    assert db.segments.set_comment(test_segment, test_repeatable_comment, True)
+    retrieved_repeatable_comment = db.segments.get_comment(test_segment, True)
     assert retrieved_repeatable_comment == test_repeatable_comment
 
     # Test getting non-existent comment returns empty string
     text_segment = db.segments.get_at(0x0)  # Use .text segment
-    empty_comment = db.comments.get_segment_comment(text_segment, False)
+    empty_comment = db.segments.get_comment(text_segment, False)
     assert empty_comment == ''
 
 
@@ -404,18 +404,18 @@ def test_function(test_env):
     test_repeatable_comment = 'Test repeatable function comment'
 
     # Test non-repeatable function comment
-    assert db.comments.set_function_comment(func, test_comment, False)
-    retrieved_comment = db.comments.get_function_comment(func, False)
+    assert db.functions.set_comment(func, test_comment, False)
+    retrieved_comment = db.functions.get_comment(func, False)
     assert retrieved_comment == test_comment
 
     # Test repeatable function comment
-    assert db.comments.set_function_comment(func, test_repeatable_comment, True)
-    retrieved_repeatable_comment = db.comments.get_function_comment(func, True)
+    assert db.functions.set_comment(func, test_repeatable_comment, True)
+    retrieved_repeatable_comment = db.functions.get_comment(func, True)
     assert retrieved_repeatable_comment == test_repeatable_comment
 
     # Test getting non-existent comment returns empty string
     func_no_comment = db.functions.get_at(0x311)
-    empty_comment = db.comments.get_function_comment(func_no_comment, False)
+    empty_comment = db.functions.get_comment(func_no_comment, False)
     assert empty_comment == ''
 
 
@@ -1422,14 +1422,14 @@ def test_types(test_env):
     test_comment = 'Test type comment'
 
     # Test setting comment for the STRUCT_EXAMPLE type
-    assert db.comments.set_type_comment(tif, test_comment)
-    retrieved_comment = db.comments.get_type_comment(tif)
+    assert db.types.set_comment(tif, test_comment)
+    retrieved_comment = db.types.get_comment(tif)
     assert retrieved_comment == test_comment
 
     # Test getting non-existent comment returns empty string
     # Create a simple type without comment
     simple_type = ida_typeinf.tinfo_t()
-    empty_comment = db.comments.get_type_comment(simple_type)
+    empty_comment = db.types.get_comment(simple_type)
     assert empty_comment == ''
 
     db.types.unload_library(til)
@@ -1619,14 +1619,14 @@ def test_comments(test_env):
     )
 
     anterior_comments = list(
-        db.comments.get_extra_all(test_ea, ida_domain.comments.ExtraCommentKind.ANTERIOR)
+        db.comments.get_all_extra_at(test_ea, ida_domain.comments.ExtraCommentKind.ANTERIOR)
     )
     assert len(anterior_comments) == 2
     assert anterior_comments[0] == 'First anterior comment'
     assert anterior_comments[1] == 'Second anterior comment'
 
     posterior_comments = list(
-        db.comments.get_extra_all(test_ea, ida_domain.comments.ExtraCommentKind.POSTERIOR)
+        db.comments.get_all_extra_at(test_ea, ida_domain.comments.ExtraCommentKind.POSTERIOR)
     )
     assert len(posterior_comments) == 2
     assert posterior_comments[0] == 'First posterior comment'
@@ -1634,7 +1634,7 @@ def test_comments(test_env):
 
     assert db.comments.delete_extra_at(test_ea, 1, ida_domain.comments.ExtraCommentKind.ANTERIOR)
     remaining_anterior = list(
-        db.comments.get_extra_all(test_ea, ida_domain.comments.ExtraCommentKind.ANTERIOR)
+        db.comments.get_all_extra_at(test_ea, ida_domain.comments.ExtraCommentKind.ANTERIOR)
     )
     assert len(remaining_anterior) == 1
     assert remaining_anterior[0] == 'First anterior comment'
@@ -1643,7 +1643,7 @@ def test_comments(test_env):
     # all the subsequent ones are becoming "invisible" also
     assert db.comments.delete_extra_at(test_ea, 0, ida_domain.comments.ExtraCommentKind.POSTERIOR)
     remaining_posterior = list(
-        db.comments.get_extra_all(test_ea, ida_domain.comments.ExtraCommentKind.POSTERIOR)
+        db.comments.get_all_extra_at(test_ea, ida_domain.comments.ExtraCommentKind.POSTERIOR)
     )
     assert len(remaining_posterior) == 0
 
@@ -1660,7 +1660,9 @@ def test_comments(test_env):
     with pytest.raises(ida_domain.base.InvalidEAError):
         db.comments.get_extra_at(0xFFFFFFFF, 0, ida_domain.comments.ExtraCommentKind.ANTERIOR)
     with pytest.raises(ida_domain.base.InvalidEAError):
-        list(db.comments.get_extra_all(0xFFFFFFFF, ida_domain.comments.ExtraCommentKind.ANTERIOR))
+        list(
+            db.comments.get_all_extra_at(0xFFFFFFFF, ida_domain.comments.ExtraCommentKind.ANTERIOR)
+        )
     with pytest.raises(ida_domain.base.InvalidEAError):
         db.comments.delete_extra_at(0xFFFFFFFF, 0, ida_domain.comments.ExtraCommentKind.ANTERIOR)
 
@@ -2563,6 +2565,8 @@ def test_migrated_examples():
             db.current_ea = ea
             db.start_ip = ea
             print(f'>>>========\nExecuting migrated IDA Python example {script_path.name}')
-            ret, error = db.execute_script(script_path)
+            try:
+                db.execute_script(script_path)
+            except RuntimeError as e:
+                assert False, f'Example {script_path.name} failed to run, error {e}'
             print(f'Executing migrated IDA Python example {script_path.name} finised\n<<<=====')
-            assert ret, f'Example {script_path.name} failed to run, error {error}'

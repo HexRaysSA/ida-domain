@@ -231,7 +231,7 @@ class Comments(DatabaseEntity):
         base_idx = ida_lines.E_PREV if kind == ExtraCommentKind.ANTERIOR else ida_lines.E_NEXT
         return ida_lines.get_extra_cmt(ea, base_idx + index)
 
-    def get_extra_all(self, ea: int, kind: ExtraCommentKind) -> Iterator[str]:
+    def get_all_extra_at(self, ea: int, kind: ExtraCommentKind) -> Iterator[str]:
         """
         Gets all extra comments of a specific kind.
 
@@ -277,90 +277,3 @@ class Comments(DatabaseEntity):
 
         base_idx = ida_lines.E_PREV if kind == ExtraCommentKind.ANTERIOR else ida_lines.E_NEXT
         return ida_lines.del_extra_cmt(ea, base_idx + index)
-
-    def set_function_comment(self, func: func_t, comment: str, repeatable: bool = False) -> bool:
-        """
-        Set comment for function.
-
-        Args:
-            func: The function to set comment for.
-            comment: Comment text to set.
-            repeatable: If True, creates a repeatable comment (shows at all identical operands).
-                        If False, creates a non-repeatable comment (shows only at this function).
-
-        Returns:
-            True if successful, False otherwise.
-        """
-        return ida_funcs.set_func_cmt(func, comment, repeatable)
-
-    def get_function_comment(self, func: func_t, repeatable: bool = False) -> str:
-        """
-        Get comment for function.
-
-        Args:
-            func: The function to get comment from.
-            repeatable: If True, retrieves repeatable comment (shows at all identical operands).
-                        If False, retrieves non-repeatable comment (shows only at this function).
-
-        Returns:
-            Comment text, or empty string if no comment exists.
-        """
-        return ida_funcs.get_func_cmt(func, repeatable) or ''
-
-    def set_segment_comment(
-        self, segment: segment_t, comment: str, repeatable: bool = False
-    ) -> bool:
-        """
-        Set comment for segment.
-
-        Args:
-            segment: The segment to set comment for.
-            comment: Comment text to set.
-            repeatable: If True, creates a repeatable comment (shows at all identical operands).
-                        If False, creates a non-repeatable comment (shows only at this segment).
-
-        Returns:
-            True if successful, False otherwise.
-        """
-        ida_segment.set_segment_cmt(segment, comment, repeatable)
-        return self.get_segment_comment(segment, repeatable) == comment
-
-    def get_segment_comment(self, segment: segment_t, repeatable: bool = False) -> str:
-        """
-        Get comment for segment.
-
-        Args:
-            segment: The segment to get comment from.
-            repeatable: If True, retrieves repeatable comment (shows at all identical operands).
-                        If False, retrieves non-repeatable comment (shows only at this segment).
-
-        Returns:
-            Comment text, or empty string if no comment exists.
-        """
-        return ida_segment.get_segment_cmt(segment, repeatable) or ''
-
-    def set_type_comment(self, type_info: tinfo_t, comment: str) -> bool:
-        """
-        Set comment for type.
-        This function works only for non-trivial types
-
-        Args:
-            type_info: The type info object to set comment for.
-            comment: Comment text to set.
-
-        Returns:
-            True if successful, False otherwise.
-        """
-        return type_info.set_type_cmt(comment) == 0
-
-    def get_type_comment(self, type_info: tinfo_t) -> str:
-        """
-        Get comment for type.
-
-        Args:
-            type_info: The type info object to get comment from.
-
-        Returns:
-            Comment text, or empty string if no comment exists.
-        """
-        return type_info.get_type_cmt() or ''

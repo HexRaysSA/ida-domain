@@ -641,3 +641,32 @@ class Functions(DatabaseEntity):
         func = ida_funcs.get_func(ea)
         chunk = ida_funcs.get_fchunk(ea)
         return chunk is not None and (func != chunk)
+
+    def set_comment(self, func: func_t, comment: str, repeatable: bool = False) -> bool:
+        """
+        Set comment for function.
+
+        Args:
+            func: The function to set comment for.
+            comment: Comment text to set.
+            repeatable: If True, creates a repeatable comment (shows at all identical operands).
+                        If False, creates a non-repeatable comment (shows only at this function).
+
+        Returns:
+            True if successful, False otherwise.
+        """
+        return ida_funcs.set_func_cmt(func, comment, repeatable)
+
+    def get_comment(self, func: func_t, repeatable: bool = False) -> str:
+        """
+        Get comment for function.
+
+        Args:
+            func: The function to get comment from.
+            repeatable: If True, retrieves repeatable comment (shows at all identical operands).
+                        If False, retrieves non-repeatable comment (shows only at this function).
+
+        Returns:
+            Comment text, or empty string if no comment exists.
+        """
+        return ida_funcs.get_func_cmt(func, repeatable) or ''

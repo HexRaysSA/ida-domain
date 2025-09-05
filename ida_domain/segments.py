@@ -319,3 +319,33 @@ class Segments(DatabaseEntity):
         """Get segment class name."""
         cls = ida_segment.get_segm_class(segment)
         return cls if cls else None
+
+    def set_comment(self, segment: segment_t, comment: str, repeatable: bool = False) -> bool:
+        """
+        Set comment for segment.
+
+        Args:
+            segment: The segment to set comment for.
+            comment: Comment text to set.
+            repeatable: If True, creates a repeatable comment (shows at all identical operands).
+                        If False, creates a non-repeatable comment (shows only at this segment).
+
+        Returns:
+            True if successful, False otherwise.
+        """
+        ida_segment.set_segment_cmt(segment, comment, repeatable)
+        return self.get_comment(segment, repeatable) == comment
+
+    def get_comment(self, segment: segment_t, repeatable: bool = False) -> str:
+        """
+        Get comment for segment.
+
+        Args:
+            segment: The segment to get comment from.
+            repeatable: If True, retrieves repeatable comment (shows at all identical operands).
+                        If False, retrieves non-repeatable comment (shows only at this segment).
+
+        Returns:
+            Comment text, or empty string if no comment exists.
+        """
+        return ida_segment.get_segment_cmt(segment, repeatable) or ''
