@@ -50,7 +50,7 @@ _VERSION_SUPPORT_CHECK: Dict[Tuple[str, str], Callable[[], bool]] = {
 }
 
 
-def _is_not_supported(type_name: str, attr: str, warn: bool = True) -> bool:
+def _is_supported(type_name: str, attr: str, warn: bool = True) -> bool:
     checker = _VERSION_SUPPORT_CHECK.get((type_name, attr))
     not_supported = checker is not None and not checker()
     if not_supported and warn:
@@ -59,13 +59,13 @@ def _is_not_supported(type_name: str, attr: str, warn: bool = True) -> bool:
             category=NotSupportedWarning,
             stacklevel=1,
         )
-    return not_supported
+    return not not_supported
 
 
 class _CheckAttrSupport(EnumMeta):
     def __getattribute__(cls, name):  # type: ignore
         obj = super().__getattribute__(name)
-        _is_not_supported(type(obj).__name__, name)
+        _is_supported(type(obj).__name__, name)
         return obj
 
 
@@ -235,7 +235,7 @@ class UdtDetails:
     def _is_tuple(u: udt_type_data_t) -> bool:
         type_name = UdtAttr.__name__
         attr_name = str(UdtAttr.TUPLE.name)
-        if not _is_not_supported(type_name, attr_name, warn=False):
+        if _is_supported(type_name, attr_name, warn=False):
             return u.is_tuple()
         return False
 
