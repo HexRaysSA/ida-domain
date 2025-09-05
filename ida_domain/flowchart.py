@@ -38,8 +38,8 @@ class FlowChartFlags(IntFlag):
 @decorate_all_methods(check_db_open)
 class BasicBlock(ida_gdl.BasicBlock, DatabaseEntity):
     """
-    Basic block class wrapper around ida_gdl.BasicBlock.
-    Provides access to basic block properties and navigation.
+    Provides access to basic block properties and navigation
+    between connected blocks within a control flow graph.
     """
 
     def __init__(
@@ -89,8 +89,7 @@ class BasicBlock(ida_gdl.BasicBlock, DatabaseEntity):
 @decorate_all_methods(check_db_open)
 class FlowChart(ida_gdl.FlowChart, DatabaseEntity):
     """
-    Flowchart class wrapper around ida_gdl.FlowChart.
-    Used to analyze and iterate through basic blocks within
+    Provides analysis and iteration over basic blocks within
     functions or address ranges.
     """
 
