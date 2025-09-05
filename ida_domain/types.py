@@ -263,7 +263,7 @@ class UdtDetails:
         return self._num_members
 
     @classmethod
-    def extract(cls, type_info: tinfo_t) -> Optional[UdtDetails]:
+    def from_tinfo_t(cls, type_info: tinfo_t) -> Optional[UdtDetails]:
         """
         Extract UDT type attributes and details.
 
@@ -337,7 +337,7 @@ class EnumDetails:
         return self._attributes
 
     @classmethod
-    def extract(cls, type_info: tinfo_t) -> Optional[EnumDetails]:
+    def from_tinfo_t(cls, type_info: tinfo_t) -> Optional[EnumDetails]:
         """
         Extract enum type attributes and details.
 
@@ -384,7 +384,7 @@ class PtrDetails:
         return self._attributes
 
     @classmethod
-    def extract(cls, type_info: tinfo_t) -> Optional[PtrDetails]:
+    def from_tinfo_t(cls, type_info: tinfo_t) -> Optional[PtrDetails]:
         """
         Extract pointer type attributes and details.
 
@@ -431,7 +431,7 @@ class ArrayDetails:
         return self._number_of_elements
 
     @classmethod
-    def extract(cls, type_info: tinfo_t) -> Optional[ArrayDetails]:
+    def from_tinfo_t(cls, type_info: tinfo_t) -> Optional[ArrayDetails]:
         """
         Extract array type attributes and details.
 
@@ -499,7 +499,7 @@ class FuncDetails:
         return self._attributes
 
     @classmethod
-    def extract(cls, type_info: tinfo_t) -> Optional[FuncDetails]:
+    def from_tinfo_t(cls, type_info: tinfo_t) -> Optional[FuncDetails]:
         """
         Extract function type attributes and details.
 
@@ -548,7 +548,7 @@ class BitfieldDetails:
         return self._attributes
 
     @classmethod
-    def extract(cls, type_info: tinfo_t) -> Optional[BitfieldDetails]:
+    def from_tinfo_t(cls, type_info: tinfo_t) -> Optional[BitfieldDetails]:
         """
         Extract bitfield type attributes and details.
 
@@ -819,7 +819,7 @@ class TypeDetails:
         return self._bitfield_details
 
     @classmethod
-    def extract(cls, type_info: tinfo_t) -> TypeDetails:
+    def from_tinfo_t(cls, type_info: tinfo_t) -> TypeDetails:
         """
         Extract all type attributes and details.
 
@@ -836,12 +836,12 @@ class TypeDetails:
             if handler(type_info):
                 details._attributes |= flag
 
-        details._udt_details = UdtDetails.extract(type_info)
-        details._enum_details = EnumDetails.extract(type_info)
-        details._func_details = FuncDetails.extract(type_info)
-        details._ptr_details = PtrDetails.extract(type_info)
-        details._array_details = ArrayDetails.extract(type_info)
-        details._bitfield_details = BitfieldDetails.extract(type_info)
+        details._udt_details = UdtDetails.from_tinfo_t(type_info)
+        details._enum_details = EnumDetails.from_tinfo_t(type_info)
+        details._func_details = FuncDetails.from_tinfo_t(type_info)
+        details._ptr_details = PtrDetails.from_tinfo_t(type_info)
+        details._array_details = ArrayDetails.from_tinfo_t(type_info)
+        details._bitfield_details = BitfieldDetails.from_tinfo_t(type_info)
 
         return details
 
@@ -1207,7 +1207,7 @@ class Types(DatabaseEntity):
         Returns:
             Type details object.
         """
-        return TypeDetails.extract(type_info)
+        return TypeDetails.from_tinfo_t(type_info)
 
     def set_comment(self, type_info: tinfo_t, comment: str) -> bool:
         """
