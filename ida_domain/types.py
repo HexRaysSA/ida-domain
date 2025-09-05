@@ -52,14 +52,14 @@ _VERSION_SUPPORT_CHECK: Dict[Tuple[str, str], Callable[[], bool]] = {
 
 def _is_supported(type_name: str, attr: str, warn: bool = True) -> bool:
     checker = _VERSION_SUPPORT_CHECK.get((type_name, attr))
-    not_supported = checker is not None and not checker()
-    if not_supported and warn:
+    supported = checker is None or checker()
+    if not supported and warn:
         warnings.warn(
             f'{type_name}.{attr} is not supported in IDA version {__ida_version__}',
             category=NotSupportedWarning,
             stacklevel=1,
         )
-    return not not_supported
+    return supported
 
 
 class _CheckAttrSupport(EnumMeta):
