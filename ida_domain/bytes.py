@@ -2142,7 +2142,7 @@ class Bytes(DatabaseEntity):
             lines = src.splitlines()
 
             if not remove_tags:
-                microcode.append(lines)
+                microcode.extend(lines)
                 continue
 
             for line in lines:
