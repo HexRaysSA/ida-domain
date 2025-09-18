@@ -2125,6 +2125,7 @@ class Bytes(DatabaseEntity):
         if not mba:
             raise RuntimeError(f'Failed to generate microcode for range {start_ea:x}:{end_ea:x}')
 
+        microcode = []
         mba.build_graph()
         total = mba.qty
         for i in range(total):
@@ -2141,13 +2142,12 @@ class Bytes(DatabaseEntity):
             lines = src.splitlines()
 
             if not remove_tags:
-                return lines
+                microcode.extend(lines)
+                continue
 
-            microcode = []
             for line in lines:
                 new_line = ida_lines.tag_remove(line)
                 if new_line:
                     microcode.append(new_line)
 
-            return microcode
-        return []
+        return microcode
