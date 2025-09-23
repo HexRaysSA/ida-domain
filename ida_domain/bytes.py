@@ -2138,16 +2138,15 @@ class Bytes(DatabaseEntity):
 
             vp = ida_hexrays.qstring_printer_t(None, True)
             block._print(vp)
-            src = vp.s
-            lines = src.splitlines()
+            lines = vp.get_s().split('\n')
 
             if not remove_tags:
                 microcode.extend(lines)
                 continue
 
             for line in lines:
-                new_line = ida_lines.tag_remove(line)
-                if new_line:
-                    microcode.append(new_line)
+                line = ida_lines.tag_remove(line)
+                if line:
+                    microcode.append(line.strip())
 
         return microcode
