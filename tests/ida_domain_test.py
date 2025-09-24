@@ -307,6 +307,8 @@ def test_function(test_env):
     first_ref = refs[0]
     assert first_ref.access_type == LocalVariableAccessType.READ
     assert first_ref.context == LocalVariableContext.OTHER
+    assert first_ref.line_number == 8
+    assert first_ref.code_line == '*((_QWORD *)&v3 + 1) = a3;'
 
     func = db.functions.get_at(0x311)
     assert func is not None

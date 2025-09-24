@@ -106,6 +106,8 @@ class LocalVariableReference:
     access_type: LocalVariableAccessType  # How variable is accessed
     context: Optional[LocalVariableContext] = None  # Usage context
     ea: Optional[ea_t] = None  # Binary address if mappable
+    line_number: Optional[int] = None  # Line number in pseudocode
+    code_line: Optional[str] = None  # The pseudocode line containing the reference
 
 
 @dataclass
@@ -152,7 +154,29 @@ class _LVarRefsVisitor(ida_hexrays.ctree_visitor_t):
                 context = self._determine_context(expr)
                 ea = expr.ea if expr.ea != BADADDR else None
 
-                ref = LocalVariableReference(access_type=access_type, context=context, ea=ea)
+                # Extract line information
+                line_number = None
+                code_line = None
+
+                # Get line coordinates from the expression
+                coords = self.cfunc.find_item_coords(expr)
+                if coords and len(coords) >= 2:
+                    line_number = coords[1]  # y coordinate is line number
+
+                    # Get the actual pseudocode line
+                    sv = self.cfunc.get_pseudocode()
+                    if 0 <= line_number < len(sv):
+                        code_line = sv[line_number].line
+                        # Remove IDA color/formatting tags
+                        code_line = ida_lines.tag_remove(code_line).strip()
+
+                ref = LocalVariableReference(
+                    access_type=access_type,
+                    context=context,
+                    ea=ea,
+                    line_number=line_number,
+                    code_line=code_line
+                )
                 self.refs.append(ref)
         return 0
 

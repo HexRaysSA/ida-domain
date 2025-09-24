@@ -28,6 +28,11 @@ def analyze_local_variables(db, func):
 
         print(f'    {lvar.name} ({var_type}, {type_str}): {ref_count} refs')
 
+        # Show first reference with line info if available
+        if refs and refs[0].line_number is not None:
+            first_ref = refs[0]
+            print(f'      first ref at line {first_ref.line_number}: {first_ref.code_line}')
+
 
 def analyze_functions(db_path, pattern='main', max_results=10, analyze_lvars=True):
     """Find and analyze functions matching a pattern."""
