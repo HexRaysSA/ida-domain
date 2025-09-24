@@ -175,7 +175,7 @@ class _LVarRefsVisitor(ida_hexrays.ctree_visitor_t):
                     context=context,
                     ea=ea,
                     line_number=line_number,
-                    code_line=code_line
+                    code_line=code_line,
                 )
                 self.refs.append(ref)
         return 0
