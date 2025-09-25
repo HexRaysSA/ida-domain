@@ -276,6 +276,40 @@ def test_function(test_env):
     assert func is not None
     assert func.name == 'add_numbers'
 
+    # Test local variables functionality
+    lvars = db.functions.get_local_variables(func)
+    assert len(lvars) == 3
+
+    # Check first argument
+    first_arg = lvars[0]
+    assert first_arg.is_argument is True
+    assert first_arg.name == 'a1'
+    assert first_arg.size == 8
+    assert str(first_arg.type) == '__int64'
+
+    # Test get_local_variable_by_name
+    var_by_name = db.functions.get_local_variable_by_name(func, 'a1')
+    assert var_by_name is not None
+    assert var_by_name.index == 0
+    assert var_by_name.name == 'a1'
+
+    # Test local variable references
+    func = db.functions.get_at(0x2D0)
+    lvars = db.functions.get_local_variables(func)
+    assert len(lvars) == 9
+    local_var = lvars[0]
+    assert local_var.name == 'a3'
+    refs = db.functions.get_local_variable_references(func, local_var)
+    assert len(refs) == 1
+
+    from ida_domain.functions import LocalVariableAccessType, LocalVariableContext
+
+    first_ref = refs[0]
+    assert first_ref.access_type == LocalVariableAccessType.READ
+    assert first_ref.context == LocalVariableContext.OTHER
+    assert first_ref.line_number == 8
+    assert first_ref.code_line == '*((_QWORD *)&v3 + 1) = a3;'
+
     func = db.functions.get_at(0x311)
     assert func is not None
     assert func.name == 'level2_func_a'
@@ -422,8 +456,6 @@ def test_function(test_env):
     func = db.functions.get_at(0x2BC)
     microcode_lines = db.functions.get_microcode(func)
     assert len(microcode_lines) == 72
-    print(microcode_lines[53])
-    print(microcode_lines[67])
     assert microcode_lines[53] == '2.40 jcnd   tt.1, @2                ; 2DE u=tt.1'
     assert microcode_lines[67] == (
         '3.13 call   !sys_write <spec:"unsigned int fd" edi.4,'

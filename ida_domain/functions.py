@@ -2,20 +2,19 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from enum import Flag
+from enum import Enum, Flag, IntEnum
 
 import ida_bytes
-import ida_frame
 import ida_funcs
 import ida_hexrays
 import ida_lines
 import ida_name
 import ida_typeinf
-import ida_ua
 from ida_funcs import func_t
 from ida_idaapi import BADADDR, ea_t
+from ida_typeinf import tinfo_t
 from ida_ua import insn_t
-from typing_extensions import TYPE_CHECKING, Iterator, List, Optional
+from typing_extensions import TYPE_CHECKING, Any, Iterator, List, Optional
 
 import ida_domain
 import ida_domain.flowchart
@@ -33,6 +32,29 @@ if TYPE_CHECKING:
     from .database import Database
 
 logger = logging.getLogger(__name__)
+
+
+class LocalVariableAccessType(IntEnum):
+    """Type of access to a local variable."""
+
+    READ = 1  # Variable value is read
+    WRITE = 2  # Variable value is modified
+    ADDRESS = 3  # Address of variable is taken (&var)
+
+
+class LocalVariableContext(Enum):
+    """Context where local variable is referenced."""
+
+    ASSIGNMENT = 'assignment'  # var = expr or expr = var
+    CONDITION = 'condition'  # if (var), while (var), etc.
+    CALL_ARG = 'call_arg'  # func(var)
+    RETURN = 'return'  # return var
+    ARITHMETIC = 'arithmetic'  # var + 1, var * 2, etc.
+    COMPARISON = 'comparison'  # var == x, var < y, etc.
+    ARRAY_INDEX = 'array_index'  # arr[var] or var[i]
+    POINTER_DEREF = 'pointer_deref'  # *var or var->field
+    CAST = 'cast'  # (type)var
+    OTHER = 'other'  # Other contexts
 
 
 class FunctionFlags(Flag):
@@ -61,6 +83,34 @@ class FunctionFlags(Flag):
 
 
 @dataclass
+class LocalVariable:
+    """Represents a local variable or argument in a function."""
+
+    index: int  # Variable index in function
+    name: str  # Variable name
+    type: Optional[tinfo_t]  # Type information
+    size: int  # Size in bytes
+    is_argument: bool  # True if is a function argument
+    is_result: bool  # True if is a return value variable
+
+    @property
+    def type_str(self) -> str:
+        """Get string representation of the type."""
+        return str(self.type) if self.type else ''
+
+
+@dataclass
+class LocalVariableReference:
+    """Reference to a local variable in pseudocode."""
+
+    access_type: LocalVariableAccessType  # How variable is accessed
+    context: Optional[LocalVariableContext] = None  # Usage context
+    ea: Optional[ea_t] = None  # Binary address if mappable
+    line_number: Optional[int] = None  # Line number in pseudocode
+    code_line: Optional[str] = None  # The pseudocode line containing the reference
+
+
+@dataclass
 class StackPoint:
     """Stack pointer change information."""
 
@@ -83,6 +133,124 @@ class FunctionChunk:
     start_ea: ea_t
     end_ea: ea_t
     is_main: bool
+
+
+class _LVarRefsVisitor(ida_hexrays.ctree_visitor_t):
+    """Visitor to find references to a specific local variable in pseudocode."""
+
+    def __init__(self, cfunc: Any, lvar_index: int):
+        super().__init__(ida_hexrays.CV_FAST)
+        self.cfunc = cfunc
+        self.lvar_index = lvar_index
+        self.refs: List[LocalVariableReference] = []
+
+    def visit_expr(self, expr: Any) -> int:
+        """Visit expression nodes to find variable references."""
+        if expr.op == ida_hexrays.cot_var:
+            # Found any variable - check if it's our target
+            if expr.v.idx == self.lvar_index:
+                # Found a reference to our variable
+                access_type = self._determine_access_type(expr)
+                context = self._determine_context(expr)
+                ea = expr.ea if expr.ea != BADADDR else None
+
+                # Extract line information
+                line_number = None
+                code_line = None
+
+                # Get line coordinates from the expression
+                coords = self.cfunc.find_item_coords(expr)
+                if coords and len(coords) >= 2:
+                    line_number = coords[1]  # y coordinate is line number
+
+                    # Get the actual pseudocode line
+                    sv = self.cfunc.get_pseudocode()
+                    if 0 <= line_number < len(sv):
+                        code_line = sv[line_number].line
+                        # Remove IDA color/formatting tags
+                        code_line = ida_lines.tag_remove(code_line).strip()
+
+                ref = LocalVariableReference(
+                    access_type=access_type,
+                    context=context,
+                    ea=ea,
+                    line_number=line_number,
+                    code_line=code_line,
+                )
+                self.refs.append(ref)
+        return 0
+
+    def _determine_access_type(self, expr: Any) -> LocalVariableAccessType:
+        """Determine how the variable is being accessed."""
+        parent = expr.cexpr
+        if not parent:
+            return LocalVariableAccessType.READ
+
+        # Check if this is a write operation (left side of assignment)
+        if parent.op == ida_hexrays.cot_asg and parent.x == expr:
+            return LocalVariableAccessType.WRITE
+        # Check if address is taken
+        elif parent.op == ida_hexrays.cot_ref and parent.x == expr:
+            return LocalVariableAccessType.ADDRESS
+        # Check compound assignments
+        elif (
+            parent.op
+            in (
+                ida_hexrays.cot_asgadd,
+                ida_hexrays.cot_asgmul,
+                ida_hexrays.cot_asgsub,
+                ida_hexrays.cot_asgsdiv,
+                ida_hexrays.cot_asgudiv,
+                ida_hexrays.cot_asgsmod,
+                ida_hexrays.cot_asgumod,
+            )
+            and parent.x == expr
+        ):
+            return LocalVariableAccessType.WRITE
+
+        return LocalVariableAccessType.READ
+
+    def _determine_context(self, expr: Any) -> LocalVariableContext:
+        """Determine the context where the variable is used."""
+        parent = expr.cexpr
+        if not parent:
+            return LocalVariableContext.OTHER
+
+        if parent.op == ida_hexrays.cot_asg:
+            return LocalVariableContext.ASSIGNMENT
+        elif parent.op == ida_hexrays.cot_call:
+            return LocalVariableContext.CALL_ARG
+        elif parent.op in (
+            ida_hexrays.cot_eq,
+            ida_hexrays.cot_ne,
+            ida_hexrays.cot_sge,
+            ida_hexrays.cot_uge,
+            ida_hexrays.cot_sle,
+            ida_hexrays.cot_ule,
+            ida_hexrays.cot_sgt,
+            ida_hexrays.cot_ugt,
+            ida_hexrays.cot_slt,
+            ida_hexrays.cot_ult,
+        ):
+            return LocalVariableContext.COMPARISON
+        elif parent.op in (
+            ida_hexrays.cot_add,
+            ida_hexrays.cot_sub,
+            ida_hexrays.cot_mul,
+            ida_hexrays.cot_sdiv,
+            ida_hexrays.cot_udiv,
+            ida_hexrays.cot_smod,
+            ida_hexrays.cot_umod,
+        ):
+            return LocalVariableContext.ARITHMETIC
+        elif parent.op == ida_hexrays.cot_idx:
+            return LocalVariableContext.ARRAY_INDEX
+        elif parent.op in (ida_hexrays.cot_ptr, ida_hexrays.cot_memptr, ida_hexrays.cot_memref):
+            return LocalVariableContext.POINTER_DEREF
+        elif parent.op == ida_hexrays.cot_cast:
+            return LocalVariableContext.CAST
+
+        return LocalVariableContext.OTHER
 
 
 @decorate_all_methods(check_db_open)
@@ -675,3 +843,88 @@ class Functions(DatabaseEntity):
             Comment text, or empty string if no comment exists.
         """
         return ida_funcs.get_func_cmt(func, repeatable) or ''
+
+    def get_local_variables(self, func: func_t) -> List[LocalVariable]:
+        """
+        Get all local variables for a function.
+
+        Args:
+            func: The function instance.
+
+        Returns:
+            List of local variables including arguments and local vars.
+
+        Raises:
+            RuntimeError: If decompilation fails for the function.
+        """
+        cfunc = ida_hexrays.decompile(func.start_ea)
+        if not cfunc:
+            raise RuntimeError(f'Failed to decompile function at 0x{func.start_ea:x}')
+
+        lvars = []
+        for i in range(cfunc.lvars.size()):
+            lvar = cfunc.lvars[i]
+
+            # Get type information
+            type_info = lvar.tif
+
+            local_var = LocalVariable(
+                index=i,
+                name=lvar.name,
+                type=type_info,
+                size=lvar.width,
+                is_argument=lvar.is_arg_var,
+                is_result=lvar.is_result_var,
+            )
+            lvars.append(local_var)
+
+        return lvars
+
+    def get_local_variable_references(
+        self, func: func_t, lvar: LocalVariable
+    ) -> List[LocalVariableReference]:
+        """
+        Get all references to a specific local variable.
+
+        Args:
+            func: The function instance.
+            lvar: The local variable to find references for.
+
+        Returns:
+            List of references to the variable in pseudocode.
+
+        Raises:
+            RuntimeError: If decompilation fails for the function.
+        """
+        cfunc = ida_hexrays.decompile(func.start_ea)
+        if not cfunc:
+            raise RuntimeError(f'Failed to decompile function at 0x{func.start_ea:x}')
+
+        # Create visitor to find variable references
+        visitor = _LVarRefsVisitor(cfunc, lvar.index)
+
+        # Visit the function body to find references
+        visitor.apply_to(cfunc.body, None)
+
+        return visitor.refs
+
+    def get_local_variable_by_name(self, func: func_t, name: str) -> Optional[LocalVariable]:
+        """
+        Find a local variable by name.
+
+        Args:
+            func: The function instance.
+            name: Variable name to search for.
+
+        Returns:
+            LocalVariable if found
+
+        Raises:
+            RuntimeError: If decompilation fails for the function.
+            KeyError: If the variable is not found
+        """
+        lvars = self.get_local_variables(func)
+        for lvar in lvars:
+            if lvar.name == name:
+                return lvar
+        raise KeyError(f'Variable {name} could not be located')
