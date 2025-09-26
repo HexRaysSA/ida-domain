@@ -25,7 +25,7 @@ def _load_dependencies() -> None:
         import idapro
 
 
-__version__ = '0.2.2'
+__version__ = '0.3.0'
 
 # Make sure all dependencies are loaded
 _load_dependencies()

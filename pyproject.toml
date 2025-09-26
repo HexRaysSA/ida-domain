@@ -1,6 +1,6 @@
 [project]
 name = "ida-domain"
-version = "0.2.2"
+version = "0.3.0"
 description = "IDA Domain API - Python interface for IDA Pro reverse engineering platform"
 requires-python = ">=3.9"
 license = "MIT"
