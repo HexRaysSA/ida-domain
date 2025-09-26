@@ -37,61 +37,100 @@ logger = logging.getLogger(__name__)
 class LocalVariableAccessType(IntEnum):
     """Type of access to a local variable."""
 
-    READ = 1  # Variable value is read
-    WRITE = 2  # Variable value is modified
-    ADDRESS = 3  # Address of variable is taken (&var)
+    READ = 1
+    """Variable value is read"""
+    WRITE = 2
+    """Variable value is modified"""
+    ADDRESS = 3
+    """Address of variable is taken (&var)"""
 
 
 class LocalVariableContext(Enum):
     """Context where local variable is referenced."""
 
-    ASSIGNMENT = 'assignment'  # var = expr or expr = var
-    CONDITION = 'condition'  # if (var), while (var), etc.
-    CALL_ARG = 'call_arg'  # func(var)
-    RETURN = 'return'  # return var
-    ARITHMETIC = 'arithmetic'  # var + 1, var * 2, etc.
-    COMPARISON = 'comparison'  # var == x, var < y, etc.
-    ARRAY_INDEX = 'array_index'  # arr[var] or var[i]
-    POINTER_DEREF = 'pointer_deref'  # *var or var->field
-    CAST = 'cast'  # (type)var
-    OTHER = 'other'  # Other contexts
+    ASSIGNMENT = 'assignment'
+    """var = expr or expr = var"""
+    CONDITION = 'condition'
+    """if (var), while (var), etc."""
+    CALL_ARG = 'call_arg'
+    """func(var)"""
+    RETURN = 'return'
+    """return var"""
+    ARITHMETIC = 'arithmetic'
+    """var + 1, var * 2, etc."""
+    COMPARISON = 'comparison'
+    """var == x, var < y, etc."""
+    ARRAY_INDEX = 'array_index'
+    """arr[var] or var[i]"""
+    POINTER_DEREF = 'pointer_deref'
+    """*var or var->field"""
+    CAST = 'cast'
+    """(type)var"""
+    OTHER = 'other'
+    """Other contexts"""
 
 
 class FunctionFlags(Flag):
     """Function attribute flags from IDA SDK."""
 
-    NORET = ida_funcs.FUNC_NORET  # Function doesn't return
-    FAR = ida_funcs.FUNC_FAR  # Far function
-    LIB = ida_funcs.FUNC_LIB  # Library function
-    STATICDEF = ida_funcs.FUNC_STATICDEF  # Static function
-    FRAME = ida_funcs.FUNC_FRAME  # Function uses frame pointer (BP)
-    USERFAR = ida_funcs.FUNC_USERFAR  # User has specified far-ness of the function
-    HIDDEN = ida_funcs.FUNC_HIDDEN  # A hidden function chunk
-    THUNK = ida_funcs.FUNC_THUNK  # Thunk (jump) function
-    BOTTOMBP = ida_funcs.FUNC_BOTTOMBP  # BP points to the bottom of the stack frame
-    NORET_PENDING = ida_funcs.FUNC_NORET_PENDING  # Function 'non-return' analysis needed
-    SP_READY = ida_funcs.FUNC_SP_READY  # SP-analysis has been performed
-    FUZZY_SP = ida_funcs.FUNC_FUZZY_SP  # Function changes SP in untraceable way
-    PROLOG_OK = ida_funcs.FUNC_PROLOG_OK  # Prolog analysis has been performed
-    PURGED_OK = ida_funcs.FUNC_PURGED_OK  # 'argsize' field has been validated
-    TAIL = ida_funcs.FUNC_TAIL  # This is a function tail
-    LUMINA = ida_funcs.FUNC_LUMINA  # Function info is provided by Lumina
-    OUTLINE = ida_funcs.FUNC_OUTLINE  # Outlined code, not a real function
-    REANALYZE = ida_funcs.FUNC_REANALYZE  # Function frame changed, request to reanalyze
-    UNWIND = ida_funcs.FUNC_UNWIND  # Function is an exception unwind handler
-    CATCH = ida_funcs.FUNC_CATCH  # Function is an exception catch handler
+    NORET = ida_funcs.FUNC_NORET
+    """Function doesn't return"""
+    FAR = ida_funcs.FUNC_FAR
+    """Far function"""
+    LIB = ida_funcs.FUNC_LIB
+    """Library function"""
+    STATICDEF = ida_funcs.FUNC_STATICDEF
+    """Static function"""
+    FRAME = ida_funcs.FUNC_FRAME
+    """Function uses frame pointer (BP)"""
+    USERFAR = ida_funcs.FUNC_USERFAR
+    """User has specified far-ness of the function"""
+    HIDDEN = ida_funcs.FUNC_HIDDEN
+    """A hidden function chunk"""
+    THUNK = ida_funcs.FUNC_THUNK
+    """Thunk (jump) function"""
+    BOTTOMBP = ida_funcs.FUNC_BOTTOMBP
+    """BP points to the bottom of the stack frame"""
+    NORET_PENDING = ida_funcs.FUNC_NORET_PENDING
+    """Function 'non-return' analysis needed"""
+    SP_READY = ida_funcs.FUNC_SP_READY
+    """SP-analysis has been performed"""
+    FUZZY_SP = ida_funcs.FUNC_FUZZY_SP
+    """Function changes SP in untraceable way"""
+    PROLOG_OK = ida_funcs.FUNC_PROLOG_OK
+    """Prolog analysis has been performed"""
+    PURGED_OK = ida_funcs.FUNC_PURGED_OK
+    """'argsize' field has been validated"""
+    TAIL = ida_funcs.FUNC_TAIL
+    """This is a function tail"""
+    LUMINA = ida_funcs.FUNC_LUMINA
+    """Function info is provided by Lumina"""
+    OUTLINE = ida_funcs.FUNC_OUTLINE
+    """Outlined code, not a real function"""
+    REANALYZE = ida_funcs.FUNC_REANALYZE
+    """Function frame changed, request to reanalyze"""
+    UNWIND = ida_funcs.FUNC_UNWIND
+    """Function is an exception unwind handler"""
+    CATCH = ida_funcs.FUNC_CATCH
+    """Function is an exception catch handler"""
 
 
 @dataclass
 class LocalVariable:
     """Represents a local variable or argument in a function."""
 
-    index: int  # Variable index in function
-    name: str  # Variable name
-    type: Optional[tinfo_t]  # Type information
-    size: int  # Size in bytes
-    is_argument: bool  # True if is a function argument
-    is_result: bool  # True if is a return value variable
+    index: int
+    """Variable index in function"""
+    name: str
+    """Variable name"""
+    type: Optional[tinfo_t]
+    """Type information"""
+    size: int
+    """Size in bytes"""
+    is_argument: bool
+    """True if is a function argument"""
+    is_result: bool
+    """True if is a return value variable"""
 
     @property
     def type_str(self) -> str:
@@ -103,27 +142,36 @@ class LocalVariable:
 class LocalVariableReference:
     """Reference to a local variable in pseudocode."""
 
-    access_type: LocalVariableAccessType  # How variable is accessed
-    context: Optional[LocalVariableContext] = None  # Usage context
-    ea: Optional[ea_t] = None  # Binary address if mappable
-    line_number: Optional[int] = None  # Line number in pseudocode
-    code_line: Optional[str] = None  # The pseudocode line containing the reference
+    access_type: LocalVariableAccessType
+    """How variable is accessed"""
+    context: Optional[LocalVariableContext] = None
+    """Usage context"""
+    ea: Optional[ea_t] = None
+    """Binary address if mappable"""
+    line_number: Optional[int] = None
+    """Line number in pseudocode"""
+    code_line: Optional[str] = None
+    """The pseudocode line containing the reference"""
 
 
 @dataclass
 class StackPoint:
     """Stack pointer change information."""
 
-    ea: ea_t  # Address where SP changes
-    sp_delta: int  # Stack pointer delta at this point
+    ea: ea_t
+    """Address where SP changes"""
+    sp_delta: int
+    """Stack pointer delta at this point"""
 
 
 @dataclass
 class TailInfo:
     """Function tail chunk information."""
 
-    owner_ea: ea_t  # Address of owning function
-    owner_name: str  # Name of owning function
+    owner_ea: ea_t
+    """Address of owning function"""
+    owner_name: str
+    """Name of owning function"""
 
 
 @dataclass
@@ -131,8 +179,11 @@ class FunctionChunk:
     """Represents a function chunk (main or tail)."""
 
     start_ea: ea_t
+    """Start address of the function chunk"""
     end_ea: ea_t
+    """End address of the function chunk"""
     is_main: bool
+    """True if is the function main chunk"""
 
 
 class _LVarRefsVisitor(ida_hexrays.ctree_visitor_t):
