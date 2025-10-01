@@ -2387,7 +2387,7 @@ class ProcessorHooks(_BaseHooks, IDP_Hooks):
         Returns:
             PyObject*: 1 if success, 0 if not implemented or failed.
         """
-        return IDP_Hooks.ev_decorate_name(self, name, mangle, cc, optional_type)
+        return 0
 
     def ev_arch_changed(self) -> int:
         """
