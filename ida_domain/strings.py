@@ -48,16 +48,28 @@ class StringItem:
     Represents detailed information about a string in the IDA database.
     """
 
-    address: ea_t
+    address: int
     length: int
-    type: StringType
+    internal_type: int
+
+    @property
+    def type(self) -> StringType:
+        return StringType(ida_nalt.get_str_type_code(self.internal_type))
+
+    @property
+    def encoding(self) -> str:
+        """
+        Returns internal IDA string encoding.
+        Note that IDA Domain API always uses UTF-8 to decode strings.
+        """
+        return ida_nalt.encoding_from_strtype(self.internal_type)
 
     @property
     def contents(self) -> bytes:
-        return ida_bytes.get_strlit_contents(self.address, self.length, self.type)
+        return ida_bytes.get_strlit_contents(self.address, self.length, self.internal_type)
 
     def __str__(self) -> str:
-        return self.contents.decode('UTF-8')
+        return self.contents.decode('utf-8')
 
     def __bytes__(self) -> bytes:
         return self.contents
@@ -116,9 +128,8 @@ class Strings(DatabaseEntity):
         """
         if 0 <= index < len(self):
             if ida_strlist.get_strlist_item(self._si, index):
-                str_type = ida_nalt.get_str_type_code(self._si.type)
                 return StringItem(
-                    address=self._si.ea, length=self._si.length, type=StringType(str_type)
+                    address=self._si.ea, length=self._si.length, internal_type=self._si.type,
                 )
         raise IndexError(f'String index {index} out of range [0, {len(self)})')
 
