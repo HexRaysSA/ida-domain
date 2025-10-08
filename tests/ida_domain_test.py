@@ -1007,9 +1007,6 @@ def test_strings(test_env):
 
     db.strings.rebuild(config=StringListConfig(min_len=5))
 
-    for i in db.strings:
-        logger.debug(i)
-
     assert len(db.strings) == 3
 
     expected_strings = [
@@ -1103,6 +1100,37 @@ def test_strings(test_env):
         assert info.length > 0
         assert isinstance(info.type, StringType)
         assert info.type == StringType.C
+
+    # Modify string in place with some latin-1 encoded chars
+    import ida_nalt
+
+    string_encoding = 'iso-8859-1'
+    string_addr = 0x3A0
+    latin_1_str = b'So\xe4\xf6\xfc\xdf string data'
+    utf_8_str = b'So\xc3\xa4\xc3\xb6\xc3\xbc\xc3\x9f string data'
+    buf = bytearray()
+    buf += 'äöüß'.encode('latin-1')
+
+    encoding_idx = ida_nalt.add_encoding(string_encoding)
+    assert encoding_idx
+
+    string_type = ida_nalt.make_str_type(ida_nalt.STRTYPE_C, encoding_idx)
+    assert string_type
+    ida_nalt.set_str_type(string_addr, string_type)
+    db.bytes.set_bytes_at(string_addr + 2, bytes(buf))
+    db.strings.rebuild()
+
+    modified_bytes = db.bytes.get_bytes_at(string_addr, len(latin_1_str))
+    assert modified_bytes == latin_1_str
+
+    modified_string = db.strings.get_at(string_addr)
+    assert modified_string.contents == utf_8_str
+    assert str(modified_string) == utf_8_str.decode('utf-8')
+    assert modified_string.encoding == string_encoding
+    assert modified_string.length == 19
+    assert modified_string.internal_type == string_type
+    assert modified_string.type == StringType.C
+    assert len(db.strings) == 3
 
 
 def test_names(test_env):

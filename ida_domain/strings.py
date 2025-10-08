@@ -48,7 +48,7 @@ class StringItem:
     Represents detailed information about a string in the IDA database.
     """
 
-    address: int
+    address: ea_t
     length: int
     internal_type: int
 
@@ -60,7 +60,7 @@ class StringItem:
     def encoding(self) -> str:
         """
         Returns internal IDA string encoding.
-        Note that IDA Domain API always uses UTF-8 to decode strings.
+        Retrieved string contents are always utf-8 encoded.
         """
         return ida_nalt.encoding_from_strtype(self.internal_type)
 
