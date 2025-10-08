@@ -1005,8 +1005,6 @@ def test_strings(test_env):
     db = test_env
     from ida_domain.base import InvalidEAError, InvalidParameterError
 
-    db.strings.rebuild(config=StringListConfig(min_len=5))
-
     assert len(db.strings) == 3
 
     expected_strings = [

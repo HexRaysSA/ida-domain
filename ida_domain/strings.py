@@ -49,23 +49,32 @@ class StringItem:
     """
 
     address: ea_t
+    """String address"""
     length: int
+    """String length in number of characters"""
     internal_type: int
+    """Internal IDA string type, including internal string encoding"""
 
     @property
     def type(self) -> StringType:
+        """
+        Return string type enum value, e.g. 'C-style null-terminated string'.
+        """
         return StringType(ida_nalt.get_str_type_code(self.internal_type))
 
     @property
     def encoding(self) -> str:
         """
-        Returns internal IDA string encoding.
-        Retrieved string contents are always utf-8 encoded.
+        Returns internal IDA string encoding, e.g. 'iso-8859-1'.
+        Note that retrieved string contents will always be utf-8 encoded.
         """
         return ida_nalt.encoding_from_strtype(self.internal_type)
 
     @property
     def contents(self) -> bytes:
+        """
+        Returns utf-8 encoded string contents.
+        """
         return ida_bytes.get_strlit_contents(self.address, self.length, self.internal_type)
 
     def __str__(self) -> str:
@@ -102,6 +111,7 @@ class Strings(DatabaseEntity):
     def __init__(self, database: Database) -> None:
         super().__init__(database)
         self._si = ida_strlist.string_info_t()
+        self.rebuild()
 
     def __iter__(self) -> Iterator[StringItem]:
         return self.get_all()
