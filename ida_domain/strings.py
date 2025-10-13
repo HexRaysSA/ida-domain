@@ -111,7 +111,6 @@ class Strings(DatabaseEntity):
     def __init__(self, database: Database) -> None:
         super().__init__(database)
         self._si = ida_strlist.string_info_t()
-        self.rebuild()
 
     def __iter__(self) -> Iterator[StringItem]:
         return self.get_all()
