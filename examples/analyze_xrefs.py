@@ -14,7 +14,7 @@ from ida_domain.database import IdaCommandOptions
 
 def analyze_xrefs(db_path, target_addr):
     """Analyze cross-references to and from a target address."""
-    ida_options = IdaCommandOptions(auto_analysis=True, new_database=True)
+    ida_options = IdaCommandOptions(auto_analysis=True, new_database=False)
     with Database.open(db_path, ida_options) as db:
         print(f'Cross-references to {hex(target_addr)}:')
 

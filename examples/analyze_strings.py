@@ -14,7 +14,7 @@ from ida_domain.database import IdaCommandOptions
 
 def analyze_strings(db_path, min_length=5, max_display=20, show_interesting=True):
     """Find and analyze strings in the database."""
-    ida_options = IdaCommandOptions(auto_analysis=True, new_database=True)
+    ida_options = IdaCommandOptions(auto_analysis=True, new_database=False)
     with Database.open(db_path, ida_options) as db:
         print(f'Analyzing strings (minimum length: {min_length}):')
 

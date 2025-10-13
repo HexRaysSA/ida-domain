@@ -358,7 +358,7 @@ def traverse_database(db_path: str):
     print(f'Analyzing file: {db_path}')
 
     # Configure IDA options for analysis
-    ida_options = IdaCommandOptions(auto_analysis=True, new_database=True)
+    ida_options = IdaCommandOptions(auto_analysis=True, new_database=False)
 
     # Open database
     with ida_domain.Database.open(db_path, ida_options, False) as db:
