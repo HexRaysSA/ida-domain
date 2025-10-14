@@ -36,7 +36,7 @@ def analyze_local_variables(db, func):
 
 def analyze_functions(db_path, pattern='main', max_results=10, analyze_lvars=True):
     """Find and analyze functions matching a pattern."""
-    ida_options = IdaCommandOptions(auto_analysis=True, new_database=True)
+    ida_options = IdaCommandOptions(auto_analysis=True, new_database=False)
     with ida_domain.Database.open(db_path, ida_options, False) as db:
         # Find functions matching a pattern
         matching_functions = []

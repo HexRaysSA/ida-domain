@@ -71,7 +71,7 @@ from ida_domain.database import IdaCommandOptions
 
 def explore_database(db_path):
     """Explore basic database information."""
-    ida_options = IdaCommandOptions(auto_analysis=True, new_database=True)
+    ida_options = IdaCommandOptions(auto_analysis=True, new_database=False)
     with Database.open(db_path, ida_options) as db:
         # Get basic information
         print(f'Address range: {hex(db.minimum_ea)} - {hex(db.maximum_ea)}')

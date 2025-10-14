@@ -17,7 +17,7 @@ from ida_domain.database import IdaCommandOptions
 
 def analyze_bytes(db_path, search_pattern=None, patch_demo=False, max_results=20):
     """Analyze and manipulate bytes in the database."""
-    ida_options = IdaCommandOptions(auto_analysis=True, new_database=True)
+    ida_options = IdaCommandOptions(auto_analysis=True, new_database=False)
     with Database.open(path=db_path, args=ida_options, save_on_close=False) as db:
         bytes_handler = db.bytes
 

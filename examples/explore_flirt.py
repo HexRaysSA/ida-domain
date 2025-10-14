@@ -66,7 +66,7 @@ def main():
     parser.add_argument('-a', '--min-apply-matches', default=10, type=int)
     args = parser.parse_args()
 
-    ida_options = IdaCommandOptions(auto_analysis=True, new_database=True)
+    ida_options = IdaCommandOptions(auto_analysis=True, new_database=False)
     with Database.open(args.input_file, ida_options) as db:
         matches = probe_signature_files(db, args.min_probe_matches, args.sig_dir)
         apply_signature_files(db, matches, args.min_apply_matches)
