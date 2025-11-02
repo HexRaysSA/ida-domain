@@ -35,7 +35,9 @@ def analyze_local_variables(db: Database, func: 'func_t') -> None:
             print(f'      first ref at line {first_ref.line_number}: {first_ref.code_line}')
 
 
-def analyze_functions(db_path: str, pattern: str = 'main', max_results: int = 10, analyze_lvars: bool = True) -> None:
+def analyze_functions(
+    db_path: str, pattern: str = 'main', max_results: int = 10, analyze_lvars: bool = True
+) -> None:
     """Find and analyze functions matching a pattern."""
     ida_options = IdaCommandOptions(auto_analysis=True, new_database=False)
     with ida_domain.Database.open(db_path, ida_options, False) as db:
