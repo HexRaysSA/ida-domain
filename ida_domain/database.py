@@ -411,7 +411,7 @@ class Database:
     """
 
     def __init__(self, hooks: Optional[HooksList] = None) -> None:
-        self.save_on_close = False
+        self.save_on_close = True
         self._hooks = hooks if hooks is not None else []
 
     def __enter__(self) -> Database:
@@ -454,7 +454,7 @@ class Database:
         cls,
         path: str = '',
         args: Optional[IdaCommandOptions] = None,
-        save_on_close: bool = False,
+        save_on_close: bool = True,
         hooks: Optional[HooksList] = None,
     ) -> Database:
         """
