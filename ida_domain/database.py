@@ -379,33 +379,39 @@ class Database:
     """
     Provides access and control over the loaded IDA database.
 
-    Can be used as a context manager for automatic resource cleanup.
+    This class supports context manager protocol for automatic resource cleanup.
+    When used as a context manager, the database is automatically closed on exit.
 
     Args:
         hooks (HooksList, optional): A list of hook instances to associate with this database.
             Defaults to an empty list.
 
-    Note:
-        Direct instantiation of this class is discouraged.
-        Use the `Database.open()` class method to create and initialize a database instance.
+    Warning:
+        Direct instantiation is discouraged. Use `Database.open()` instead.
+
+        Database lifecycle behavior differs based on execution context:
+        - **Library mode**: You can open/close databases programmatically
+        - **IDA mode**: You can only obtain a handle to the currently open database
+          by calling `Database.open()` without arguments
 
     Example:
-        ```python
-        # Open and automatically close a database
+    ```python
+        # Library mode: Open and automatically close a database
         with Database.open("path/to/file.exe", save_on_close=True) as db:
-            # Work with the database
             print(f"Loaded: {db.path}")
         # Database is automatically closed here
 
-        # Or use without context manager
+        # Library mode: Manual control
         db = Database.open("path/to/file.exe", save_on_close=True)
-        # Work with database
-        db.close()  # Uses save_on_close=True automatically
-        ```
+        db.close()
+
+        # IDA mode: Get handle to current database
+        db = Database.open()  # or Database.open(None)
+    ```
     """
 
     def __init__(self, hooks: Optional[HooksList] = None) -> None:
-        self.save_on_close = False
+        self.save_on_close = True
         self._hooks = hooks if hooks is not None else []
 
     def __enter__(self) -> Database:
@@ -448,30 +454,58 @@ class Database:
         cls,
         path: str = '',
         args: Optional[IdaCommandOptions] = None,
-        save_on_close: bool = False,
+        save_on_close: bool = True,
         hooks: Optional[HooksList] = None,
     ) -> Database:
         """
-        Database factory, opens a database from the specified file path.
+        Opens or connects to an IDA database.
+
+        This method has two distinct behaviors depending on the execution context:
+
+        **Library mode** (IDA as a library):
+            Opens a new database from the specified file path. Full control over the
+            database lifecycle including opening and closing.
+
+        **IDA GUI mode** (running inside IDA):
+            Returns a handle to the currently open database. Set `path` to None.
 
         Args:
-            path: Path to the input file, pass None when running inside IDA GUI
-            args: Command builder responsible for passing arguments to IDA kernel.
-            save_on_close: Default behavior for saving changes on close. Used automatically
-            when exiting context manager, but can be overridden in explicit close() calls.
-            hooks: List of hook instances to associated with the database. Hooks are
-            automatically enabled before opening the database and disabled after closing.
+            path: Path to the binary file to analyze.
+                - Library mode: Required path to the file
+                - IDA GUI mode: Must be None to reference the currently open database
+                Defaults to None.
+            args: Additional arguments to pass to the IDA kernel when opening the database
+                (e.g., processor type, loading address, analysis options). Only applicable
+                in library mode. Defaults to None.
+            save_on_close: Whether to save changes when closing the database. This is used
+                automatically when exiting a context manager, but can be overridden in
+                explicit `close()` calls. Defaults to False.
+            hooks: List of hook instances to associate with the database. Hooks are
+                automatically enabled before opening and disabled after closing.
+                Defaults to an empty list.
 
         Returns:
-            Database: A new Database instance on success
+            Database: A Database instance connected to the specified or current database.
 
         Raises:
-            DatabaseError: If the Database instance cannot be created
+            DatabaseError: If the database cannot be opened or if `path` is provided
+                when running inside IDA GUI.
 
-        Note:
-            The user is allowed to open a new file only when running IDA as a library.
-            When running inside the IDA GUI, the db_path needs to be set to None
-            to refer to the currently open database in IDA.
+        Example:
+        ```python
+            # Library mode: Open a new database with custom options
+            with Database.open(
+                "malware.exe",
+                args={"processor": "arm", "load_addr": 0x1000},
+                save_on_close=True
+            ) as db:
+                # Analyze the binary
+                pass  # Automatically saved and closed
+
+            # IDA GUI mode: Get current database
+            db = Database.open()  # path=None
+            # Work with the currently open database
+        ```
         """
         db = Database(hooks=hooks)
         db.save_on_close = save_on_close

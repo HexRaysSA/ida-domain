@@ -8,6 +8,7 @@ patching, flag checking, and search functionality.
 """
 
 import argparse
+from typing import Optional
 
 import ida_domain
 from ida_domain import Database
@@ -15,7 +16,12 @@ from ida_domain.bytes import ByteFlags, SearchFlags, StringType
 from ida_domain.database import IdaCommandOptions
 
 
-def analyze_bytes(db_path, search_pattern=None, patch_demo=False, max_results=20):
+def analyze_bytes(
+    db_path: str,
+    search_pattern: Optional[str] = None,
+    patch_demo: bool = False,
+    max_results: int = 20,
+) -> None:
     """Analyze and manipulate bytes in the database."""
     ida_options = IdaCommandOptions(auto_analysis=True, new_database=False)
     with Database.open(path=db_path, args=ida_options, save_on_close=False) as db:

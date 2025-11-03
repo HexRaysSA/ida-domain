@@ -117,7 +117,7 @@ def test_database(test_env):
     db.close(False)
 
     # Test context manager protocol
-    with ida_domain.Database.open(idb_path) as db2:
+    with ida_domain.Database.open(idb_path, save_on_close=False) as db2:
         assert db2.is_open()
         func = db2.functions.get_at(0x2A3)
         assert func is not None

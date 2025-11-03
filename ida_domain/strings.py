@@ -138,7 +138,9 @@ class Strings(DatabaseEntity):
         if 0 <= index < len(self):
             if ida_strlist.get_strlist_item(self._si, index):
                 return StringItem(
-                    address=self._si.ea, length=self._si.length, internal_type=self._si.type,
+                    address=self._si.ea,
+                    length=self._si.length,
+                    internal_type=self._si.type,
                 )
         raise IndexError(f'String index {index} out of range [0, {len(self)})')
 
