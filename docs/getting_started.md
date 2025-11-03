@@ -85,6 +85,20 @@ Run: `python my_first_script.py -f <binary input file>`
 ✓ Database closed
 ```
 
+## Running Scripts Inside IDA
+
+The examples above show **library mode** - running standalone Python scripts outside IDA. You can also use IDA Domain from **inside the IDA GUI** for interactive analysis.
+
+When running inside IDA, call `Database.open()` with no arguments to get a handle to the currently open database:
+
+```python
+--8<-- "examples/ida_console_example.py"
+```
+
+**Key difference from library mode:**
+
+- No file path argument - database is already open
+
 ## Troubleshooting
 
 **ImportError: No module named 'ida_domain'**

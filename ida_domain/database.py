@@ -390,8 +390,8 @@ class Database:
         Direct instantiation is discouraged. Use `Database.open()` instead.
 
         Database lifecycle behavior differs based on execution context:
-        - **Library mode**: You can open/close databases programmatically
-        - **IDA mode**: You can only obtain a handle to the currently open database
+        - Library mode: You can open/close databases programmatically
+        - IDA mode: You can only obtain a handle to the currently open database
           by calling `Database.open()` without arguments
 
     Example:

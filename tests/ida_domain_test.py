@@ -2572,6 +2572,19 @@ def test_api_examples():
 
     assert result.returncode == 0, f'Example {script_path} failed to run'
 
+    # These examples are runing inside IDA, emulate the envirnoment with IDA Domain
+    inside_ida_examples = [
+        'ida_console_example.py'
+    ]
+    ida_options = IdaCommandOptions(auto_analysis=True, new_database=True)
+    for example in inside_ida_examples:
+        script_path = Path(__file__).parent.parent / 'examples' / example
+        with ida_domain.Database.open(str(idb_path), ida_options, save_on_close=False) as db:
+            try:
+                db.execute_script(script_path)
+            except RuntimeError as e:
+                assert False, f'Example {script_path.name} failed to run, error {e}'
+
 
 def test_readme_examples():
     """
