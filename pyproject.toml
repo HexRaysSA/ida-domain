@@ -9,6 +9,14 @@ keywords = ["ida", "ida-pro", "reverse-engineering", "disassembler", "binary-ana
 authors = [
     { name = "Hex-Rays SA", email = "support@hex-rays.com" }
 ]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
 
 dependencies = [
     "idapro>=0.0.5",
