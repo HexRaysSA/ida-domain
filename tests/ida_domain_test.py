@@ -306,9 +306,21 @@ def test_function(test_env):
 
     first_ref = refs[0]
     assert first_ref.access_type == LocalVariableAccessType.READ
-    assert first_ref.context == LocalVariableContext.OTHER
+    assert first_ref.context == LocalVariableContext.ASSIGNMENT
     assert first_ref.line_number == 8
     assert first_ref.code_line == '*((_QWORD *)&v3 + 1) = a3;'
+
+    # Test WRITE access type - verify v5 assignment is correctly classified
+    v5_var = db.functions.get_local_variable_by_name(func, 'v5')
+    assert v5_var is not None
+    v5_refs = db.functions.get_local_variable_references(func, v5_var)
+
+    # v5 = v3; should be detected as WRITE
+    write_refs = [ref for ref in v5_refs if ref.access_type == LocalVariableAccessType.WRITE]
+    assert len(write_refs) == 1, 'Expected exactly one WRITE reference for v5'
+    assert write_refs[0].access_type == LocalVariableAccessType.WRITE
+    assert write_refs[0].context == LocalVariableContext.ASSIGNMENT
+    assert write_refs[0].code_line == 'v5 = v3;'
 
     func = db.functions.get_at(0x311)
     assert func is not None
