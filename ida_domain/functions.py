@@ -186,11 +186,14 @@ class FunctionChunk:
     """True if is the function main chunk"""
 
 
-class _LVarRefsVisitor(ida_hexrays.ctree_visitor_t):
-    """Visitor to find references to a specific local variable in pseudocode."""
+class _LVarRefsVisitor(ida_hexrays.ctree_parentee_t):
+    """Visitor to find references to a specific local variable in pseudocode.
+
+    Uses ctree_parentee_t which properly maintains parent information.
+    """
 
     def __init__(self, cfunc: Any, lvar_index: int):
-        super().__init__(ida_hexrays.CV_FAST)
+        super().__init__()
         self.cfunc = cfunc
         self.lvar_index = lvar_index
         self.refs: List[LocalVariableReference] = []
@@ -201,8 +204,11 @@ class _LVarRefsVisitor(ida_hexrays.ctree_visitor_t):
             # Found any variable - check if it's our target
             if expr.v.idx == self.lvar_index:
                 # Found a reference to our variable
-                access_type = self._determine_access_type(expr)
-                context = self._determine_context(expr)
+                # Use parent_expr() to get the parent expression
+                parent = self.parent_expr()
+
+                access_type = self._determine_access_type(expr, parent)
+                context = self._determine_context(expr, parent)
                 ea = expr.ea if expr.ea != BADADDR else None
 
                 # Extract line information
@@ -231,9 +237,8 @@ class _LVarRefsVisitor(ida_hexrays.ctree_visitor_t):
                 self.refs.append(ref)
         return 0
 
-    def _determine_access_type(self, expr: Any) -> LocalVariableAccessType:
+    def _determine_access_type(self, expr: Any, parent: Any) -> LocalVariableAccessType:
         """Determine how the variable is being accessed."""
-        parent = expr.cexpr
         if not parent:
             return LocalVariableAccessType.READ
 
@@ -261,9 +266,8 @@ class _LVarRefsVisitor(ida_hexrays.ctree_visitor_t):
 
         return LocalVariableAccessType.READ
 
-    def _determine_context(self, expr: Any) -> LocalVariableContext:
+    def _determine_context(self, expr: Any, parent: Any) -> LocalVariableContext:
         """Determine the context where the variable is used."""
-        parent = expr.cexpr
         if not parent:
             return LocalVariableContext.OTHER
 
