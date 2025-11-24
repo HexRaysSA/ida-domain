@@ -449,18 +449,9 @@ class MemoryOperand(Operand):
                 for item in res:
                     if hasattr(item, 'name'):
                         return item.name
-                    if isinstance(item, str) and item:
-                        return item
-            elif hasattr(res, 'name'):
-                return res.name
             return None
 
-        # Try bits (strict)
         name = extract_name(tif.get_udm_by_offset(offset * 8))
-        if name:
-            return name
-        # Try bytes (loose)
-        name = extract_name(tif.get_udm_by_offset(offset))
         if name:
             return name
         return None
