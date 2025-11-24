@@ -1,6 +1,7 @@
 from typing import Optional
 from dataclasses import dataclass
 
+
 class RexPrefix:
     """
     Helper class for decoding REX prefixes from instruction prefix bytes.
@@ -60,6 +61,7 @@ class MemoryComponents:
     """
     Structured representation of memory operand components.
     """
+
     base_reg: Optional[str] = None
     index_reg: Optional[str] = None
     scale: Optional[int] = None

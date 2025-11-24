@@ -272,13 +272,13 @@ class AsmFormatter:
     """
 
     SIZE_TOKENS = {
-        1: "byte",
-        2: "word",
-        4: "dword",
-        8: "qword",
-        16: "xmmword",
-        32: "ymmword",
-        64: "zmmword",
+        1: 'byte',
+        2: 'word',
+        4: 'dword',
+        8: 'qword',
+        16: 'xmmword',
+        32: 'ymmword',
+        64: 'zmmword',
     }
 
     @staticmethod
@@ -288,14 +288,14 @@ class AsmFormatter:
         """
         if size_bytes <= 0:
             return None
-        return AsmFormatter.SIZE_TOKENS.get(size_bytes, f"mem{size_bytes}")
+        return AsmFormatter.SIZE_TOKENS.get(size_bytes, f'mem{size_bytes}')
 
     @staticmethod
     def immediate(val: int) -> str:
         """Format immediate value as hex string."""
         if val < 0:
-            return f"-0x{abs(val):x}"
-        return f"0x{val:x}"
+            return f'-0x{abs(val):x}'
+        return f'0x{val:x}'
 
     @staticmethod
     def displacement(val: int) -> str:
@@ -305,8 +305,8 @@ class AsmFormatter:
         if val > 0x7FFFFFFFFFFFFFFF:
             val = val - 0x10000000000000000
         if val < 0:
-            return f"-0x{abs(val):x}"
-        return f"0x{val:x}"
+            return f'-0x{abs(val):x}'
+        return f'0x{val:x}'
 
 
 class MemoryOperand(Operand):
@@ -398,15 +398,15 @@ class MemoryOperand(Operand):
         """
         insn = ida_ua.insn_t()
         if not ida_ua.decode_insn(insn, self._instruction_ea):
-            return ""
+            return ''
 
-        if hasattr(insn, "segpref"):
+        if hasattr(insn, 'segpref'):
             reg_idx = insn.segpref
             if reg_idx != -1 and reg_idx != 0:
                 name = ida_idp.get_reg_name(reg_idx, 2)
                 if name and name.lower() in ['cs', 'ds', 'es', 'fs', 'gs', 'ss']:
-                    return f"{name.lower()}:"
-        return ""
+                    return f'{name.lower()}:'
+        return ''
 
     def get_stack_variable_name(self) -> Optional[str]:
         """
@@ -443,20 +443,26 @@ class MemoryOperand(Operand):
             return None
 
         def extract_name(res):
-            if not res: return None
+            if not res:
+                return None
             if isinstance(res, tuple):
                 for item in res:
-                    if hasattr(item, "name"): return item.name
-                    if isinstance(item, str) and item: return item
-            elif hasattr(res, "name"): return res.name
+                    if hasattr(item, 'name'):
+                        return item.name
+                    if isinstance(item, str) and item:
+                        return item
+            elif hasattr(res, 'name'):
+                return res.name
             return None
 
         # Try bits (strict)
         name = extract_name(tif.get_udm_by_offset(offset * 8))
-        if name: return name
+        if name:
+            return name
         # Try bytes (loose)
         name = extract_name(tif.get_udm_by_offset(offset))
-        if name: return name
+        if name:
+            return name
         return None
 
     def get_complex_addressing_string(self) -> str:
@@ -466,7 +472,7 @@ class MemoryOperand(Operand):
         op = self._op
         insn = ida_ua.insn_t()
         if not ida_ua.decode_insn(insn, self._instruction_ea):
-            return "?"
+            return '?'
 
         ptr_width = 8 if self.m_database.bitness == 64 else 4
         components = []
@@ -478,21 +484,21 @@ class MemoryOperand(Operand):
 
         if has_sib:
             sib = SIB(op.specflag2)
-            rex_val = insn.insnpref if hasattr(insn, "insnpref") else 0
+            rex_val = insn.insnpref if hasattr(insn, 'insnpref') else 0
             rex = RexPrefix(rex_val)
-            
+
             # Resolve SIB components
             base_reg = None
             index_reg = None
             scale = None
-            
+
             # Base Register
             if op.type != ida_ua.o_mem:
                 base_idx = sib.base + (rex.b * 8)
                 base_reg = ida_idp.get_reg_name(base_idx, ptr_width)
 
             # Index Register
-            if not (sib.index == 4 and rex.x == 0): # has_sib_index
+            if not (sib.index == 4 and rex.x == 0):  # has_sib_index
                 index_idx = sib.index + (rex.x * 8)
                 index_reg = ida_idp.get_reg_name(index_idx, ptr_width)
                 if index_reg and sib.scale > 1:
@@ -501,10 +507,11 @@ class MemoryOperand(Operand):
             if base_reg:
                 components.append(base_reg)
             if index_reg:
-                if components: components.append("+")
+                if components:
+                    components.append('+')
                 components.append(index_reg)
                 if scale:
-                    components.append("*")
+                    components.append('*')
                     components.append(AsmFormatter.immediate(scale))
         else:
             # No SIB
@@ -515,25 +522,25 @@ class MemoryOperand(Operand):
         # Displacement
         disp = None
         if op.type == ida_ua.o_displ:
-             disp = op.addr
+            disp = op.addr
         elif op.type == ida_ua.o_mem:
-             disp = op.addr
-        
+            disp = op.addr
+
         if disp is not None and disp != 0:
             hex_disp = AsmFormatter.displacement(disp)
             if components:
-                if hex_disp.startswith("-"):
-                    components.append("-")
+                if hex_disp.startswith('-'):
+                    components.append('-')
                     components.append(hex_disp[1:])
                 else:
-                    components.append("+")
+                    components.append('+')
                     components.append(hex_disp)
             else:
                 components.append(hex_disp)
 
         if not components:
-            components.append("0x0")
-        return f"[ {' '.join(components)} ]"
+            components.append('0x0')
+        return f'[ {" ".join(components)} ]'
 
     def __str__(self) -> str:
         class_name = self.__class__.__name__
