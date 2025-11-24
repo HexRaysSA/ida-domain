@@ -13,6 +13,13 @@ import ida_name
 import ida_ua
 from ida_idaapi import ea_t
 from typing_extensions import TYPE_CHECKING
+import ida_funcs
+import ida_bytes
+import ida_frame
+import ida_typeinf
+import idc
+
+from .x86 import RexPrefix, SIB, MemoryComponents
 
 if TYPE_CHECKING:
     from .database import Database
@@ -259,6 +266,49 @@ class ImmediateOperand(Operand):
         return f'{class_name}(Op{self.number}, 0x{value:x})'
 
 
+class AsmFormatter:
+    """
+    Centralized formatting logic for IDA extensions.
+    """
+
+    SIZE_TOKENS = {
+        1: "byte",
+        2: "word",
+        4: "dword",
+        8: "qword",
+        16: "xmmword",
+        32: "ymmword",
+        64: "zmmword",
+    }
+
+    @staticmethod
+    def get_size_token(size_bytes: int) -> Optional[str]:
+        """
+        Get the size token for a given size in bytes.
+        """
+        if size_bytes <= 0:
+            return None
+        return AsmFormatter.SIZE_TOKENS.get(size_bytes, f"mem{size_bytes}")
+
+    @staticmethod
+    def immediate(val: int) -> str:
+        """Format immediate value as hex string."""
+        if val < 0:
+            return f"-0x{abs(val):x}"
+        return f"0x{val:x}"
+
+    @staticmethod
+    def displacement(val: int) -> str:
+        """Format displacement value as hex string, handling 64-bit negatives."""
+
+        # Normalize 64-bit negative displacements
+        if val > 0x7FFFFFFFFFFFFFFF:
+            val = val - 0x10000000000000000
+        if val < 0:
+            return f"-0x{abs(val):x}"
+        return f"0x{val:x}"
+
+
 class MemoryOperand(Operand):
     """Operand representing memory access (o_mem, o_phrase, o_displ)."""
 
@@ -335,6 +385,155 @@ class MemoryOperand(Operand):
         """Get the formatted operand string from IDA."""
         ret = ida_ua.print_operand(self._instruction_ea, self.number)
         return ida_lines.tag_remove(ret)
+
+    def get_size_token(self) -> Optional[str]:
+        """
+        Get the size token for this memory operand (e.g., 'byte', 'dword', 'qword').
+        """
+        return AsmFormatter.get_size_token(self.size_bytes)
+
+    def get_segment_prefix(self) -> str:
+        """
+        Get the segment prefix for this operand (e.g., 'fs:', 'gs:').
+        """
+        insn = ida_ua.insn_t()
+        if not ida_ua.decode_insn(insn, self._instruction_ea):
+            return ""
+
+        if hasattr(insn, "segpref"):
+            reg_idx = insn.segpref
+            if reg_idx != -1 and reg_idx != 0:
+                name = ida_idp.get_reg_name(reg_idx, 2)
+                if name and name.lower() in ['cs', 'ds', 'es', 'fs', 'gs', 'ss']:
+                    return f"{name.lower()}:"
+        return ""
+
+    def get_stack_variable_name(self) -> Optional[str]:
+        """
+        Resolves stack variable name if this operand references a stack variable.
+        """
+        op = self._op
+        ea = self._instruction_ea
+
+        # Check if IDA flagged this as a stack variable
+        flags = ida_bytes.get_flags(ea)
+        if not ida_bytes.is_stkvar(flags, op.n):
+            return None
+
+        p_func = ida_funcs.get_func(ea)
+        if not p_func:
+            return None
+
+        try:
+            stkoff = ida_frame.calc_stkvar_struc_offset(p_func, ea, op.n)
+            if stkoff != idc.BADADDR and stkoff != -1:
+                return self._get_frame_member_name(p_func, stkoff)
+        except Exception:
+            pass
+        return None
+
+    def _get_frame_member_name(self, p_func, offset: int) -> Optional[str]:
+        """Retrieve symbolic name of stack variable using IDA 9.0+ TypeInf."""
+        frame_id = p_func.frame
+        if frame_id == 0xFFFFFFFFFFFFFFFF or frame_id == 0:
+            return None
+
+        tif = ida_typeinf.tinfo_t()
+        if not tif.get_type_by_tid(frame_id):
+            return None
+
+        def extract_name(res):
+            if not res: return None
+            if isinstance(res, tuple):
+                for item in res:
+                    if hasattr(item, "name"): return item.name
+                    if isinstance(item, str) and item: return item
+            elif hasattr(res, "name"): return res.name
+            return None
+
+        # Try bits (strict)
+        name = extract_name(tif.get_udm_by_offset(offset * 8))
+        if name: return name
+        # Try bytes (loose)
+        name = extract_name(tif.get_udm_by_offset(offset))
+        if name: return name
+        return None
+
+    def get_complex_addressing_string(self) -> str:
+        """
+        Reconstructs the complex memory operand string with SIB decoding.
+        """
+        op = self._op
+        insn = ida_ua.insn_t()
+        if not ida_ua.decode_insn(insn, self._instruction_ea):
+            return "?"
+
+        ptr_width = 8 if self.m_database.bitness == 64 else 4
+        components = []
+
+        # Check for SIB presence (x86/x64 specific)
+        has_sib = False
+        if ida_idp.ph.id == ida_idp.PLFM_386:
+            has_sib = op.specflag1 != 0
+
+        if has_sib:
+            sib = SIB(op.specflag2)
+            rex_val = insn.insnpref if hasattr(insn, "insnpref") else 0
+            rex = RexPrefix(rex_val)
+            
+            # Resolve SIB components
+            base_reg = None
+            index_reg = None
+            scale = None
+            
+            # Base Register
+            if op.type != ida_ua.o_mem:
+                base_idx = sib.base + (rex.b * 8)
+                base_reg = ida_idp.get_reg_name(base_idx, ptr_width)
+
+            # Index Register
+            if not (sib.index == 4 and rex.x == 0): # has_sib_index
+                index_idx = sib.index + (rex.x * 8)
+                index_reg = ida_idp.get_reg_name(index_idx, ptr_width)
+                if index_reg and sib.scale > 1:
+                    scale = sib.scale
+
+            if base_reg:
+                components.append(base_reg)
+            if index_reg:
+                if components: components.append("+")
+                components.append(index_reg)
+                if scale:
+                    components.append("*")
+                    components.append(AsmFormatter.immediate(scale))
+        else:
+            # No SIB
+            if op.reg != -1:
+                if name := ida_idp.get_reg_name(op.reg, ptr_width):
+                    components.append(name)
+
+        # Displacement
+        disp = None
+        if op.type == ida_ua.o_displ:
+             disp = op.addr
+        elif op.type == ida_ua.o_mem:
+             disp = op.addr
+        
+        if disp is not None and disp != 0:
+            hex_disp = AsmFormatter.displacement(disp)
+            if components:
+                if hex_disp.startswith("-"):
+                    components.append("-")
+                    components.append(hex_disp[1:])
+                else:
+                    components.append("+")
+                    components.append(hex_disp)
+            else:
+                components.append(hex_disp)
+
+        if not components:
+            components.append("0x0")
+        return f"[ {' '.join(components)} ]"
 
     def __str__(self) -> str:
         class_name = self.__class__.__name__

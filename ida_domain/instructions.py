@@ -267,3 +267,32 @@ class Instructions(DatabaseEntity):
         # Get canonical feature flags for the instruction
         feature = insn.get_canon_feature()
         return bool(feature & ida_idp.CF_STOP)
+    def has_prefix(self, insn: insn_t, prefix_type: str) -> bool:
+        """
+        Check if instruction has a specific prefix.
+        """
+        if not hasattr(insn, "auxpref"):
+            return False
+        if prefix_type == "lock":
+            return bool(insn.auxpref & 0x01)
+        elif prefix_type == "rep":
+            return bool(insn.auxpref & 0x02)
+        elif prefix_type == "repne":
+            return bool(insn.auxpref & 0x04)
+        return False
+
+    def get_prefixes(self, insn: insn_t) -> List[str]:
+        """
+        Get all prefixes for an instruction.
+        """
+        prefixes = []
+        if self.has_prefix(insn, "lock"):
+            prefixes.append("lock")
+
+        mnem = self.get_mnemonic(insn)
+        if mnem and not mnem.startswith("rep"):
+            if self.has_prefix(insn, "rep"):
+                prefixes.append("rep")
+            elif self.has_prefix(insn, "repne"):
+                prefixes.append("repne")
+        return prefixes
