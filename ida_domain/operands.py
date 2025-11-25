@@ -7,19 +7,19 @@ from dataclasses import dataclass
 from enum import Enum, IntEnum
 from typing import Any, Optional
 
+import ida_bytes
+import ida_frame
+import ida_funcs
 import ida_idp
 import ida_lines
 import ida_name
+import ida_typeinf
 import ida_ua
+import idc
 from ida_idaapi import ea_t
 from typing_extensions import TYPE_CHECKING
-import ida_funcs
-import ida_bytes
-import ida_frame
-import ida_typeinf
-import idc
 
-from .x86 import RexPrefix, SIB, MemoryComponents
+from .x86 import SIB, MemoryComponents, RexPrefix
 
 if TYPE_CHECKING:
     from .database import Database

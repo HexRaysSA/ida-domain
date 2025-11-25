@@ -4,11 +4,12 @@ import sys
 # Ensure local ida-domain is used
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from ida_domain.database import Database, IdaCommandOptions
-from ida_domain.operands import MemoryOperand, RegisterOperand, ImmediateOperand
-from ida_domain.instructions import Instructions
 import ida_idp
 import ida_ua
+
+from ida_domain.database import Database, IdaCommandOptions
+from ida_domain.instructions import Instructions
+from ida_domain.operands import ImmediateOperand, MemoryOperand, RegisterOperand
 
 
 def format_immediate(val):
@@ -142,7 +143,6 @@ def main():
             print('-' * 120)
             for insn in db.functions.get_instructions(func):
                 ida_raw = db.instructions.get_disassembly(insn)
-                # Clean up IDA raw disassembly for better column alignment (remove tabs/extra spaces)
                 ida_raw_clean = ' '.join(ida_raw.split())
 
                 our_reconstruction = reconstruct_instruction(db, insn)
