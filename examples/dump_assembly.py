@@ -4,13 +4,11 @@ import sys
 # Ensure local ida-domain is used
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-import ida_idp
-import ida_ua
-
 from ida_domain.database import Database, IdaCommandOptions
 from ida_domain.instructions import Instructions
 from ida_domain.operands import ImmediateOperand, MemoryOperand, RegisterOperand
 
+import ida_ua # isort: skip
 
 def format_immediate(val):
     if val < 0:
