@@ -432,7 +432,7 @@ class MemoryOperand(Operand):
             pass
         return None
 
-    def _get_frame_member_name(self, p_func, offset: int) -> Optional[str]:
+    def _get_frame_member_name(self, p_func: ida_funcs.func_t, offset: int) -> Optional[str]:
         """Retrieve symbolic name of stack variable using IDA 9.0+ TypeInf."""
         frame_id = p_func.frame
         if frame_id == 0xFFFFFFFFFFFFFFFF or frame_id == 0:
@@ -442,7 +442,7 @@ class MemoryOperand(Operand):
         if not tif.get_type_by_tid(frame_id):
             return None
 
-        def extract_name(res):
+        def extract_name(res: Any) -> Optional[str]:
             if not res:
                 return None
             if isinstance(res, tuple):
