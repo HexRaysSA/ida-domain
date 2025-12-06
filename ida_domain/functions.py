@@ -186,6 +186,25 @@ class FunctionChunk:
     """True if is the function main chunk"""
 
 
+# All assignment operators in IDA hexrays ctree
+_ASSIGNMENT_OPS = (
+    ida_hexrays.cot_asg,
+    ida_hexrays.cot_asgadd,
+    ida_hexrays.cot_asgmul,
+    ida_hexrays.cot_asgsub,
+    ida_hexrays.cot_asgsdiv,
+    ida_hexrays.cot_asgudiv,
+    ida_hexrays.cot_asgsmod,
+    ida_hexrays.cot_asgumod,
+    ida_hexrays.cot_asgbor,
+    ida_hexrays.cot_asgxor,
+    ida_hexrays.cot_asgband,
+    ida_hexrays.cot_asgsshr,
+    ida_hexrays.cot_asgushr,
+    ida_hexrays.cot_asgshl,
+)
+
+
 class _LVarRefsVisitor(ida_hexrays.ctree_parentee_t):
     """Visitor to find references to a specific local variable in pseudocode.
 
@@ -237,6 +256,78 @@ class _LVarRefsVisitor(ida_hexrays.ctree_parentee_t):
                 self.refs.append(ref)
         return 0
 
+    def _is_on_left_side_of_assignment(self, asg_expr: Any, child_expr: Any) -> bool:
+        """Check if child_expr is in the left subtree of an assignment.
+
+        This traverses from the assignment's left operand (x) down to find
+        if child_expr is reachable, meaning it's being written to.
+        """
+        # asg_expr might be a citem_t, we need to access the cexpr_t
+        # Check if it's an expression type with x attribute
+        if not hasattr(asg_expr, 'x'):
+            # Try to get the expression from citem_t
+            if hasattr(asg_expr, 'cexpr'):
+                asg_expr = asg_expr.cexpr
+            else:
+                return False
+
+        # Get the left side of the assignment
+        left = asg_expr.x
+        if left is None:
+            return False
+
+        # Use a simple BFS/DFS to find if child_expr is in the left subtree
+        stack = [left]
+        while stack:
+            current = stack.pop()
+            if current is None:
+                continue
+            # Check if this is our target expression (by object identity or ea)
+            if current == child_expr:
+                return True
+            if hasattr(current, 'ea') and hasattr(child_expr, 'ea'):
+                if current.ea == child_expr.ea and current.op == child_expr.op:
+                    return True
+            # Traverse children based on expression type
+            if hasattr(current, 'x') and current.x is not None:
+                stack.append(current.x)
+            if hasattr(current, 'y') and current.y is not None:
+                stack.append(current.y)
+            if hasattr(current, 'z') and current.z is not None:
+                stack.append(current.z)
+        return False
+
+    def _find_assignment_in_ancestors(self) -> tuple:
+        """Find an assignment operator in ancestors.
+
+        Returns:
+            Tuple of (assignment_expr, is_on_left_side) or (None, False)
+        """
+        # self.parents is a vector of parent items from ctree_parentee_t
+        # We need to traverse from nearest to farthest ancestor
+        num_parents = len(self.parents)
+        for i in range(num_parents):
+            # Access parents from end (nearest) to beginning (farthest)
+            parent_item = self.parents[num_parents - 1 - i]
+            if parent_item is None:
+                continue
+            # Check if this parent is an expression with an assignment op
+            if not hasattr(parent_item, 'op'):
+                continue
+            if parent_item.op in _ASSIGNMENT_OPS:
+                # Found an assignment - determine if we're on the left side
+                # The item right before this assignment in the parent chain
+                # is the child that leads to our expression
+                if i == 0:
+                    # Immediate parent is assignment, use parent_expr()
+                    child = self.parent_expr()
+                else:
+                    # Get the item that is child of this assignment
+                    child = self.parents[num_parents - i]
+                is_left = self._is_on_left_side_of_assignment(parent_item, child)
+                return (parent_item, is_left)
+        return (None, False)
+
     def _determine_access_type(self, expr: Any, parent: Any) -> LocalVariableAccessType:
         """Determine how the variable is being accessed."""
         if not parent:
@@ -245,24 +336,31 @@ class _LVarRefsVisitor(ida_hexrays.ctree_parentee_t):
         # Check if this is a write operation (left side of assignment)
         if parent.op == ida_hexrays.cot_asg and parent.x == expr:
             return LocalVariableAccessType.WRITE
-        # Check if address is taken
-        elif parent.op == ida_hexrays.cot_ref and parent.x == expr:
-            return LocalVariableAccessType.ADDRESS
-        # Check compound assignments
-        elif (
-            parent.op
-            in (
-                ida_hexrays.cot_asgadd,
-                ida_hexrays.cot_asgmul,
-                ida_hexrays.cot_asgsub,
-                ida_hexrays.cot_asgsdiv,
-                ida_hexrays.cot_asgudiv,
-                ida_hexrays.cot_asgsmod,
-                ida_hexrays.cot_asgumod,
-            )
-            and parent.x == expr
-        ):
+        # Check compound assignments at immediate parent level
+        elif parent.op in _ASSIGNMENT_OPS and parent.x == expr:
             return LocalVariableAccessType.WRITE
+        # Check if address is taken - but also check ancestors for assignment
+        elif parent.op == ida_hexrays.cot_ref:
+            # Address is taken - check if this is part of an assignment
+            asg, is_left = self._find_assignment_in_ancestors()
+            if asg and is_left:
+                return LocalVariableAccessType.WRITE
+            return LocalVariableAccessType.ADDRESS
+
+        # For calls (including helpers like HIWORD), casts, ptr derefs - check ancestors
+        if parent.op in (
+            ida_hexrays.cot_call,
+            ida_hexrays.cot_helper,
+            ida_hexrays.cot_cast,
+            ida_hexrays.cot_ptr,
+            ida_hexrays.cot_memptr,
+            ida_hexrays.cot_memref,
+            ida_hexrays.cot_add,
+            ida_hexrays.cot_idx,
+        ):
+            asg, is_left = self._find_assignment_in_ancestors()
+            if asg and is_left:
+                return LocalVariableAccessType.WRITE
 
         return LocalVariableAccessType.READ
 
@@ -273,7 +371,13 @@ class _LVarRefsVisitor(ida_hexrays.ctree_parentee_t):
 
         if parent.op == ida_hexrays.cot_asg:
             return LocalVariableContext.ASSIGNMENT
+        elif parent.op in _ASSIGNMENT_OPS:
+            return LocalVariableContext.ASSIGNMENT
         elif parent.op == ida_hexrays.cot_call:
+            # Check if there's an assignment ancestor - if so, this is ASSIGNMENT context
+            asg, is_left = self._find_assignment_in_ancestors()
+            if asg and is_left:
+                return LocalVariableContext.ASSIGNMENT
             return LocalVariableContext.CALL_ARG
         elif parent.op in (
             ida_hexrays.cot_eq,
@@ -297,13 +401,41 @@ class _LVarRefsVisitor(ida_hexrays.ctree_parentee_t):
             ida_hexrays.cot_smod,
             ida_hexrays.cot_umod,
         ):
+            # Check if there's an assignment ancestor
+            asg, is_left = self._find_assignment_in_ancestors()
+            if asg and is_left:
+                return LocalVariableContext.ASSIGNMENT
             return LocalVariableContext.ARITHMETIC
         elif parent.op == ida_hexrays.cot_idx:
+            # Check if there's an assignment ancestor
+            asg, is_left = self._find_assignment_in_ancestors()
+            if asg and is_left:
+                return LocalVariableContext.ASSIGNMENT
             return LocalVariableContext.ARRAY_INDEX
         elif parent.op in (ida_hexrays.cot_ptr, ida_hexrays.cot_memptr, ida_hexrays.cot_memref):
+            # Check if there's an assignment ancestor
+            asg, is_left = self._find_assignment_in_ancestors()
+            if asg and is_left:
+                return LocalVariableContext.ASSIGNMENT
             return LocalVariableContext.POINTER_DEREF
         elif parent.op == ida_hexrays.cot_cast:
+            # Check if there's an assignment ancestor
+            asg, is_left = self._find_assignment_in_ancestors()
+            if asg and is_left:
+                return LocalVariableContext.ASSIGNMENT
             return LocalVariableContext.CAST
+        elif parent.op == ida_hexrays.cot_ref:
+            # Address taken - check for assignment ancestor
+            asg, is_left = self._find_assignment_in_ancestors()
+            if asg and is_left:
+                return LocalVariableContext.ASSIGNMENT
+            return LocalVariableContext.OTHER
+        elif parent.op == ida_hexrays.cot_helper:
+            # Helper functions like HIWORD - check for assignment ancestor
+            asg, is_left = self._find_assignment_in_ancestors()
+            if asg and is_left:
+                return LocalVariableContext.ASSIGNMENT
+            return LocalVariableContext.OTHER
 
         return LocalVariableContext.OTHER
 

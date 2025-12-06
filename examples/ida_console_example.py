@@ -4,6 +4,6 @@ from ida_domain import Database
 
 # Get handle to currently open database (no path needed)
 with Database.open() as db:
-    print(f"Current database: {db.path}")
-    print(f"Architecture: {db.architecture}")
-    print(f"Functions: {len(list(db.functions))}")
+    print(f'Current database: {db.path}')
+    print(f'Architecture: {db.architecture}')
+    print(f'Functions: {len(list(db.functions))}')

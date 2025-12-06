@@ -1,24 +1,31 @@
 
-# Unit Testing Input Binary
+# Unit Testing Input Binaries
 
-The project includes a minimal binary used for unit testing, based on a simple assembly file called `tiny.asm`.
-
-If you need to modify this binary (e.g., to cover new edge cases), simply update `tiny.asm` and follow the steps below to regenerate the input file.
+The project includes minimal binaries used for unit testing.
 
 ---
 
-## Rebuilding the Test Binary
+## Assembly Test Binary (tiny_asm)
 
-To compile the test binary from the assembly source:
+The `tiny_asm.asm` file is a minimal assembly binary used for basic unit testing.
 
-1. Assemble using **NASM**:
-   ```bash
-   nasm -f elf64 tiny.asm -o test.bin
-   ```
+To rebuild:
+```bash
+nasm -f elf64 tiny_asm.asm -o tiny_asm.bin
+```
+
+After rebuilding, replace `tiny_asm.bin` in this folder and update any tests as needed.
+
 ---
 
-## Adding Test Binary to Tests
+## C Test Binary (tiny_c)
 
-Once the `test.bin` file is ready, just replace the `test.bin` under the `resources` folder with the new one.
+The `tiny_c.c` file contains patterns that generate complex variable access
+patterns in IDA's decompiler output (HIWORD, LOWORD, pointer casts).
 
-After that, please ensure you are making the necessary changes to existing tests.
+To rebuild:
+```bash
+gcc -O0 -fno-pie -c tiny_c.c -o tiny_c.bin
+```
+
+After rebuilding, replace `tiny_c.bin` in this folder and update any tests as needed.

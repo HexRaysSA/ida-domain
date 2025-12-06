@@ -157,28 +157,38 @@ tests/
 ├── ida_domain_test.py          # Main test suite
 └── resources/                  # Test binaries and resources
     ├── README.md               # Instructions for rebuilding test binaries
-    ├── tiny.asm                # Comprehensive assembly test source
-    ├── test.bin                # Compiled test binary (from tiny.asm)
+    ├── tiny_asm.asm            # Comprehensive assembly test source
+    ├── tiny_asm.bin            # Compiled test binary (from tiny_asm.asm)
+    ├── tiny_c.c                # C test source for complex patterns
+    ├── tiny_c.bin              # Compiled C test binary
     └── example.til             # Type information library
 ```
 
 ### Working with Test Resources
 
-The project includes a comprehensive test binary (`test.bin`) built from `tiny.asm` that covers:
+The project includes test binaries for different testing needs:
+
+**Assembly binary (`tiny_asm.bin`)** - built from `tiny_asm.asm`, covers:
 - All x64 operand types (register, immediate, memory, SIB addressing)
 - Various instruction patterns and data sizes
 - Function calls, string operations, and vector instructions
 - Edge cases for thorough API testing
 
-To rebuild the test binary after modifying `tiny.asm`:
+**C binary (`tiny_c.bin`)** - built from `tiny_c.c`, covers:
+- Complex variable access patterns (HIWORD, LOWORD macros)
+- Pointer cast assignments
+- Patterns that test decompiler output analysis
+
+To rebuild the test binaries:
 ```bash
 cd tests/resources
-nasm -f elf64 tiny.asm -o test.bin
+nasm -f elf64 tiny_asm.asm -o tiny_asm.bin
+gcc -O0 -fno-pie -c tiny_c.c -o tiny_c.bin
 ```
 
 **Important**: After updating the test binary, ensure you make the necessary changes to existing tests to accommodate any new functionality or changes in the binary structure.
 
-When adding new functionality, consider whether `tiny.asm` needs updates to test new operand types or instruction patterns.
+When adding new functionality, consider whether `tiny_asm.asm` needs updates to test new operand types or instruction patterns.
 
 ### Running Specific Tests
 
@@ -283,7 +293,7 @@ if __name__ == '__main__':
 export IDADIR="/Applications/IDA Professional 9.1.app/Contents/MacOS/"
 
 # Test with different binary types
-python examples/explore_database.py -f tests/resources/test.bin
+python examples/explore_database.py -f tests/resources/tiny_asm.bin
 ```
 
 ### Common Development Tasks
