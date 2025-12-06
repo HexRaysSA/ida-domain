@@ -39,11 +39,11 @@ def global_setup():
     idb_path = os.path.join(tempfile.gettempdir(), 'api_tests_work_dir')
     shutil.rmtree(idb_path, ignore_errors=True)
     os.makedirs(idb_path, exist_ok=True)
-    idb_path = os.path.join(tempfile.gettempdir(), 'api_tests_work_dir', 'test.bin')
+    idb_path = os.path.join(tempfile.gettempdir(), 'api_tests_work_dir', 'tiny_asm.bin')
 
     # Copy the test binary from resources folder under our tests working directory
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    src_path = os.path.join(current_dir, 'resources', 'test.bin')
+    src_path = os.path.join(current_dir, 'resources', 'tiny_asm.bin')
     shutil.copy(src_path, idb_path)
 
 
@@ -53,6 +53,30 @@ def test_env():
     """Runs for each test: Opens and closes the database."""
     ida_options = IdaCommandOptions(new_database=True)
     db = ida_domain.Database.open(path=idb_path, args=ida_options, save_on_close=False)
+    yield db
+    if db.is_open():
+        db.close(False)
+
+
+# C binary path for complex variable access tests
+tiny_c_idb_path: str = ''
+
+
+@pytest.fixture(scope='module')
+def tiny_c_setup(global_setup):
+    """Setup for C binary tests - copies tiny_c.bin to work directory."""
+    global tiny_c_idb_path
+    tiny_c_idb_path = os.path.join(tempfile.gettempdir(), 'api_tests_work_dir', 'tiny_c.bin')
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    src_path = os.path.join(current_dir, 'resources', 'tiny_c.bin')
+    shutil.copy(src_path, tiny_c_idb_path)
+
+
+@pytest.fixture(scope='function')
+def tiny_c_env(tiny_c_setup):
+    """Opens tiny_c database for each test."""
+    ida_options = IdaCommandOptions(new_database=True, auto_analysis=True)
+    db = ida_domain.Database.open(path=tiny_c_idb_path, args=ida_options, save_on_close=False)
     yield db
     if db.is_open():
         db.close(False)
@@ -72,7 +96,7 @@ def test_database(test_env):
     assert db.maximum_ea == 0x420
 
     assert db.base_address == 0x0
-    assert db.module == 'test.bin'
+    assert db.module == 'tiny_asm.bin'
     assert db.filesize == 3680
     assert db.md5 == 'f53ff12139b2cf71703222e79cfe0b9b'
     assert db.sha256 == '03858ca230c1755b1db18c4051c348de5b4b274ff0489ea14237f56a9f9adf30'
@@ -86,8 +110,8 @@ def test_database(test_env):
 
     assert len(fields(metadata)) == 13
 
-    assert 'test.bin' in metadata.path
-    assert metadata.module == 'test.bin'
+    assert 'tiny_asm.bin' in metadata.path
+    assert metadata.module == 'tiny_asm.bin'
     assert metadata.base_address == 0x0
     assert metadata.filesize == 0xE60
     assert metadata.md5 == 'f53ff12139b2cf71703222e79cfe0b9b'
@@ -1613,7 +1637,7 @@ def test_signature_files(test_env):
     assert isinstance(match_info, ida_domain.signature_files.MatchInfo)
     assert isinstance(match_info.addr, int)
     assert isinstance(match_info.name, str)
-    assert 'test.bin.i64' in match_info.lib
+    assert 'tiny_asm.bin.i64' in match_info.lib
 
     # Apply with probe_only=True
     results_probe = db.signature_files.apply(sig_path, probe_only=True)
@@ -2585,9 +2609,7 @@ def test_api_examples():
     assert result.returncode == 0, f'Example {script_path} failed to run'
 
     # These examples are runing inside IDA, emulate the envirnoment with IDA Domain
-    inside_ida_examples = [
-        'ida_console_example.py'
-    ]
+    inside_ida_examples = ['ida_console_example.py']
     ida_options = IdaCommandOptions(auto_analysis=True, new_database=True)
     for example in inside_ida_examples:
         script_path = Path(__file__).parent.parent / 'examples' / example
@@ -2613,7 +2635,7 @@ def test_readme_examples():
     assert example_content in readme_content, f'Example from {example_path} not found in README'
 
 
-def test_migrated_examples():
+def test_migrated_examples(global_setup):
     """
     Make sure the migrated examples are running fine
     """
@@ -2668,3 +2690,41 @@ def test_migrated_examples():
             except RuntimeError as e:
                 assert False, f'Example {script_path.name} failed to run, error {e}'
             print(f'Executing migrated IDA Python example {script_path.name} finised\n<<<=====')
+
+
+def test_complex_variable_access(tiny_c_env):
+    """Test complex variable access patterns for issue #30.
+
+    This tests that HIWORD/LOWORD-like patterns are correctly identified
+    as WRITE access with ASSIGNMENT context.
+
+    The test binary tiny_c.bin contains a function 'complex_assignments'
+    with a local variable 'v9' that has three references:
+    - HIWORD(v9) = a1;  -> WRITE / ASSIGNMENT
+    - LOWORD(v9) = a2;  -> WRITE / ASSIGNMENT
+    - use_val(v9);      -> READ / CALL_ARG
+    """
+    from ida_domain.functions import LocalVariableAccessType, LocalVariableContext
+
+    db = tiny_c_env
+
+    func = db.functions.get_function_by_name('complex_assignments')
+    assert func is not None
+
+    v9 = db.functions.get_local_variable_by_name(func, 'v9')
+    assert v9 is not None
+
+    refs = db.functions.get_local_variable_references(func, v9)
+    assert len(refs) == 3
+
+    assert refs[0].access_type == LocalVariableAccessType.WRITE
+    assert refs[0].context == LocalVariableContext.ASSIGNMENT
+    assert refs[0].code_line == 'HIWORD(v9) = a1;'
+
+    assert refs[1].access_type == LocalVariableAccessType.WRITE
+    assert refs[1].context == LocalVariableContext.ASSIGNMENT
+    assert refs[1].code_line == 'LOWORD(v9) = a2;'
+
+    assert refs[2].access_type == LocalVariableAccessType.READ
+    assert refs[2].context == LocalVariableContext.CALL_ARG
+    assert refs[2].code_line == 'use_val(v9);'
