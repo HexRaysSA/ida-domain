@@ -186,6 +186,52 @@ class FunctionChunk:
     """True if is the function main chunk"""
 
 
+# ============================================================================
+# Ctree Assignment Detection
+# ============================================================================
+#
+# The hexrays ctree represents decompiled code as nested expression trees.
+# Determining write access requires analyzing the tree structure.
+#
+# Direct assignment: v9 = 10
+#
+#   cot_asg
+#   ├── x: cot_var (v9)     ← variable is direct child of assignment
+#   └── y: cot_num (10)
+#
+# Nested assignment: HIWORD(v9) = a1  (helper function wrapping variable)
+#
+#   cot_asg
+#   ├── x: cot_helper (HIWORD)
+#   │       └── a[0]: cot_var (v9)   ← variable is nested in left subtree
+#   └── y: cot_var (a1)
+#
+# Other nested patterns include casts, pointer dereferences, and array indexing:
+#   *ptr = x        →  cot_ptr wraps the variable
+#   arr[i] = x      →  cot_idx wraps the variable
+#   (cast)v = x     →  cot_cast wraps the variable
+#
+# Problem:
+#   A direct parent check (parent.op == cot_asg and parent.x == expr) only
+#   handles direct assignments. In nested cases, the variable's immediate
+#   parent is the wrapper expression (helper/cast/ptr), not the assignment.
+#
+# Solution:
+#   Two-direction traversal:
+#   1. UP: Traverse ancestor chain to locate an assignment operator
+#   2. DOWN: Verify the variable resides in the assignment's left subtree
+#
+# Without this logic, `HIWORD(v9) = a1` incorrectly reports `v9` as READ
+# because the immediate parent is cot_helper. This affects data flow analysis
+# and variable access classification.
+#
+# Performance characteristics:
+#   - Up-traversal: O(d) where d = ancestor depth, typically 1-5 levels
+#   - Down-traversal: O(n) where n = nodes in left subtree, typically 1-10
+#   - Invoked once per variable reference during ctree visitor traversal
+#
+# ============================================================================
+
 # All assignment operators in IDA hexrays ctree
 _ASSIGNMENT_OPS = (
     ida_hexrays.cot_asg,
@@ -259,8 +305,24 @@ class _LVarRefsVisitor(ida_hexrays.ctree_parentee_t):
     def _is_on_left_side_of_assignment(self, asg_expr: Any, child_expr: Any) -> bool:
         """Check if child_expr is in the left subtree of an assignment.
 
-        This traverses from the assignment's left operand (x) down to find
-        if child_expr is reachable, meaning it's being written to.
+        Performs a depth-first traversal from the assignment's left operand (.x)
+        to determine if child_expr is reachable. If reachable, the variable is
+        on the write side of the assignment.
+
+        This handles nested patterns where the variable is wrapped in expressions:
+            HIWORD(v9) = a1  →  v9 is inside cot_helper, which is in .x
+            *ptr = val       →  ptr is inside cot_ptr, which is in .x
+
+        Args:
+            asg_expr: An assignment expression (cot_asg or compound assignment).
+            child_expr: The expression to search for in the left subtree.
+
+        Returns:
+            True if child_expr is found in the left subtree (write side).
+
+        Performance:
+            O(n) where n = number of nodes in left subtree. Typically 1-10 nodes
+            for common patterns like helpers, casts, or pointer dereferences.
         """
         # asg_expr might be a citem_t, we need to access the cexpr_t
         # Check if it's an expression type with x attribute
@@ -298,13 +360,29 @@ class _LVarRefsVisitor(ida_hexrays.ctree_parentee_t):
         return False
 
     def _find_assignment_in_ancestors(self) -> tuple:
-        """Find an assignment operator in ancestors.
+        """Find an assignment operator in the ancestor chain.
+
+        Traverses from the immediate parent upward through the ancestor chain
+        to locate an assignment operator. When found, determines whether the
+        current expression is on the left (write) or right (read) side.
+
+        This enables correct access type detection for nested patterns:
+            HIWORD(v9) = a1  →  parent of v9 is cot_helper, not assignment
+                             →  ancestor traversal finds the cot_asg above
+
+        Uses self.parents vector maintained by ctree_parentee_t during traversal.
 
         Returns:
-            Tuple of (assignment_expr, is_on_left_side) or (None, False)
+            Tuple of (assignment_expr, is_on_left_side):
+                - (expr, True) if in left subtree (write side)
+                - (expr, False) if in right subtree (read side)
+                - (None, False) if no assignment found in ancestors
+
+        Performance:
+            O(d) where d = ancestor depth. Typically 1-5 levels for common
+            patterns. The parents vector is already maintained by the base
+            class during tree traversal.
         """
-        # self.parents is a vector of parent items from ctree_parentee_t
-        # We need to traverse from nearest to farthest ancestor
         num_parents = len(self.parents)
         for i in range(num_parents):
             # Access parents from end (nearest) to beginning (farthest)
