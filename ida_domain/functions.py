@@ -649,7 +649,7 @@ class Functions(DatabaseEntity):
         """
         return ida_domain.flowchart.FlowChart(self.database, func, None, flags)
 
-    def get_instructions(self, func: func_t) -> Optional[Iterator[insn_t]]:
+    def get_instructions(self, func: func_t) -> Iterator[insn_t]:
         """
         Retrieves all instructions within the given function.
 
