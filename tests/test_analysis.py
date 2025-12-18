@@ -624,3 +624,232 @@ def test_new_legacy_methods_work_in_workflow(analysis_db):
             ida_auto.AU_NONE,
             ida_auto.AU_FINAL,
         ], "Should show idle or complete state"
+
+
+def test_enable_auto_delegates_to_set_enabled(analysis_db):
+    """
+    Test that enable_auto() correctly delegates to set_enabled().
+
+    RATIONALE: enable_auto() is a legacy API compatibility method that should
+    behave identically to set_enabled(). This test validates that:
+    1. The method exists and can be called with a boolean parameter
+    2. It returns the previous enabled state
+    3. It actually changes the analysis enabled state
+    4. It can be used to restore the previous state
+
+    This is important for backward compatibility - existing scripts using
+    ida_auto.enable_auto() should be able to use db.analysis.enable_auto()
+    as a drop-in replacement.
+    """
+    # Get initial state (should be enabled since we opened with auto_analysis=True)
+    initial_state = analysis_db.analysis.is_enabled
+    assert initial_state is True, "Analysis should start enabled"
+
+    # Disable using enable_auto
+    prev_state = analysis_db.analysis.enable_auto(False)
+    assert prev_state is True, "Should return previous state (was enabled)"
+    assert analysis_db.analysis.is_enabled is False, "Should now be disabled"
+
+    # Re-enable using enable_auto
+    prev_state2 = analysis_db.analysis.enable_auto(True)
+    assert prev_state2 is False, "Should return previous state (was disabled)"
+    assert analysis_db.analysis.is_enabled is True, "Should now be enabled"
+
+    # Verify it matches set_enabled behavior
+    prev_via_set = analysis_db.analysis.set_enabled(False)
+    assert prev_via_set is True, "set_enabled should return same as enable_auto"
+    assert analysis_db.analysis.is_enabled is False, "Both should disable"
+
+    # Restore
+    analysis_db.analysis.set_enabled(True)
+
+
+def test_disable_auto_convenience_method(analysis_db):
+    """
+    Test that disable_auto() is a convenient way to disable analysis.
+
+    RATIONALE: disable_auto() is a convenience wrapper that:
+    1. Disables auto-analysis without requiring a parameter
+    2. Returns the previous state for easy restoration
+    3. Makes code more readable than enable_auto(False)
+
+    This is useful in scripts where you want to temporarily disable analysis
+    for performance or to prevent unwanted automatic changes.
+    """
+    # Ensure analysis starts enabled
+    analysis_db.analysis.set_enabled(True)
+    assert analysis_db.analysis.is_enabled is True, "Should start enabled"
+
+    # Disable using convenience method
+    prev_state = analysis_db.analysis.disable_auto()
+    assert prev_state is True, "Should return previous state (was enabled)"
+    assert analysis_db.analysis.is_enabled is False, "Should now be disabled"
+
+    # Calling disable again should return False
+    prev_state2 = analysis_db.analysis.disable_auto()
+    assert prev_state2 is False, "Should return False (was already disabled)"
+    assert analysis_db.analysis.is_enabled is False, "Should still be disabled"
+
+    # Restore using returned state
+    analysis_db.analysis.set_enabled(prev_state)
+    assert analysis_db.analysis.is_enabled is True, "Should be restored"
+
+
+def test_show_auto_updates_ui_indicator(analysis_db):
+    """
+    Test that show_auto() updates the IDA UI auto-analysis indicator.
+
+    RATIONALE: show_auto() is a UI-focused legacy method that:
+    1. Accepts a valid address and optional queue type
+    2. Updates the IDA UI indicator to show that address
+    3. Validates the address before calling the legacy API
+    4. Raises InvalidEAError for invalid addresses
+
+    While primarily a UI function, it's useful for scripts that want to
+    provide visual feedback about what's being processed, especially in
+    long-running analysis operations.
+    """
+    # Get a valid address
+    valid_ea = analysis_db.minimum_ea
+
+    # Show auto with CODE queue type
+    # This should not raise an exception
+    analysis_db.analysis.show_auto(valid_ea, AnalysisQueueType.CODE)
+
+    # Show auto with default (NONE) queue type
+    analysis_db.analysis.show_auto(valid_ea)
+
+    # Test with different queue types
+    analysis_db.analysis.show_auto(valid_ea, AnalysisQueueType.PROC)
+    analysis_db.analysis.show_auto(valid_ea, AnalysisQueueType.USED)
+
+    # Test invalid address
+    from ida_domain.base import InvalidEAError
+
+    with pytest.raises(InvalidEAError):
+        analysis_db.analysis.show_auto(0xFFFFFFFFFFFFFFFF, AnalysisQueueType.CODE)
+
+
+def test_noshow_auto_hides_ui_indicator(analysis_db):
+    """
+    Test that noshow_auto() hides the IDA UI auto-analysis indicator.
+
+    RATIONALE: noshow_auto() is a UI-focused legacy method that:
+    1. Hides the auto-analysis UI indicator
+    2. Is equivalent to show_auto(BADADDR, AU_NONE)
+    3. Requires no parameters (convenience method)
+
+    This is useful when you want to clear the auto-analysis display after
+    custom processing, or to provide a clean UI state.
+    """
+    # First show something on the indicator
+    valid_ea = analysis_db.minimum_ea
+    analysis_db.analysis.show_auto(valid_ea, AnalysisQueueType.CODE)
+
+    # Now hide it
+    # This should not raise an exception
+    analysis_db.analysis.noshow_auto()
+
+    # Can be called multiple times without issue
+    analysis_db.analysis.noshow_auto()
+    analysis_db.analysis.noshow_auto()
+
+
+def test_analysis_active_inverse_of_is_complete(analysis_db):
+    """
+    Test that analysis_active() is the inverse of is_complete.
+
+    RATIONALE: analysis_active() is a legacy API method that:
+    1. Returns True when analysis is running (queues not empty)
+    2. Returns False when analysis is complete (all queues empty)
+    3. Is exactly the inverse of the is_complete property
+    4. Provides a more intuitive name for some use cases
+
+    Some users find "analysis_active()" more readable than "not is_complete"
+    when writing conditional logic, making this a valuable compatibility method.
+    """
+    # Wait for completion first
+    analysis_db.analysis.wait_for_completion()
+
+    # After waiting, should not be active (is complete)
+    is_complete = analysis_db.analysis.is_complete
+    is_active = analysis_db.analysis.analysis_active()
+
+    # They should be inverses
+    assert is_active == (not is_complete), "analysis_active should be inverse of is_complete"
+
+    # When complete, active should be False
+    if is_complete:
+        assert is_active is False, "Should not be active when complete"
+
+    # Schedule some work to potentially make it active
+    valid_ea = analysis_db.minimum_ea
+    analysis_db.analysis.schedule_reanalysis(valid_ea)
+
+    # Check immediately (may or may not be active depending on timing)
+    is_active_after_schedule = analysis_db.analysis.analysis_active()
+    is_complete_after_schedule = analysis_db.analysis.is_complete
+
+    # Still should be inverses
+    assert is_active_after_schedule == (
+        not is_complete_after_schedule
+    ), "Should remain inverse after scheduling"
+
+    # Wait again
+    analysis_db.analysis.wait_for_completion()
+
+    # Should be back to not active
+    assert analysis_db.analysis.analysis_active() is False, "Should not be active after waiting"
+    assert analysis_db.analysis.is_complete is True, "Should be complete after waiting"
+
+
+def test_all_five_new_legacy_methods_in_workflow(analysis_db):
+    """
+    Test all five new legacy methods working together in a realistic workflow.
+
+    RATIONALE: This integration test validates that all five new legacy
+    compatibility methods (enable_auto, disable_auto, show_auto, noshow_auto,
+    analysis_active) work correctly together in a typical script scenario:
+
+    1. Check if analysis is active
+    2. Wait if needed
+    3. Disable analysis for batch operations
+    4. Show progress on UI
+    5. Re-enable analysis
+    6. Hide UI indicator
+    7. Verify completion
+
+    This ensures the methods integrate properly with each other and with the
+    existing Analysis API, providing a smooth migration path from legacy code.
+    """
+    # Step 1: Check if analysis is active
+    if analysis_db.analysis.analysis_active():
+        # Step 2: Wait for it to complete
+        analysis_db.analysis.wait_for_completion()
+
+    # Verify it's complete
+    assert not analysis_db.analysis.analysis_active(), "Should not be active after wait"
+    assert analysis_db.analysis.is_complete, "Should be complete"
+
+    # Step 3: Disable analysis for batch operations
+    prev_state = analysis_db.analysis.disable_auto()
+    assert not analysis_db.analysis.is_enabled, "Should be disabled"
+
+    # Step 4: Do some work and show on UI
+    valid_ea = analysis_db.minimum_ea
+    analysis_db.analysis.show_auto(valid_ea, AnalysisQueueType.CODE)
+
+    # Step 5: Re-enable analysis
+    analysis_db.analysis.enable_auto(prev_state)
+    assert analysis_db.analysis.is_enabled, "Should be re-enabled"
+
+    # Step 6: Hide UI indicator
+    analysis_db.analysis.noshow_auto()
+
+    # Step 7: Schedule work and verify
+    analysis_db.analysis.schedule_reanalysis(valid_ea)
+    analysis_db.analysis.wait_for_completion()
+
+    # Final verification
+    assert not analysis_db.analysis.analysis_active(), "Should not be active at end"
+    assert analysis_db.analysis.is_complete, "Should be complete at end"

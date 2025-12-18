@@ -712,3 +712,126 @@ class Analysis(DatabaseEntity):
             return None
 
         return display
+
+    def enable_auto(self, enable: bool) -> bool:
+        """
+        Enable or disable auto-analysis (legacy API compatibility).
+
+        This is a legacy API compatibility method that directly maps to
+        set_enabled(). New code should prefer set_enabled() for clarity.
+
+        Args:
+            enable: True to enable auto-analysis, False to disable
+
+        Returns:
+            Previous enabled state
+
+        Example:
+            >>> db = Database.open_current()
+            >>> prev = db.analysis.enable_auto(False)
+            >>> # ... do work ...
+            >>> db.analysis.enable_auto(prev)
+
+        See Also:
+            set_enabled: Preferred method with clearer name
+        """
+        return self.set_enabled(enable)
+
+    def disable_auto(self) -> bool:
+        """
+        Disable auto-analysis (legacy API compatibility).
+
+        Convenience method to disable auto-analysis without requiring a
+        parameter. Returns the previous enabled state so it can be restored.
+
+        Returns:
+            Previous enabled state (True if was enabled, False if was disabled)
+
+        Example:
+            >>> db = Database.open_current()
+            >>> prev = db.analysis.disable_auto()
+            >>> # ... do work with analysis disabled ...
+            >>> db.analysis.set_enabled(prev)
+
+        See Also:
+            enable_auto: To re-enable with previous state
+            set_enabled: Preferred method with explicit True/False
+        """
+        return self.set_enabled(False)
+
+    def show_auto(self, ea: ea_t, queue_type: AnalysisQueueType = AnalysisQueueType.NONE) -> None:
+        """
+        Update auto-analysis UI indicator (legacy API compatibility).
+
+        This is a legacy API compatibility method that updates the IDA UI
+        auto-analysis indicator to show a specific address and queue type.
+        This is primarily for UI display purposes and is rarely needed in
+        scripts.
+
+        Args:
+            ea: Address to display on indicator
+            queue_type: Queue type to display (default: NONE)
+
+        Raises:
+            InvalidEAError: If address is invalid
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Show address on UI indicator
+            >>> db.analysis.show_auto(0x401000, AnalysisQueueType.CODE)
+
+        Note:
+            This is a UI-only function and does not affect analysis behavior.
+        """
+        # Validate address
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        # Update UI indicator
+        ida_auto.show_auto(ea, queue_type.value)
+
+    def noshow_auto(self) -> None:
+        """
+        Hide auto-analysis UI indicator (legacy API compatibility).
+
+        This is a legacy API compatibility method that hides the auto-analysis
+        UI indicator. This is equivalent to calling show_auto() with BADADDR.
+        This is primarily for UI display purposes and is rarely needed in
+        scripts.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Hide the auto-analysis indicator
+            >>> db.analysis.noshow_auto()
+
+        Note:
+            This is a UI-only function and does not affect analysis behavior.
+
+        See Also:
+            show_auto: To show the indicator with a specific address
+        """
+        # Hide indicator by showing BADADDR
+        ida_auto.show_auto(BADADDR, ida_auto.AU_NONE)
+
+    def analysis_active(self) -> bool:
+        """
+        Check if analysis is currently active (legacy API compatibility).
+
+        This is a legacy API compatibility method that checks if the analyzer
+        is currently processing items (i.e., not complete). This is the inverse
+        of is_complete.
+
+        Returns:
+            True if analysis is currently running, False if all queues are empty
+
+        Example:
+            >>> db = Database.open_current()
+            >>> if db.analysis.analysis_active():
+            ...     print("Analysis is running")
+            ... else:
+            ...     print("Analysis is idle")
+
+        See Also:
+            is_complete: Preferred property (inverse of this method)
+        """
+        return not self.is_complete
