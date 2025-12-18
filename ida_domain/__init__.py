@@ -41,6 +41,7 @@ if __ida_version__ < 910:
 
 # If we reach this point kernel libraries were successfully loaded
 from .database import Database
+from .decompiler import Decompiler
 from .exporter import Exporter, ExportFlags, ExportFormat
 from .fixups import FixupInfo, Fixups, FixupType
 from .problems import Problem, Problems, ProblemType

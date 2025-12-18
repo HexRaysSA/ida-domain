@@ -20,6 +20,7 @@ from .analysis import Analysis
 from .base import InvalidParameterError, check_db_open
 from .bytes import Bytes
 from .comments import Comments
+from .decompiler import Decompiler
 from .entries import Entries
 from .exporter import Exporter
 from .fixups import Fixups
@@ -905,6 +906,11 @@ class Database:
     def comments(self) -> Comments:
         """Handler that provides access to user comment-related operations."""
         return Comments(self)
+
+    @property
+    def decompiler(self) -> Decompiler:
+        """Handler that provides access to decompiler operations."""
+        return Decompiler(self)
 
     @property
     def entries(self) -> Entries:
