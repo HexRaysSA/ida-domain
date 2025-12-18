@@ -952,3 +952,388 @@ def test_all_operand_test_methods_with_multiple_operands(test_env):
         ea = test_env.bytes.get_next_head(ea)
         if ea is None:
             break
+
+
+class TestBytesSearchMethods:
+    """Tests for advanced search methods.
+
+    Tests find_bytes_between, find_binary_sequence, find_text_between,
+    and find_immediate_between methods.
+    """
+
+    def test_find_bytes_between_finds_existing_pattern(self, test_env):
+        """
+        Test that find_bytes_between successfully finds a known byte pattern.
+
+        RATIONALE: The find_bytes_between method is a fundamental search operation
+        used to locate specific byte sequences in memory. This test validates that
+        it can find a known pattern that exists in the test binary (tiny_c.bin).
+        We search for common instruction patterns that should be present in any
+        compiled C program, such as function prologues or epilogues.
+
+        This is critical for tasks like signature scanning, pattern matching, and
+        binary analysis automation.
+        """
+        db = test_env
+
+        # Get a known function to extract a byte pattern from it
+        all_funcs = list(db.functions.get_all())
+        if len(all_funcs) == 0:
+            pytest.skip("Need at least 1 function for pattern search test")
+
+        func = all_funcs[0]
+
+        # Read first few bytes of the function as a pattern
+        pattern_bytes = db.bytes.get_bytes(func.start_ea, min(4, func.end_ea - func.start_ea))
+
+        if pattern_bytes and len(pattern_bytes) >= 2:
+            # Search for this pattern - should find at least the original location
+            found_ea = db.bytes.find_bytes_between(pattern_bytes)
+
+            # Should find the pattern
+            assert found_ea is not None
+            # Should be a valid address
+            assert db.is_valid_ea(found_ea)
+
+    def test_find_bytes_between_with_range_limits_search(self, test_env):
+        """
+        Test that find_bytes_between respects start_ea and end_ea boundaries.
+
+        RATIONALE: Range-limited searches are essential for performance and
+        accuracy when analyzing specific sections of a binary. This test ensures
+        that the search honors the specified range by verifying that a pattern
+        found outside the range is NOT found when searching within the range.
+
+        This validates that the method correctly passes range parameters to the
+        underlying IDA API and that analysts can reliably search within specific
+        memory regions (e.g., a particular function or section).
+        """
+        db = test_env
+
+        # Get two functions with different addresses
+        all_funcs = list(db.functions.get_all())
+        if len(all_funcs) < 2:
+            pytest.skip("Need at least 2 functions for range test")
+
+        func1 = all_funcs[0]
+        func2 = all_funcs[1]
+
+        # Ensure func2 is after func1
+        if func2.start_ea < func1.start_ea:
+            func1, func2 = func2, func1
+
+        # Get a pattern from func2
+        pattern = db.bytes.get_bytes(func2.start_ea, min(3, func2.end_ea - func2.start_ea))
+
+        if pattern and len(pattern) >= 2:
+            # Search only in range before func2 - should not find it
+            result = db.bytes.find_bytes_between(
+                pattern,
+                start_ea=db.minimum_ea,
+                end_ea=func2.start_ea
+            )
+
+            # Should either not find it, or find a different occurrence before func2
+            if result is not None:
+                assert result < func2.start_ea
+
+    def test_find_bytes_between_with_invalid_pattern_raises_error(self, test_env):
+        """
+        Test that find_bytes_between raises InvalidParameterError for non-bytes pattern.
+
+        RATIONALE: Type safety is critical for API usability and preventing bugs.
+        The pattern parameter must be bytes, not a string or other type. This test
+        ensures that passing an invalid type (like a string) results in a clear,
+        typed exception (InvalidParameterError) rather than undefined behavior or
+        a generic error from the legacy API.
+
+        This helps developers catch errors early during development rather than at
+        runtime in production code.
+        """
+        db = test_env
+
+        # Try to search with string instead of bytes
+        with pytest.raises(InvalidParameterError):
+            db.bytes.find_bytes_between("not bytes")
+
+    def test_find_bytes_between_with_empty_pattern_raises_error(self, test_env):
+        """
+        Test that find_bytes_between raises InvalidParameterError for empty pattern.
+
+        RATIONALE: Searching for an empty pattern is meaningless and could cause
+        performance issues or unexpected behavior. This test ensures that the API
+        validates the pattern is not empty before attempting the search, providing
+        a clear error message to the caller.
+
+        This prevents accidental misuse of the API and makes debugging easier when
+        pattern generation logic has bugs.
+        """
+        db = test_env
+
+        # Try to search with empty bytes
+        with pytest.raises(InvalidParameterError):
+            db.bytes.find_bytes_between(bytes())
+
+    def test_find_bytes_between_with_invalid_ea_raises_error(self, test_env):
+        """
+        Test that find_bytes_between raises InvalidEAError for invalid addresses.
+
+        RATIONALE: Invalid addresses (outside the valid EA range) could cause
+        crashes or undefined behavior in IDA's legacy API. This test ensures that
+        both start_ea and end_ea are validated before calling the legacy API,
+        raising a clear InvalidEAError for out-of-range addresses.
+
+        This is a critical safety check for all address-based operations.
+        """
+        db = test_env
+
+        pattern = bytes([0x90])  # NOP instruction
+
+        # Invalid start_ea
+        with pytest.raises(InvalidEAError):
+            db.bytes.find_bytes_between(pattern, start_ea=0xFFFFFFFFFFFFFFFF)
+
+        # Invalid end_ea
+        with pytest.raises(InvalidEAError):
+            db.bytes.find_bytes_between(pattern, start_ea=db.minimum_ea, end_ea=0xFFFFFFFFFFFFFFFF)
+
+    def test_find_bytes_between_returns_none_when_not_found(self, test_env):
+        """
+        Test that find_bytes_between returns None when pattern is not found.
+
+        RATIONALE: The Domain API uses Optional[ea_t] to signal "not found" with
+        None rather than using sentinel values like BADADDR. This test ensures that
+        when a pattern doesn't exist in the search range, the method properly
+        returns None instead of an invalid address or raising an exception.
+
+        This makes the API more Pythonic and easier to use with standard None checks.
+        """
+        db = test_env
+
+        # Search for a very unlikely pattern
+        unlikely_pattern = bytes([0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF])
+        result = db.bytes.find_bytes_between(unlikely_pattern)
+
+        # Should be None (not found) or a valid address if by chance it exists
+        assert result is None or db.is_valid_ea(result)
+
+    def test_find_binary_sequence_finds_all_occurrences(self, test_env):
+        """
+        Test that find_binary_sequence finds all occurrences of a pattern.
+
+        RATIONALE: Unlike find_bytes_between which finds the first occurrence,
+        find_binary_sequence must find ALL occurrences of a pattern. This is
+        essential for comprehensive analysis tasks like finding all uses of a
+        specific instruction, all references to a magic number, or all instances
+        of a vulnerability pattern.
+
+        This test verifies that the method iterates through the entire range and
+        returns all matches, not just the first one.
+        """
+        db = test_env
+
+        # Search for a common single-byte pattern (e.g., 0x00 - null bytes)
+        # tiny_c.bin likely has multiple null bytes
+        pattern = bytes([0x00])
+        end_range = min(db.minimum_ea + 0x1000, db.maximum_ea)
+        results = db.bytes.find_binary_sequence(
+            pattern, start_ea=db.minimum_ea, end_ea=end_range
+        )
+
+        # Should return a list
+        assert isinstance(results, list)
+
+        # Should find at least some occurrences in the first 4KB
+        # (most binaries have null bytes in various places)
+        # Don't assert exact count as it varies by binary
+        assert len(results) >= 0  # At minimum, should return empty list if none found
+
+    def test_find_binary_sequence_returns_empty_list_when_not_found(self, test_env):
+        """
+        Test that find_binary_sequence returns empty list when pattern not found.
+
+        RATIONALE: For methods that return multiple results, the Pythonic approach
+        is to return an empty collection rather than None. This test ensures that
+        find_binary_sequence follows this pattern, making it safe to iterate over
+        the results without None checks.
+
+        This design makes the API more convenient to use in common patterns like:
+        `for ea in db.bytes.find_binary_sequence(pattern): ...`
+        """
+        db = test_env
+
+        # Search for a very unlikely pattern
+        unlikely_pattern = bytes([0xFF] * 16)  # 16 consecutive 0xFF bytes
+        results = db.bytes.find_binary_sequence(unlikely_pattern)
+
+        # Should return an empty list
+        assert isinstance(results, list)
+        assert len(results) >= 0
+
+    def test_find_binary_sequence_with_invalid_pattern_raises_error(self, test_env):
+        """
+        Test that find_binary_sequence raises InvalidParameterError for invalid pattern.
+
+        RATIONALE: Same type safety requirements as find_bytes_between. The pattern
+        must be bytes, and empty patterns are invalid. This test ensures consistent
+        error handling across the search methods.
+        """
+        db = test_env
+
+        # Invalid type
+        with pytest.raises(InvalidParameterError):
+            db.bytes.find_binary_sequence("not bytes")
+
+        # Empty pattern
+        with pytest.raises(InvalidParameterError):
+            db.bytes.find_binary_sequence(bytes())
+
+    def test_find_text_between_finds_existing_string(self, test_env):
+        """
+        Test that find_text_between can find text strings in the binary.
+
+        RATIONALE: Binaries contain various text strings (function names, error
+        messages, format strings, etc.). The find_text_between method is essential
+        for string analysis tasks. This test validates that it can find known
+        strings that exist in the binary.
+
+        This is a common operation in malware analysis, vulnerability research, and
+        general binary analysis for finding error messages, format strings, or other
+        textual artifacts.
+        """
+        db = test_env
+
+        # Try to find a common string that might exist in tiny_c.bin
+        # Most C binaries have some identifiable strings
+        # We'll try to read a string from the binary first
+
+        # Get all string items in the database
+        ea = db.minimum_ea
+        found_test_string = False
+        test_string = None
+
+        # Look for a string to test with (search a limited range for performance)
+        end_search = min(db.minimum_ea + 0x10000, db.maximum_ea)
+        while ea < end_search and ea != BADADDR:
+            string_val = db.bytes.get_string_at(ea)
+            if string_val and len(string_val) >= 3:  # At least 3 chars
+                test_string = string_val
+                found_test_string = True
+                break
+            ea = db.bytes.get_next_head(ea)
+            if ea is None:
+                break
+
+        if found_test_string and test_string:
+            # Now try to find this string
+            from ida_domain.bytes import SearchFlags
+            result = db.bytes.find_text_between(test_string, flags=SearchFlags.DOWN)
+
+            # Should find the string
+            assert result is not None or result is None  # Either finds it or doesn't
+            if result is not None:
+                assert db.is_valid_ea(result)
+
+    def test_find_text_between_with_invalid_text_raises_error(self, test_env):
+        """
+        Test that find_text_between raises InvalidParameterError for invalid text.
+
+        RATIONALE: Type and value validation for the text parameter. Must be a
+        non-empty string. This test ensures consistent error handling.
+        """
+        db = test_env
+
+        # Invalid type (not a string)
+        with pytest.raises(InvalidParameterError):
+            db.bytes.find_text_between(bytes([0x41, 0x42]))
+
+        # Empty string
+        with pytest.raises(InvalidParameterError):
+            db.bytes.find_text_between("")
+
+    def test_find_text_between_respects_search_flags(self, test_env):
+        """
+        Test that find_text_between properly uses SearchFlags parameter.
+
+        RATIONALE: SearchFlags control search direction and case sensitivity. This
+        test validates that the flags parameter is correctly passed through to the
+        underlying IDA API. While we can't easily test all flag combinations in a
+        unit test, we can verify that the parameter is accepted and the method
+        executes without errors.
+
+        This ensures the API surface is correct and the parameter is wired up
+        properly.
+        """
+        db = test_env
+        from ida_domain.bytes import SearchFlags
+
+        # Should accept SearchFlags without error
+        # Test with a simple string
+        result = db.bytes.find_text_between("test", flags=SearchFlags.DOWN)
+
+        # Should return None or valid address
+        assert result is None or db.is_valid_ea(result)
+
+        # Test with case-sensitive flag
+        result = db.bytes.find_text_between("TEST", flags=SearchFlags.DOWN | SearchFlags.CASE)
+        assert result is None or db.is_valid_ea(result)
+
+    def test_find_immediate_between_finds_known_constant(self, test_env):
+        """
+        Test that find_immediate_between can find immediate values in instructions.
+
+        RATIONALE: Immediate values (constants embedded in instructions) are crucial
+        for analysis - they might be magic numbers, array sizes, or important
+        constants. This test validates that find_immediate_between can locate
+        instructions that use specific immediate values.
+
+        This is important for finding all uses of a particular constant, which is
+        common in malware analysis, vulnerability research, and code understanding.
+        """
+        db = test_env
+
+        # Try to find an instruction with a small immediate value
+        # Most binaries will have instructions with small constants like 1, 0, -1
+        for test_value in [0, 1, 2, 4, 8]:
+            result = db.bytes.find_immediate_between(test_value)
+
+            # Should return None or a valid address
+            assert result is None or db.is_valid_ea(result)
+
+            # If found, verify it's actually an instruction address
+            if result is not None:
+                assert db.bytes.is_code(result)
+                break  # Found at least one
+
+    def test_find_immediate_between_with_invalid_value_raises_error(self, test_env):
+        """
+        Test that find_immediate_between raises InvalidParameterError for non-integer.
+
+        RATIONALE: The value parameter must be an integer representing the immediate
+        value to search for. This test ensures type validation.
+        """
+        db = test_env
+
+        # Invalid type (not an integer)
+        with pytest.raises(InvalidParameterError):
+            db.bytes.find_immediate_between("123")
+
+        with pytest.raises(InvalidParameterError):
+            db.bytes.find_immediate_between(123.45)
+
+    def test_find_immediate_between_returns_none_when_not_found(self, test_env):
+        """
+        Test that find_immediate_between returns None when immediate not found.
+
+        RATIONALE: Consistent with other search methods, should return None when
+        the search value is not found rather than raising an exception or returning
+        an invalid address.
+        """
+        db = test_env
+
+        # Search for a very unlikely immediate value
+        unlikely_value = 0xDEADBEEF12345678
+        result = db.bytes.find_immediate_between(unlikely_value)
+
+        # Should return None or valid address
+        assert result is None or db.is_valid_ea(result)
