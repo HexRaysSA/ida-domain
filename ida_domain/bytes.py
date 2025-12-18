@@ -1927,6 +1927,93 @@ class Bytes(DatabaseEntity):
 
         return ByteFlags(ida_bytes.get_full_flags(ea))
 
+    def get_item_head_at(self, ea: ea_t) -> ea_t:
+        """
+        Gets the start address of the item containing the specified address.
+
+        If ea is in the middle of an item, returns the head address. If ea is
+        already a head, returns ea itself.
+
+        Args:
+            ea: The effective address.
+
+        Returns:
+            Start address of the item containing ea.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> head = db.bytes.get_item_head_at(0x401002)
+            >>> print(f"Item head: 0x{head:x}")
+            >>> size = db.bytes.get_item_size_at(head)
+            >>> print(f"Item size: {size} bytes")
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        # ida_bytes.get_item_head() is an inline function that returns:
+        # is_head(get_flags(ea)) ? ea : prev_head(ea, 0)
+        flags = ida_bytes.get_flags(ea)
+        if ida_bytes.is_head(flags):
+            return ea
+        else:
+            return ida_bytes.prev_head(ea, 0)
+
+    def get_item_end_at(self, ea: ea_t) -> ea_t:
+        """
+        Gets the end address of the item containing the specified address.
+
+        The end address is the address immediately after the last byte of the
+        item (exclusive).
+
+        Args:
+            ea: The effective address.
+
+        Returns:
+            End address of the item containing ea (exclusive).
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> head = db.bytes.get_item_head_at(ea)
+            >>> end = db.bytes.get_item_end_at(ea)
+            >>> size = end - head
+            >>> print(f"Item: 0x{head:x} - 0x{end:x} (size: {size})")
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        return ida_bytes.get_item_end(ea)
+
+    def get_item_size_at(self, ea: ea_t) -> int:
+        """
+        Gets the size of the item at the specified address.
+
+        Equivalent to get_item_end_at(ea) - get_item_head_at(ea).
+
+        Args:
+            ea: The effective address.
+
+        Returns:
+            Size of the item in bytes.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> size = db.bytes.get_item_size_at(0x401000)
+            >>> print(f"Item size: {size} bytes")
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        return int(ida_bytes.get_item_size(ea))
+
     def get_next_head(self, ea: ea_t, max_ea: ea_t = None) -> Optional[ea_t]:
         """
         Gets the next head (start of data item) after the specified address.
