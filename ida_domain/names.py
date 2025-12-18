@@ -388,6 +388,51 @@ class Names(DatabaseEntity):
             return None
         return ea
 
+    def resolve_value(
+        self, name: str, from_ea: ea_t = BADADDR
+    ) -> tuple[Optional[int], int]:
+        """
+        Get the numeric value and type of a name.
+
+        The name can represent various things including regular addresses,
+        enum constants, segment names, stack variables, etc. This method
+        resolves the name and returns both its numeric value and type code.
+
+        Args:
+            name: Name to resolve.
+            from_ea: Context address for resolution. Defaults to BADADDR.
+
+        Returns:
+            Tuple of (value, type_code) where:
+            - value: The numeric value, or None if name has no value
+            - type_code: One of the NT_* constants from ida_name (NT_NONE, NT_SEG,
+              NT_FUNC, NT_STRUC, NT_ENUM, etc.)
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Resolve an enum constant
+            >>> value, name_type = db.names.resolve_value("MY_CONSTANT")
+            >>> if name_type == ida_name.NT_ENUM:
+            ...     print(f"Enum value: {value}")
+            >>> # Resolve a function address
+            >>> value, name_type = db.names.resolve_value("main")
+            >>> if name_type == ida_name.NT_CODE:
+            ...     print(f"Function at: 0x{value:x}")
+        """
+        # get_name_value returns a tuple (type, value) in IDA Python
+        # The first element is the name type, the second is the value
+        result = ida_name.get_name_value(from_ea, name)
+
+        if result is None:
+            return (None, ida_name.NT_NONE)
+
+        name_type, value = result
+
+        if name_type == ida_name.NT_NONE:
+            return (None, name_type)
+
+        return (int(value), name_type)
+
     def delete_local(self, ea: ea_t) -> bool:
         """
         Delete a local name at the specified address.

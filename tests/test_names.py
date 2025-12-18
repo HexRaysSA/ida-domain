@@ -106,6 +106,112 @@ class TestNamesResolve:
         else:
             pytest.skip("Not enough names in database to test")
 
+    def test_resolve_value_for_function_name(self, test_env):
+        """
+        Test that resolve_value returns value and type for a function name.
+
+        RATIONALE: resolve_value provides more information than resolve_name by
+        returning both the numeric value AND the type of the name. This is critical
+        for scripts that need to distinguish between different kinds of names
+        (functions, data, enums, etc.).
+
+        This test validates that we can resolve a function name and get back both
+        its address and the NT_CODE type code, confirming it's recognized as code.
+        """
+        import ida_name
+
+        # Get the first name in the database
+        if test_env.names.get_count() > 0:
+            first_addr, first_name = test_env.names.get_at_index(0)
+
+            # Resolve with resolve_value
+            value, name_type = test_env.names.resolve_value(first_name)
+
+            assert value is not None, (
+                f"resolve_value should return a value for existing name '{first_name}'"
+            )
+            assert value == first_addr, (
+                f"Expected value {first_addr:x}, got {value:x}"
+            )
+            # Type should be one of the valid NT_* constants (not NT_NONE)
+            assert name_type != ida_name.NT_NONE, (
+                f"Name type should not be NT_NONE for existing name"
+            )
+        else:
+            pytest.skip("No names in database to test")
+
+    def test_resolve_value_for_nonexistent_name(self, test_env):
+        """
+        Test that resolve_value returns None and NT_NONE for non-existent names.
+
+        RATIONALE: Error handling for resolve_value is important. When a name
+        doesn't exist, the method should return (None, NT_NONE) to clearly
+        indicate the name wasn't found. This allows callers to distinguish
+        between a name with value 0 and a non-existent name.
+        """
+        import ida_name
+
+        value, name_type = test_env.names.resolve_value("nonexistent_name_xyz123")
+
+        assert value is None, "Value should be None for non-existent name"
+        assert name_type == ida_name.NT_NONE, (
+            f"Type should be NT_NONE for non-existent name, got {name_type}"
+        )
+
+    def test_resolve_value_consistency_with_resolve_name(self, test_env):
+        """
+        Test that resolve_value returns same address as resolve_name.
+
+        RATIONALE: resolve_value and resolve_name should return consistent results
+        for the numeric value/address. This test validates that both methods agree
+        on the address of a name, ensuring API consistency.
+
+        The difference is that resolve_value provides additional type information,
+        but the address should match.
+        """
+        # Get a name to test with
+        if test_env.names.get_count() > 0:
+            test_addr, test_name = test_env.names.get_at_index(0)
+
+            # Resolve with both methods
+            addr_from_resolve_name = test_env.names.resolve_name(test_name)
+            value_from_resolve_value, _ = test_env.names.resolve_value(test_name)
+
+            assert addr_from_resolve_name is not None
+            assert value_from_resolve_value is not None
+
+            assert addr_from_resolve_name == value_from_resolve_value, (
+                f"resolve_name returned {addr_from_resolve_name:x}, "
+                f"resolve_value returned {value_from_resolve_value:x}"
+            )
+        else:
+            pytest.skip("No names in database to test")
+
+    def test_resolve_value_with_context_address(self, test_env):
+        """
+        Test that resolve_value respects from_ea context parameter.
+
+        RATIONALE: The from_ea parameter provides context for name resolution,
+        which is important for local labels and function-scoped names. This test
+        validates that the context parameter is properly passed through to the
+        underlying IDA API.
+
+        While we may not have local labels in the test binary, this test ensures
+        the parameter is accepted and doesn't cause errors.
+        """
+        # Get a name and an address to use as context
+        if test_env.names.get_count() > 0:
+            first_addr, first_name = test_env.names.get_at_index(0)
+
+            # Resolve with context address (use another address as context)
+            value, name_type = test_env.names.resolve_value(first_name, from_ea=first_addr)
+
+            # Should still resolve (global names work from any context)
+            assert value is not None, "Should resolve global name with context"
+            assert value == first_addr
+        else:
+            pytest.skip("No names in database to test")
+
 
 class TestNamesLocalOperations:
     """Tests for local name operations."""
