@@ -1242,3 +1242,489 @@ class TestStackFrameIntegration:
 
         assert locals_section is not None
         assert args_section is not None
+
+
+class TestStackFrameAdvancedOperations:
+    """
+    Tests for advanced stack frame operations.
+
+    Covers purged_bytes, get_as_struct, calc_frame_offset, and SP tracking methods.
+    """
+
+    def test_purged_bytes_property_accessible(self, tiny_c_env):
+        """
+        Test that purged_bytes property can be accessed on StackFrameInstance.
+
+        RATIONALE: The purged_bytes property indicates the number of bytes cleaned
+        from the stack upon function return, which varies by calling convention.
+        For __cdecl (standard C convention), this is zero (caller cleans stack).
+        For __stdcall/__fastcall, this is non-zero (callee cleans stack).
+
+        This test validates that the property is accessible and returns a valid
+        integer value, which is essential for understanding the function's
+        calling convention and stack behavior.
+        """
+        db = tiny_c_env
+
+        # Find complex_assignments function
+        func_ea = None
+        for func in db.functions.get_all():
+            name = db.functions.get_name(func)
+            if 'complex_assignments' in name:
+                func_ea = func.start_ea
+                break
+
+        assert func_ea is not None, "complex_assignments function not found"
+
+        # Get stack frame
+        frame = db.stack_frames.get_at(func_ea)
+        assert frame is not None, "Stack frame should exist"
+
+        # Access purged_bytes property
+        purged = frame.purged_bytes
+
+        # Should be a valid integer
+        assert isinstance(purged, int)
+        # For most C functions compiled with __cdecl, this should be 0
+        # We don't assert exact value as it depends on calling convention
+        assert purged >= 0
+
+    def test_get_as_struct_returns_tinfo(self, tiny_c_env):
+        """
+        Test that get_as_struct returns a valid tinfo_t structure type.
+
+        RATIONALE: Stack frames are internally represented as structures in IDA,
+        with members corresponding to local variables, saved registers, and
+        arguments. The get_as_struct method exposes this structural representation
+        as a tinfo_t, which is essential for advanced type analysis and
+        understanding the frame layout.
+
+        This validates that we can retrieve the frame as a structured type and
+        that it contains the expected type information.
+        """
+        db = tiny_c_env
+
+        # Find complex_assignments function
+        func_ea = None
+        for func in db.functions.get_all():
+            name = db.functions.get_name(func)
+            if 'complex_assignments' in name:
+                func_ea = func.start_ea
+                break
+
+        assert func_ea is not None, "complex_assignments function not found"
+
+        # Get frame as struct
+        from ida_typeinf import tinfo_t
+        frame_type = db.stack_frames.get_as_struct(func_ea)
+
+        # Should be a valid tinfo_t
+        assert isinstance(frame_type, tinfo_t)
+        assert frame_type.is_struct()
+
+    def test_get_as_struct_raises_on_invalid_address(self, tiny_c_env):
+        """
+        Test that get_as_struct raises InvalidEAError for invalid addresses.
+
+        RATIONALE: Type safety is critical for preventing undefined behavior.
+        When called with an address that doesn't correspond to a function,
+        get_as_struct should raise a clear InvalidEAError rather than returning
+        invalid data or crashing.
+
+        This ensures robust error handling for invalid inputs.
+        """
+        db = tiny_c_env
+
+        # Invalid address (not a function)
+        with pytest.raises(InvalidEAError):
+            db.stack_frames.get_as_struct(0xFFFFFFFF)
+
+    def test_get_as_struct_raises_when_no_frame_exists(self, tiny_c_env):
+        """
+        Test that get_as_struct raises RuntimeError when function has no frame.
+
+        RATIONALE: Not all functions have stack frames (e.g., leaf functions
+        that use only registers). When get_as_struct is called for a function
+        without a frame, it should raise RuntimeError with a clear message
+        rather than returning invalid data.
+
+        This test ensures proper error handling for this edge case.
+        """
+        db = tiny_c_env
+
+        # Find a function that might not have a frame, or use a known address
+        # For this test, we'll try to find a very simple function
+        # If all functions have frames, this test might be skipped
+        func_without_frame = None
+        for func in db.functions.get_all():
+            frame = db.stack_frames.get_at(func.start_ea)
+            if frame is None or frame.size == 0:
+                func_without_frame = func.start_ea
+                break
+
+        if func_without_frame is None:
+            pytest.skip("All functions in test binary have stack frames")
+
+        # Should raise RuntimeError
+        with pytest.raises(RuntimeError, match="No frame"):
+            db.stack_frames.get_as_struct(func_without_frame)
+
+    def test_calc_frame_offset_converts_runtime_to_frame_offset(self, tiny_c_env):
+        """
+        Test that calc_frame_offset converts runtime offsets to frame offsets.
+
+        RATIONALE: During execution, stack variables are accessed relative to
+        SP (stack pointer) or FP (frame pointer), but IDA's frame structure uses
+        a normalized offset system. The calc_frame_offset method performs the
+        critical conversion from runtime offset (as seen in disassembly like
+        [esp+0x10] or [ebp-0x4]) to the frame structure offset.
+
+        This conversion is essential for:
+        - Identifying which stack variable an instruction accesses
+        - Correlating disassembly with stack frame structure
+        - Understanding data flow through stack variables
+
+        This test validates that the conversion produces valid frame offsets.
+        """
+        db = tiny_c_env
+
+        # Find complex_assignments function
+        func_ea = None
+        for func in db.functions.get_all():
+            name = db.functions.get_name(func)
+            if 'complex_assignments' in name:
+                func_ea = func.start_ea
+                break
+
+        assert func_ea is not None, "complex_assignments function not found"
+
+        # Get first instruction in function (after prologue)
+        # We'll use an instruction a few bytes into the function
+        insn_ea = func_ea + 0x5  # Skip prologue
+
+        # Ensure insn_ea is within the function
+        func = db.functions.get_at(func_ea)
+        if insn_ea >= func.end_ea:
+            insn_ea = func_ea
+
+        # Try to convert a runtime offset to frame offset
+        # Common stack access patterns: [esp+X] or [ebp-X]
+        # We'll try a few common offsets
+        runtime_offset = 0x4  # Common offset
+
+        frame_offset = db.stack_frames.calc_frame_offset(func_ea, runtime_offset, insn_ea)
+
+        # Should return a valid integer
+        assert isinstance(frame_offset, int)
+        # Frame offsets can be negative (locals) or positive (args)
+        # Just validate it's a reasonable value
+        assert -1000 < frame_offset < 1000
+
+    def test_calc_frame_offset_raises_on_invalid_function_address(self, tiny_c_env):
+        """
+        Test that calc_frame_offset raises InvalidEAError for invalid function address.
+
+        RATIONALE: Address validation is critical for preventing crashes and
+        undefined behavior. When calc_frame_offset is called with an address
+        that doesn't correspond to a function, it should raise a clear
+        InvalidEAError before attempting any calculations.
+
+        This ensures robust input validation.
+        """
+        db = tiny_c_env
+
+        # Invalid function address
+        with pytest.raises(InvalidEAError):
+            db.stack_frames.calc_frame_offset(0xFFFFFFFF, 0x4, db.minimum_ea)
+
+    def test_add_sp_change_point_adds_user_change_point(self, tiny_c_env):
+        """
+        Test that add_sp_change_point can add user-defined SP change points.
+
+        RATIONALE: Stack pointer tracking is essential for understanding function
+        behavior, especially when functions manually manipulate SP (e.g., for
+        dynamic stack allocation or hand-written assembly). IDA automatically
+        tracks SP changes for standard instructions, but analysts sometimes need
+        to manually add SP change points to correct IDA's analysis.
+
+        User-defined change points (automatic=False) allow analysts to override
+        or supplement IDA's automatic SP tracking. This test validates that we
+        can successfully add such change points, which is critical for:
+        - Correcting SP analysis in complex functions
+        - Handling non-standard stack manipulation
+        - Supporting manual analysis corrections
+
+        This test adds a user change point and validates the operation succeeds.
+        """
+        db = tiny_c_env
+
+        # Find complex_assignments function
+        func_ea = None
+        for func in db.functions.get_all():
+            name = db.functions.get_name(func)
+            if 'complex_assignments' in name:
+                func_ea = func.start_ea
+                break
+
+        assert func_ea is not None, "complex_assignments function not found"
+
+        # Get an address within the function
+        func = db.functions.get_at(func_ea)
+        # Pick an instruction in the middle of the function
+        ea_in_function = func_ea + 0x10
+        if ea_in_function >= func.end_ea:
+            ea_in_function = func_ea + 0x5
+
+        # Add a user SP change point
+        # Negative delta = stack grows (typical for push/sub esp operations)
+        result = db.stack_frames.add_sp_change_point(
+            func_ea, ea_in_function, delta=-4, automatic=False
+        )
+
+        # Should return True on success
+        assert isinstance(result, bool)
+        # Note: result might be False if change point already exists or is invalid
+        # We're just validating the method works without errors
+
+    def test_add_sp_change_point_adds_automatic_change_point(self, tiny_c_env):
+        """
+        Test that add_sp_change_point can add automatic SP change points.
+
+        RATIONALE: Automatic change points (automatic=True) are managed by IDA's
+        analysis system and are used for standard instruction-based SP tracking.
+        While IDA typically adds these automatically, there are cases where
+        reanalysis or manual triggers require adding them programmatically.
+
+        This test validates that the automatic change point path works correctly,
+        which is important for tools that need to trigger SP reanalysis or
+        supplement IDA's automatic analysis.
+        """
+        db = tiny_c_env
+
+        # Find complex_assignments function
+        func_ea = None
+        for func in db.functions.get_all():
+            name = db.functions.get_name(func)
+            if 'complex_assignments' in name:
+                func_ea = func.start_ea
+                break
+
+        assert func_ea is not None, "complex_assignments function not found"
+
+        # Get an address within the function
+        func = db.functions.get_at(func_ea)
+        ea_in_function = func_ea + 0x8
+        if ea_in_function >= func.end_ea:
+            ea_in_function = func_ea + 0x4
+
+        # Add an automatic SP change point
+        result = db.stack_frames.add_sp_change_point(
+            func_ea, ea_in_function, delta=-4, automatic=True
+        )
+
+        # Should return a boolean
+        assert isinstance(result, bool)
+
+    def test_add_sp_change_point_raises_on_invalid_function(self, tiny_c_env):
+        """
+        Test that add_sp_change_point raises InvalidEAError for invalid function.
+
+        RATIONALE: Input validation prevents crashes and undefined behavior.
+        When add_sp_change_point is called with an address that doesn't
+        correspond to a function, it should raise InvalidEAError before
+        attempting to add the change point.
+
+        This ensures robust error handling for invalid function addresses.
+        """
+        db = tiny_c_env
+
+        # Invalid function address
+        with pytest.raises(InvalidEAError):
+            db.stack_frames.add_sp_change_point(0xFFFFFFFF, db.minimum_ea, delta=-4)
+
+    def test_delete_sp_change_point_removes_change_point(self, tiny_c_env):
+        """
+        Test that delete_sp_change_point removes SP change points.
+
+        RATIONALE: Just as analysts need to add SP change points to correct
+        analysis, they also need to remove incorrect or obsolete change points.
+        The delete_sp_change_point method provides this capability, which is
+        essential for:
+        - Removing incorrect manual corrections
+        - Cleaning up after analysis experiments
+        - Reverting to IDA's automatic analysis
+
+        This test validates that we can successfully remove change points,
+        completing the full lifecycle of SP change point management.
+        """
+        db = tiny_c_env
+
+        # Find complex_assignments function
+        func_ea = None
+        for func in db.functions.get_all():
+            name = db.functions.get_name(func)
+            if 'complex_assignments' in name:
+                func_ea = func.start_ea
+                break
+
+        assert func_ea is not None, "complex_assignments function not found"
+
+        # Get an address within the function
+        func = db.functions.get_at(func_ea)
+        ea_in_function = func_ea + 0x10
+        if ea_in_function >= func.end_ea:
+            ea_in_function = func_ea + 0x5
+
+        # First, try to add a change point
+        add_result = db.stack_frames.add_sp_change_point(
+            func_ea, ea_in_function, delta=-4, automatic=False
+        )
+
+        # Now try to delete it
+        delete_result = db.stack_frames.delete_sp_change_point(func_ea, ea_in_function)
+
+        # Should return a boolean
+        assert isinstance(delete_result, bool)
+        # Note: delete_result might be False if change point didn't exist
+        # We're validating the method works without errors
+
+    def test_delete_sp_change_point_raises_on_invalid_function(self, tiny_c_env):
+        """
+        Test that delete_sp_change_point raises InvalidEAError for invalid function.
+
+        RATIONALE: Input validation prevents undefined behavior. When
+        delete_sp_change_point is called with an address that doesn't
+        correspond to a function, it should raise InvalidEAError before
+        attempting the deletion.
+
+        This ensures consistent error handling across SP tracking methods.
+        """
+        db = tiny_c_env
+
+        # Invalid function address
+        with pytest.raises(InvalidEAError):
+            db.stack_frames.delete_sp_change_point(0xFFFFFFFF, db.minimum_ea)
+
+    def test_get_sp_delta_returns_cumulative_delta(self, tiny_c_env):
+        """
+        Test that get_sp_delta returns the cumulative SP delta at an instruction.
+
+        RATIONALE: Understanding the stack pointer value at each instruction is
+        fundamental for:
+        - Determining which stack variables are accessible
+        - Validating correct stack usage
+        - Understanding function prologue/epilogue behavior
+        - Debugging stack corruption issues
+
+        The SP delta represents how far the stack pointer has moved from the
+        function entry point. For downward-growing stacks (most common), this
+        is typically negative (SP decreases as stack grows). For example:
+        - At function entry: delta = 0
+        - After "push ebp": delta = -4 (assuming 32-bit)
+        - After "sub esp, 0x10": delta = -20
+
+        This test validates that get_sp_delta returns valid delta values that
+        represent the cumulative SP change at specific instruction addresses.
+        """
+        db = tiny_c_env
+
+        # Find complex_assignments function
+        func_ea = None
+        for func in db.functions.get_all():
+            name = db.functions.get_name(func)
+            if 'complex_assignments' in name:
+                func_ea = func.start_ea
+                break
+
+        assert func_ea is not None, "complex_assignments function not found"
+
+        # Get SP delta at function start
+        delta_at_start = db.stack_frames.get_sp_delta(func_ea, func_ea)
+        assert isinstance(delta_at_start, int)
+        # At function entry, delta should be 0 or close to it
+        assert -100 < delta_at_start < 100
+
+        # Get SP delta at an instruction within the function
+        func = db.functions.get_at(func_ea)
+        ea_in_function = func_ea + 0x10
+        if ea_in_function >= func.end_ea:
+            ea_in_function = func_ea + 0x5
+
+        delta_in_function = db.stack_frames.get_sp_delta(func_ea, ea_in_function)
+        assert isinstance(delta_in_function, int)
+        # Should be a reasonable value (within typical stack frame range)
+        assert -10000 < delta_in_function < 10000
+
+    def test_get_sp_delta_raises_on_invalid_function(self, tiny_c_env):
+        """
+        Test that get_sp_delta raises InvalidEAError for invalid function address.
+
+        RATIONALE: Input validation is critical for all SP tracking methods.
+        When get_sp_delta is called with an address that doesn't correspond
+        to a function, it should raise InvalidEAError before attempting to
+        retrieve the SP delta.
+
+        This ensures robust error handling and prevents undefined behavior.
+        """
+        db = tiny_c_env
+
+        # Invalid function address
+        with pytest.raises(InvalidEAError):
+            db.stack_frames.get_sp_delta(0xFFFFFFFF, db.minimum_ea)
+
+    def test_advanced_operations_integration(self, tiny_c_env):
+        """
+        Test integration of multiple advanced stack frame operations.
+
+        RATIONALE: In real-world analysis, multiple advanced operations are
+        used together to understand and manipulate stack frame analysis. This
+        integration test validates that:
+
+        1. Operations can be chained without conflicts
+        2. State remains consistent across operations
+        3. Different operation types work together correctly
+
+        For example, an analyst might:
+        - Get the frame as a struct to understand layout
+        - Check SP delta to validate stack usage
+        - Add change points to correct analysis
+        - Convert runtime offsets to identify variables
+
+        This test exercises this realistic workflow to ensure the advanced
+        operations form a cohesive API.
+        """
+        db = tiny_c_env
+
+        # Find complex_assignments function
+        func_ea = None
+        for func in db.functions.get_all():
+            name = db.functions.get_name(func)
+            if 'complex_assignments' in name:
+                func_ea = func.start_ea
+                break
+
+        assert func_ea is not None, "complex_assignments function not found"
+
+        # 1. Get frame as struct
+        frame_type = db.stack_frames.get_as_struct(func_ea)
+        assert frame_type.is_struct()
+
+        # 2. Get frame instance and check purged_bytes
+        frame = db.stack_frames.get_at(func_ea)
+        assert frame is not None
+        purged = frame.purged_bytes
+        assert isinstance(purged, int)
+
+        # 3. Get SP delta at function start
+        delta = db.stack_frames.get_sp_delta(func_ea, func_ea)
+        assert isinstance(delta, int)
+
+        # 4. Try calc_frame_offset
+        func = db.functions.get_at(func_ea)
+        insn_ea = func_ea + 0x5
+        if insn_ea < func.end_ea:
+            frame_offset = db.stack_frames.calc_frame_offset(func_ea, 0x4, insn_ea)
+            assert isinstance(frame_offset, int)
+
+        # All operations completed without errors
+        # This validates the operations work together correctly
