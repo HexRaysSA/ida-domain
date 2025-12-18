@@ -2237,3 +2237,225 @@ class Bytes(DatabaseEntity):
                     microcode.append(line.strip())
 
         return microcode
+
+    def set_operand_hex(self, ea: ea_t, n: int) -> bool:
+        """
+        Set operand representation to hexadecimal.
+
+        This method changes how an operand is displayed in the disassembly.
+        The value remains the same, only the display representation changes.
+
+        Args:
+            ea: The effective address of the instruction.
+            n: Operand number (0-based). 0 is first operand, 1 is second, etc.
+
+        Returns:
+            True if successful, False otherwise.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+            InvalidParameterError: If operand number is negative.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Display first operand as hexadecimal
+            >>> db.bytes.set_operand_hex(0x401000, 0)
+            True
+            >>> # Before: add eax, 255
+            >>> # After:  add eax, 0xFF
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        if n < 0:
+            raise InvalidParameterError("n", n, "operand number must be non-negative")
+
+        # op_hex is inline in IDA SDK: set_op_type(ea, hex_flag(), n)
+        return bool(ida_bytes.set_op_type(ea, ida_bytes.hex_flag(), n))
+
+    def set_operand_decimal(self, ea: ea_t, n: int) -> bool:
+        """
+        Set operand representation to decimal.
+
+        This method changes how an operand is displayed in the disassembly.
+        The value remains the same, only the display representation changes.
+
+        Args:
+            ea: The effective address of the instruction.
+            n: Operand number (0-based). 0 is first operand, 1 is second, etc.
+
+        Returns:
+            True if successful, False otherwise.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+            InvalidParameterError: If operand number is negative.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Display first operand as decimal
+            >>> db.bytes.set_operand_decimal(0x401000, 0)
+            True
+            >>> # Before: add eax, 0xFF
+            >>> # After:  add eax, 255
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        if n < 0:
+            raise InvalidParameterError("n", n, "operand number must be non-negative")
+
+        # op_dec is inline in IDA SDK: set_op_type(ea, dec_flag(), n)
+        return bool(ida_bytes.set_op_type(ea, ida_bytes.dec_flag(), n))
+
+    def set_operand_octal(self, ea: ea_t, n: int) -> bool:
+        """
+        Set operand representation to octal.
+
+        This method changes how an operand is displayed in the disassembly.
+        The value remains the same, only the display representation changes.
+
+        Args:
+            ea: The effective address of the instruction.
+            n: Operand number (0-based). 0 is first operand, 1 is second, etc.
+
+        Returns:
+            True if successful, False otherwise.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+            InvalidParameterError: If operand number is negative.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Display first operand as octal
+            >>> db.bytes.set_operand_octal(0x401000, 0)
+            True
+            >>> # Before: add eax, 255
+            >>> # After:  add eax, 0377
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        if n < 0:
+            raise InvalidParameterError("n", n, "operand number must be non-negative")
+
+        # op_oct is inline in IDA SDK: set_op_type(ea, oct_flag(), n)
+        return bool(ida_bytes.set_op_type(ea, ida_bytes.oct_flag(), n))
+
+    def set_operand_binary(self, ea: ea_t, n: int) -> bool:
+        """
+        Set operand representation to binary.
+
+        This method changes how an operand is displayed in the disassembly.
+        The value remains the same, only the display representation changes.
+
+        Args:
+            ea: The effective address of the instruction.
+            n: Operand number (0-based). 0 is first operand, 1 is second, etc.
+
+        Returns:
+            True if successful, False otherwise.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+            InvalidParameterError: If operand number is negative.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Display first operand as binary
+            >>> db.bytes.set_operand_binary(0x401000, 0)
+            True
+            >>> # Before: add eax, 255
+            >>> # After:  add eax, 0b11111111
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        if n < 0:
+            raise InvalidParameterError("n", n, "operand number must be non-negative")
+
+        # op_bin is inline in IDA SDK: set_op_type(ea, bin_flag(), n)
+        return bool(ida_bytes.set_op_type(ea, ida_bytes.bin_flag(), n))
+
+    def set_operand_char(self, ea: ea_t, n: int) -> bool:
+        """
+        Set operand representation to character.
+
+        This method changes how an operand is displayed in the disassembly.
+        The value remains the same, only the display representation changes.
+        Useful for instructions that operate on ASCII character constants.
+
+        Args:
+            ea: The effective address of the instruction.
+            n: Operand number (0-based). 0 is first operand, 1 is second, etc.
+
+        Returns:
+            True if successful, False otherwise.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+            InvalidParameterError: If operand number is negative.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Display operand as character
+            >>> db.bytes.set_operand_char(0x401000, 1)
+            True
+            >>> # Before: cmp al, 65
+            >>> # After:  cmp al, 'A'
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        if n < 0:
+            raise InvalidParameterError("n", n, "operand number must be non-negative")
+
+        # op_chr is inline in IDA SDK: set_op_type(ea, char_flag(), n)
+        return bool(ida_bytes.set_op_type(ea, ida_bytes.char_flag(), n))
+
+    def set_operand_enum(self, ea: ea_t, n: int, enum_id: int, serial: int = 0) -> bool:
+        """
+        Set operand to display as an enum member.
+
+        This method changes how an operand is displayed in the disassembly,
+        showing it as an enum member name instead of a numeric value.
+        If multiple enum members have the same value, the serial parameter
+        selects which one to display.
+
+        Args:
+            ea: The effective address of the instruction.
+            n: Operand number (0-based). 0 is first operand, 1 is second, etc.
+            enum_id: The enum type ID to apply to this operand.
+            serial: Serial number for selecting among multiple enum members with
+                the same value (default: 0 for first match).
+
+        Returns:
+            True if successful, False otherwise.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+            InvalidParameterError: If operand number is negative or enum_id is invalid.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Assuming we have an enum "FileMode" with READ=1, WRITE=2, EXECUTE=4
+            >>> enum_id = idc.get_enum("FileMode")
+            >>> db.bytes.set_operand_enum(0x401000, 1, enum_id)
+            True
+            >>> # Before: mov eax, 3
+            >>> # After:  mov eax, READ|WRITE
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        if n < 0:
+            raise InvalidParameterError("n", n, "operand number must be non-negative")
+
+        if not isinstance(enum_id, int):
+            raise InvalidParameterError("enum_id", enum_id, "must be an integer")
+
+        if enum_id < 0:
+            raise InvalidParameterError("enum_id", enum_id, "must be non-negative")
+
+        return bool(ida_bytes.op_enum(ea, n, enum_id, serial))

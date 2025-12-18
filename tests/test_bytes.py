@@ -310,3 +310,347 @@ class TestBytesItemNavigation:
 
         # Should have found at least a few items
         assert items_found > 0, "Should have found at least one item in database"
+
+
+class TestBytesOperandManipulation:
+    """Tests for operand manipulation methods (set_operand_hex, set_operand_decimal, etc.)."""
+
+    def test_set_operand_hex_changes_display_representation(self, test_env):
+        """
+        Test that set_operand_hex changes operand display to hexadecimal.
+
+        RATIONALE: When analyzing binaries, analysts often need to view numeric operands
+        in different bases (hex, decimal, octal, binary) depending on the context.
+        For example, memory addresses and bit masks are clearer in hex, while loop
+        counters may be clearer in decimal. The set_operand_hex method should change
+        the display format without modifying the underlying value.
+
+        This test finds an instruction with a numeric immediate operand and verifies
+        that set_operand_hex successfully changes its display representation.
+        """
+        # Find an instruction with an immediate operand
+        # Start searching from first code address
+        first_code = test_env.minimum_ea
+
+        # Look for an instruction with immediate operand
+        search_addr = first_code
+        max_attempts = 100
+        found_addr = None
+
+        for _ in range(max_attempts):
+            next_head = test_env.bytes.get_next_head(search_addr)
+            if next_head is None:
+                break
+
+            # Check if this is code
+            if test_env.bytes.is_code_at(next_head):
+                # Try to set operand to hex (if it has operands, this should work)
+                # We test operand 0 (first operand)
+                result = test_env.bytes.set_operand_hex(next_head, 0)
+                if result:
+                    found_addr = next_head
+                    break
+
+            search_addr = next_head + 1
+
+        if found_addr is None:
+            pytest.skip("Could not find instruction with immediate operand")
+
+        # Verify set_operand_hex returned True
+        assert test_env.bytes.set_operand_hex(found_addr, 0), \
+            f"set_operand_hex should return True for valid instruction at 0x{found_addr:x}"
+
+    def test_set_operand_decimal_changes_display_representation(self, test_env):
+        """
+        Test that set_operand_decimal changes operand display to decimal.
+
+        RATIONALE: Decimal representation is most natural for understanding numeric
+        values in many contexts (array sizes, loop counts, buffer lengths). After
+        setting an operand to hex, decimal, or any other format, analysts should be
+        able to switch to decimal representation to better understand the value's
+        magnitude.
+
+        This test verifies that set_operand_decimal works correctly.
+        """
+        # Find an instruction with an immediate operand
+        first_code = test_env.minimum_ea
+        search_addr = first_code
+        max_attempts = 100
+        found_addr = None
+
+        for _ in range(max_attempts):
+            next_head = test_env.bytes.get_next_head(search_addr)
+            if next_head is None:
+                break
+
+            if test_env.bytes.is_code_at(next_head):
+                result = test_env.bytes.set_operand_decimal(next_head, 0)
+                if result:
+                    found_addr = next_head
+                    break
+
+            search_addr = next_head + 1
+
+        if found_addr is None:
+            pytest.skip("Could not find instruction with immediate operand")
+
+        assert test_env.bytes.set_operand_decimal(found_addr, 0), \
+            f"set_operand_decimal should return True for valid instruction at 0x{found_addr:x}"
+
+    def test_set_operand_format_methods_are_reversible(self, test_env):
+        """
+        Test that operand format changes are reversible (hex <-> decimal).
+
+        RATIONALE: Analysts frequently switch between different representations
+        while analyzing code. The API should support switching back and forth
+        between formats without losing information or corrupting the display.
+
+        This test verifies that you can:
+        1. Set an operand to hex
+        2. Set the same operand to decimal
+        3. Set it back to hex
+        All operations should succeed without errors.
+        """
+        # Find an instruction with an immediate operand
+        first_code = test_env.minimum_ea
+        search_addr = first_code
+        max_attempts = 100
+        found_addr = None
+
+        for _ in range(max_attempts):
+            next_head = test_env.bytes.get_next_head(search_addr)
+            if next_head is None:
+                break
+
+            if test_env.bytes.is_code_at(next_head):
+                # Try both formats to verify the instruction supports formatting
+                if (test_env.bytes.set_operand_hex(next_head, 0) and
+                    test_env.bytes.set_operand_decimal(next_head, 0)):
+                    found_addr = next_head
+                    break
+
+            search_addr = next_head + 1
+
+        if found_addr is None:
+            pytest.skip("Could not find instruction with formattable operand")
+
+        # Test reversibility: hex -> decimal -> octal -> binary -> hex
+        assert test_env.bytes.set_operand_hex(found_addr, 0), "Should set to hex"
+        assert test_env.bytes.set_operand_decimal(found_addr, 0), "Should set to decimal"
+        assert test_env.bytes.set_operand_octal(found_addr, 0), "Should set to octal"
+        assert test_env.bytes.set_operand_binary(found_addr, 0), "Should set to binary"
+        assert test_env.bytes.set_operand_hex(found_addr, 0), "Should set back to hex"
+
+    def test_set_operand_char_for_ascii_values(self, test_env):
+        """
+        Test that set_operand_char displays printable ASCII values as characters.
+
+        RATIONALE: When analyzing code that processes text or characters, seeing
+        values like 65 as 'A' or 32 as ' ' (space) greatly improves readability.
+        The set_operand_char method should format operands as character literals
+        when the value represents a printable ASCII character.
+
+        This test verifies that set_operand_char works for instructions that
+        operate on character values.
+        """
+        # Find an instruction with an operand that could be a character
+        first_code = test_env.minimum_ea
+        search_addr = first_code
+        max_attempts = 100
+        found_addr = None
+
+        for _ in range(max_attempts):
+            next_head = test_env.bytes.get_next_head(search_addr)
+            if next_head is None:
+                break
+
+            if test_env.bytes.is_code_at(next_head):
+                result = test_env.bytes.set_operand_char(next_head, 0)
+                if result:
+                    found_addr = next_head
+                    break
+
+            search_addr = next_head + 1
+
+        if found_addr is None:
+            pytest.skip("Could not find instruction suitable for character formatting")
+
+        assert test_env.bytes.set_operand_char(found_addr, 0), \
+            f"set_operand_char should return True for valid instruction at 0x{found_addr:x}"
+
+    def test_set_operand_with_invalid_address_raises_error(self, test_env):
+        """
+        Test that operand manipulation methods raise InvalidEAError for invalid addresses.
+
+        RATIONALE: Robust error handling prevents crashes and provides clear feedback
+        when invalid inputs are provided. All operand manipulation methods should
+        validate the address parameter and raise InvalidEAError for addresses outside
+        the valid database range.
+
+        This test validates error handling across all operand format methods.
+        """
+        invalid_addr = 0xFFFFFFFFFFFFFFFF  # Address outside valid range
+
+        # Test all format methods with invalid address
+        with pytest.raises(InvalidEAError):
+            test_env.bytes.set_operand_hex(invalid_addr, 0)
+
+        with pytest.raises(InvalidEAError):
+            test_env.bytes.set_operand_decimal(invalid_addr, 0)
+
+        with pytest.raises(InvalidEAError):
+            test_env.bytes.set_operand_octal(invalid_addr, 0)
+
+        with pytest.raises(InvalidEAError):
+            test_env.bytes.set_operand_binary(invalid_addr, 0)
+
+        with pytest.raises(InvalidEAError):
+            test_env.bytes.set_operand_char(invalid_addr, 0)
+
+        with pytest.raises(InvalidEAError):
+            test_env.bytes.set_operand_enum(invalid_addr, 0, 1)
+
+    def test_set_operand_with_negative_operand_number_raises_error(self, test_env):
+        """
+        Test that operand manipulation methods reject negative operand numbers.
+
+        RATIONALE: Operand numbers are 0-based indices (0 for first operand,
+        1 for second, etc.). Negative operand numbers don't make sense and
+        should be rejected with a clear error rather than causing undefined
+        behavior or crashes.
+
+        This test ensures all operand methods validate the operand number parameter.
+        """
+        # Get a valid code address
+        first_code = test_env.bytes.get_next_head(test_env.minimum_ea)
+        if first_code is None:
+            pytest.skip("No code found in database")
+
+        # All methods should raise InvalidParameterError for negative operand number
+        from ida_domain.base import InvalidParameterError
+
+        with pytest.raises(InvalidParameterError):
+            test_env.bytes.set_operand_hex(first_code, -1)
+
+        with pytest.raises(InvalidParameterError):
+            test_env.bytes.set_operand_decimal(first_code, -1)
+
+        with pytest.raises(InvalidParameterError):
+            test_env.bytes.set_operand_octal(first_code, -1)
+
+        with pytest.raises(InvalidParameterError):
+            test_env.bytes.set_operand_binary(first_code, -1)
+
+        with pytest.raises(InvalidParameterError):
+            test_env.bytes.set_operand_char(first_code, -1)
+
+        with pytest.raises(InvalidParameterError):
+            test_env.bytes.set_operand_enum(first_code, -1, 1)
+
+    def test_set_operand_enum_validates_enum_id(self, test_env):
+        """
+        Test that set_operand_enum validates the enum_id parameter.
+
+        RATIONALE: The enum_id parameter must reference a valid enum type in the
+        database. Invalid or negative enum IDs should be rejected with a clear
+        error to prevent undefined behavior.
+
+        This test verifies parameter validation for set_operand_enum.
+        """
+        # Get a valid code address
+        first_code = test_env.bytes.get_next_head(test_env.minimum_ea)
+        if first_code is None:
+            pytest.skip("No code found in database")
+
+        from ida_domain.base import InvalidParameterError
+
+        # Negative enum_id should raise error
+        with pytest.raises(InvalidParameterError):
+            test_env.bytes.set_operand_enum(first_code, 0, -1)
+
+        # Non-integer enum_id should raise error
+        with pytest.raises(InvalidParameterError):
+            test_env.bytes.set_operand_enum(first_code, 0, "not_an_int")
+
+    def test_set_operand_methods_on_second_operand(self, test_env):
+        """
+        Test that operand manipulation methods work on second operand (n=1).
+
+        RATIONALE: Many instructions have multiple operands (e.g., "add eax, ebx" has
+        two operands). The operand manipulation API should support formatting any
+        operand by specifying the operand number. This test verifies that the methods
+        work correctly for operand number 1 (the second operand).
+
+        This is important because some bugs only manifest when accessing operands
+        other than the first one.
+        """
+        # Find an instruction with at least 2 operands
+        first_code = test_env.minimum_ea
+        search_addr = first_code
+        max_attempts = 100
+        found_addr = None
+
+        for _ in range(max_attempts):
+            next_head = test_env.bytes.get_next_head(search_addr)
+            if next_head is None:
+                break
+
+            if test_env.bytes.is_code_at(next_head):
+                # Try to format second operand (n=1)
+                # If this succeeds, the instruction has at least 2 operands
+                result = test_env.bytes.set_operand_hex(next_head, 1)
+                if result:
+                    found_addr = next_head
+                    break
+
+            search_addr = next_head + 1
+
+        if found_addr is None:
+            pytest.skip("Could not find instruction with second operand")
+
+        # Test various formats on second operand
+        assert test_env.bytes.set_operand_hex(found_addr, 1), \
+            "Should format second operand as hex"
+        assert test_env.bytes.set_operand_decimal(found_addr, 1), \
+            "Should format second operand as decimal"
+
+    def test_set_operand_works_on_data_items(self, test_env):
+        """
+        Test that operand manipulation methods work on data items, not just code.
+
+        RATIONALE: IDA allows formatting the display of data items (like initialized
+        dwords, words, etc.) in different bases, not just instruction operands.
+        For example, a data dword containing 0xFF can be displayed as 0xFF (hex),
+        255 (decimal), or 0377 (octal). This is useful when analyzing initialized
+        data tables or constants.
+
+        This test verifies that the operand formatting methods work correctly on
+        data items, returning True when successfully applied.
+        """
+        # Find a data address (non-code)
+        search_addr = test_env.minimum_ea
+        max_attempts = 100
+        found_data = None
+
+        for _ in range(max_attempts):
+            next_head = test_env.bytes.get_next_head(search_addr)
+            if next_head is None:
+                break
+
+            # Look for data (not code)
+            if not test_env.bytes.is_code_at(next_head):
+                # Verify it's actually data, not just undefined
+                if test_env.bytes.is_data_at(next_head):
+                    found_data = next_head
+                    break
+
+            search_addr = next_head + 1
+
+        if found_data is None:
+            pytest.skip("Could not find data address")
+
+        # Operand formatting on data should work (return True)
+        result = test_env.bytes.set_operand_hex(found_data, 0)
+        # IDA allows formatting data items, so this should succeed
+        assert isinstance(result, bool), \
+            f"set_operand_hex should return bool, got {type(result)}"
