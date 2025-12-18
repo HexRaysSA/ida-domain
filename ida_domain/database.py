@@ -21,6 +21,7 @@ from .base import InvalidParameterError, check_db_open
 from .bytes import Bytes
 from .comments import Comments
 from .entries import Entries
+from .fixups import Fixups
 from .functions import Functions
 from .heads import Heads
 from .hooks import HooksList  # type: ignore
@@ -906,6 +907,11 @@ class Database:
     def entries(self) -> Entries:
         """Handler that provides access to entries operations."""
         return Entries(self)
+
+    @property
+    def fixups(self) -> Fixups:
+        """Handler that provides access to fixup (relocation) operations."""
+        return Fixups(self)
 
     @property
     def imports(self) -> Imports:
