@@ -352,3 +352,172 @@ class Analysis(DatabaseEntity):
 
         # Add range to specified queue
         ida_auto.auto_mark_range(start, end, queue_type.value)
+
+    def wait_for_range(self, start: ea_t, end: ea_t) -> int:
+        """
+        Wait for analysis completion for specific address range only.
+
+        More targeted than wait_for_completion() - only processes items within
+        the specified range. Use this when you need to ensure a specific region
+        is analyzed but don't care about other pending analysis.
+
+        Args:
+            start: Start address of range
+            end: End address of range (exclusive)
+
+        Returns:
+            Number of addresses processed in range
+
+        Raises:
+            InvalidEAError: If start or end address is invalid
+            InvalidParameterError: If start >= end
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Wait for specific range only
+            >>> db.analysis.wait_for_range(0x401000, 0x402000)
+        """
+        # Validate inputs
+        if not self.database.is_valid_ea(start):
+            raise InvalidEAError(start)
+        if not self.database.is_valid_ea(end):
+            raise InvalidEAError(end)
+        if start >= end:
+            raise InvalidParameterError('start', start, 'must be less than end')
+
+        # auto_wait_range returns number of addresses processed
+        result = ida_auto.auto_wait_range(start, end)
+        return result if result >= 0 else 0
+
+    def analyze_range_until_stable(self, start: ea_t, end: ea_t) -> int:
+        """
+        Analyze range with final pass to ensure all analysis is complete.
+
+        Similar to analyze_range() but includes a final analysis pass to ensure
+        everything is fully analyzed. This is more thorough than the standard
+        analyze_range().
+
+        Args:
+            start: Start address of range to analyze
+            end: End address of range (exclusive)
+
+        Returns:
+            Number of addresses processed
+
+        Raises:
+            InvalidEAError: If start or end address is invalid
+            InvalidParameterError: If start >= end
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Thorough analysis with final pass
+            >>> db.analysis.analyze_range_until_stable(0x401000, 0x410000)
+        """
+        # Validate inputs
+        if not self.database.is_valid_ea(start):
+            raise InvalidEAError(start)
+        if not self.database.is_valid_ea(end):
+            raise InvalidEAError(end)
+        if start >= end:
+            raise InvalidParameterError('start', start, 'must be less than end')
+
+        # plan_and_wait with final_pass=True ensures stability
+        return cast(int, ida_auto.plan_and_wait(start, end, final_pass=True))
+
+    def schedule_reanalysis(self, ea: ea_t) -> None:
+        """
+        Schedule reanalysis of single address (adds to USED queue).
+
+        Use this to request IDA to reanalyze an address (e.g., after manual
+        changes). The address will be reanalyzed when the USED queue is
+        processed.
+
+        Args:
+            ea: Address to reanalyze
+
+        Raises:
+            InvalidEAError: If address is invalid
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Make manual change
+            >>> db.bytes.patch_byte(0x401000, 0x90)  # NOP
+            >>> # Request reanalysis
+            >>> db.analysis.schedule_reanalysis(0x401000)
+            >>> db.analysis.wait_for_completion()
+        """
+        # Validate address
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        # Schedule reanalysis
+        ida_auto.plan_ea(ea)
+
+    def cancel_analysis(self, start: ea_t, end: ea_t) -> None:
+        """
+        Cancel pending analysis for address range.
+
+        Removes the specified range from CODE, PROC, and USED queues. Use this
+        to prevent IDA from analyzing a specific region.
+
+        Args:
+            start: Start address of range
+            end: End address of range (exclusive)
+
+        Raises:
+            InvalidEAError: If start or end address is invalid
+            InvalidParameterError: If start >= end
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Cancel pending analysis for data section
+            >>> db.analysis.cancel_analysis(0x403000, 0x404000)
+        """
+        # Validate inputs
+        if not self.database.is_valid_ea(start):
+            raise InvalidEAError(start)
+        if not self.database.is_valid_ea(end):
+            raise InvalidEAError(end)
+        if start >= end:
+            raise InvalidParameterError('start', start, 'must be less than end')
+
+        # Cancel analysis for range
+        ida_auto.auto_cancel(start, end)
+
+    def cancel_queue(
+        self, start: ea_t, end: ea_t, queue_type: AnalysisQueueType
+    ) -> None:
+        """
+        Remove address range from specific queue.
+
+        More precise than cancel_analysis() - removes range from a single
+        specific queue.
+
+        Args:
+            start: Start address of range
+            end: End address of range (exclusive)
+            queue_type: Which queue to remove the range from
+
+        Raises:
+            InvalidEAError: If start or end address is invalid
+            InvalidParameterError: If start >= end or queue_type is invalid
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Remove only from CODE queue
+            >>> db.analysis.cancel_queue(
+            ...     0x401000,
+            ...     0x402000,
+            ...     AnalysisQueueType.CODE
+            ... )
+        """
+        # Validate inputs
+        if not self.database.is_valid_ea(start):
+            raise InvalidEAError(start)
+        if not self.database.is_valid_ea(end):
+            raise InvalidEAError(end)
+        if start >= end:
+            raise InvalidParameterError('start', start, 'must be less than end')
+
+        # Remove from specified queue
+        ida_auto.auto_unmark(start, end, queue_type.value)

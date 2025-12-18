@@ -3111,3 +3111,257 @@ def test_analysis_schedule_range_analysis(test_env):
         db.analysis.schedule_range_analysis(
             db.minimum_ea + 0x10, db.minimum_ea, AnalysisQueueType.CODE
         )
+
+
+def test_analysis_wait_for_range(test_env):
+    """
+    Test wait_for_range() waits for analysis only within specified range.
+
+    RATIONALE: wait_for_range() is more targeted than wait_for_completion().
+    It only processes analysis queue items within a specific address range,
+    which is useful for:
+    1. Faster completion when only caring about a specific region
+    2. Avoiding processing of unrelated pending analysis
+    3. Incremental analysis workflows
+    4. Testing and debugging specific code sections
+
+    The test validates:
+    1. Method accepts valid range parameters
+    2. Returns number of addresses processed (int >= 0)
+    3. Completes successfully for valid ranges
+    4. Rejects invalid addresses with InvalidEAError
+    5. Rejects invalid ranges (start >= end) with InvalidParameterError
+
+    We schedule analysis for a small range and verify wait_for_range() processes it.
+    """
+    from ida_domain.base import InvalidEAError, InvalidParameterError
+
+    db = test_env
+
+    # Ensure clean state
+    db.analysis.wait_for_completion()
+
+    # Schedule analysis for a small range
+    start = db.minimum_ea
+    end = db.minimum_ea + 0x20
+    db.analysis.schedule_code_analysis(start)
+    db.analysis.schedule_code_analysis(start + 0x10)
+
+    # Wait for only that range
+    result = db.analysis.wait_for_range(start, end)
+
+    # Should return non-negative count
+    assert isinstance(result, int)
+    assert result >= 0
+
+    # Test invalid start address
+    with pytest.raises(InvalidEAError):
+        db.analysis.wait_for_range(0xFFFFFFFF, end)
+
+    # Test invalid end address
+    with pytest.raises(InvalidEAError):
+        db.analysis.wait_for_range(start, 0xFFFFFFFF)
+
+    # Test start >= end
+    with pytest.raises(InvalidParameterError):
+        db.analysis.wait_for_range(db.minimum_ea + 0x10, db.minimum_ea)
+
+
+def test_analysis_analyze_range_until_stable(test_env):
+    """
+    Test analyze_range_until_stable() performs thorough analysis with final pass.
+
+    RATIONALE: analyze_range_until_stable() is more thorough than analyze_range()
+    because it includes a final analysis pass to ensure completeness. This is
+    critical for:
+    1. Mission-critical analysis where completeness is required
+    2. Complex code with indirect control flow
+    3. Ensuring all function chunks are discovered
+    4. Signature application and type propagation completion
+
+    The test validates:
+    1. Method accepts valid range parameters
+    2. Returns number of addresses processed (int >= 0)
+    3. Performs complete analysis including final pass
+    4. Rejects invalid addresses with InvalidEAError
+    5. Rejects invalid ranges with InvalidParameterError
+
+    We use this on a range that may have complex analysis requirements.
+    """
+    from ida_domain.base import InvalidEAError, InvalidParameterError
+
+    db = test_env
+
+    # Ensure clean state
+    db.analysis.wait_for_completion()
+
+    # Analyze range with final pass
+    start = db.minimum_ea
+    end = db.minimum_ea + 0x100
+    result = db.analysis.analyze_range_until_stable(start, end)
+
+    # Should return non-negative count
+    assert isinstance(result, int)
+    assert result >= 0
+
+    # After stable analysis, should be complete
+    assert db.analysis.is_complete is True
+
+    # Test invalid start address
+    with pytest.raises(InvalidEAError):
+        db.analysis.analyze_range_until_stable(0xFFFFFFFF, end)
+
+    # Test invalid end address
+    with pytest.raises(InvalidEAError):
+        db.analysis.analyze_range_until_stable(start, 0xFFFFFFFF)
+
+    # Test start >= end
+    with pytest.raises(InvalidParameterError):
+        db.analysis.analyze_range_until_stable(db.minimum_ea + 0x10, db.minimum_ea)
+
+
+def test_analysis_schedule_reanalysis(test_env):
+    """
+    Test schedule_reanalysis() queues single address for reanalysis.
+
+    RATIONALE: schedule_reanalysis() is essential after manual modifications
+    to the database. When you change bytes, types, or other properties, IDA
+    needs to reanalyze affected addresses. This is important for:
+    1. Updating analysis after patching bytes
+    2. Refreshing analysis after type changes
+    3. Fixing incorrect analysis results
+    4. Incremental analysis workflows
+
+    The test validates:
+    1. Method accepts valid address
+    2. Scheduling succeeds without raising exceptions
+    3. After wait_for_completion(), reanalysis is processed
+    4. Invalid addresses are rejected with InvalidEAError
+
+    We schedule reanalysis and verify the operation completes successfully.
+    """
+    from ida_domain.base import InvalidEAError
+
+    db = test_env
+
+    # Ensure clean state
+    db.analysis.wait_for_completion()
+
+    # Schedule reanalysis for a single address
+    ea = db.minimum_ea
+    db.analysis.schedule_reanalysis(ea)
+
+    # Should not raise exception
+    # Wait for reanalysis
+    db.analysis.wait_for_completion()
+
+    # Should be complete
+    assert db.analysis.is_complete is True
+
+    # Test invalid address
+    with pytest.raises(InvalidEAError):
+        db.analysis.schedule_reanalysis(0xFFFFFFFF)
+
+
+def test_analysis_cancel_analysis(test_env):
+    """
+    Test cancel_analysis() removes range from CODE, PROC, and USED queues.
+
+    RATIONALE: cancel_analysis() is useful for preventing IDA from analyzing
+    specific regions. This is important for:
+    1. Preserving data sections from being analyzed as code
+    2. Preventing analysis of encrypted/obfuscated regions
+    3. Performance optimization (skip uninteresting regions)
+    4. Manual control over analysis boundaries
+
+    The test validates:
+    1. Method accepts valid range parameters
+    2. Cancellation succeeds without raising exceptions
+    3. Invalid addresses are rejected with InvalidEAError
+    4. Invalid ranges (start >= end) are rejected with InvalidParameterError
+
+    We schedule analysis then immediately cancel it to verify the operation works.
+    """
+    from ida_domain.base import InvalidEAError, InvalidParameterError
+
+    db = test_env
+
+    # Ensure clean state
+    db.analysis.wait_for_completion()
+
+    # Schedule some analysis
+    start = db.minimum_ea + 0x100
+    end = db.minimum_ea + 0x200
+    db.analysis.schedule_code_analysis(start)
+    db.analysis.schedule_code_analysis(start + 0x10)
+
+    # Cancel the scheduled analysis
+    db.analysis.cancel_analysis(start, end)
+
+    # Should not raise exception
+    # The scheduled items should be removed from queues
+
+    # Test invalid start address
+    with pytest.raises(InvalidEAError):
+        db.analysis.cancel_analysis(0xFFFFFFFF, end)
+
+    # Test invalid end address
+    with pytest.raises(InvalidEAError):
+        db.analysis.cancel_analysis(start, 0xFFFFFFFF)
+
+    # Test start >= end
+    with pytest.raises(InvalidParameterError):
+        db.analysis.cancel_analysis(db.minimum_ea + 0x10, db.minimum_ea)
+
+
+def test_analysis_cancel_queue(test_env):
+    """
+    Test cancel_queue() removes range from specific analysis queue.
+
+    RATIONALE: cancel_queue() provides fine-grained control over analysis
+    cancellation by targeting a specific queue. This is more precise than
+    cancel_analysis() which affects multiple queues. This is useful for:
+    1. Selective cancellation (e.g., cancel CODE but not PROC)
+    2. Advanced analysis workflows with queue-level control
+    3. Performance tuning by managing specific analysis phases
+    4. Debugging analysis queue behavior
+
+    The test validates:
+    1. Method accepts valid range and queue type parameters
+    2. Cancellation succeeds without raising exceptions
+    3. Invalid addresses are rejected with InvalidEAError
+    4. Invalid ranges (start >= end) are rejected with InvalidParameterError
+
+    We schedule analysis to a specific queue then cancel from that queue.
+    """
+    from ida_domain.analysis import AnalysisQueueType
+    from ida_domain.base import InvalidEAError, InvalidParameterError
+
+    db = test_env
+
+    # Ensure clean state
+    db.analysis.wait_for_completion()
+
+    # Schedule analysis to CODE queue
+    start = db.minimum_ea + 0x300
+    end = db.minimum_ea + 0x400
+    db.analysis.schedule_range_analysis(start, end, AnalysisQueueType.CODE)
+
+    # Cancel only from CODE queue
+    db.analysis.cancel_queue(start, end, AnalysisQueueType.CODE)
+
+    # Should not raise exception
+
+    # Test invalid start address
+    with pytest.raises(InvalidEAError):
+        db.analysis.cancel_queue(0xFFFFFFFF, end, AnalysisQueueType.CODE)
+
+    # Test invalid end address
+    with pytest.raises(InvalidEAError):
+        db.analysis.cancel_queue(start, 0xFFFFFFFF, AnalysisQueueType.CODE)
+
+    # Test start >= end
+    with pytest.raises(InvalidParameterError):
+        db.analysis.cancel_queue(
+            db.minimum_ea + 0x10, db.minimum_ea, AnalysisQueueType.CODE
+        )
