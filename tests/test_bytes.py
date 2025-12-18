@@ -4,11 +4,11 @@ import os
 import tempfile
 
 import pytest
+from ida_idaapi import BADADDR
 
 import ida_domain
 from ida_domain.base import InvalidEAError, InvalidParameterError
 from ida_domain.database import IdaCommandOptions
-from ida_idaapi import BADADDR
 
 
 @pytest.fixture(scope='module')

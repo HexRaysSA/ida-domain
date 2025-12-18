@@ -877,26 +877,21 @@ class Instructions(DatabaseEntity):
         # Get operand value
         opval = op.value if op.type == ida_ua.o_imm else op.addr
 
-        # Prepare output buffer
-        buf = ida_lines.qstring()
-
-        # Set flags based on include_displacement
-        flags = 0
-        if not include_displacement:
-            flags |= ida_lines.GENDSM_REMOVE_TAGS
-
         # Get offset expression
         from_ea = ea + op.offb  # offb is operand offset in instruction bytes
 
         result = ida_offset.get_offset_expression(
-            buf, ea, operand_n, from_ea, opval, flags
+            ea, operand_n, from_ea, opval, 0  # flags=0 for default formatting
         )
 
-        # Return None if failed (result == 0), otherwise return string
-        if result == 0:
+        # Return None if empty result
+        if not result:
             return None
 
-        return str(buf)
+        # Note: include_displacement parameter is documented but the underlying
+        # ida_offset.get_offset_expression doesn't have a direct flag for this.
+        # The parameter is kept for API compatibility but currently has no effect.
+        return result
 
     def calculate_offset_base(
         self,

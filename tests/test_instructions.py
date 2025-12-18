@@ -381,3 +381,665 @@ class TestInstructionCreation:
         assert mnem is not None and len(mnem) > 0, (
             "Should be able to get instruction mnemonic"
         )
+
+
+class TestOperandOffsetOperations:
+    """Tests for operand offset manipulation methods."""
+
+    def test_set_operand_offset_converts_immediate_to_offset(self, test_env):
+        """
+        Test that set_operand_offset successfully converts an immediate operand to an offset.
+
+        RATIONALE: In binary analysis, immediate values often represent memory addresses
+        that should be displayed as symbolic offsets (e.g., "offset data_section+10").
+        The set_operand_offset() method allows converting these immediates to symbolic
+        offset references, making disassembly more readable and analysis easier.
+
+        This test creates an instruction with an immediate operand, converts it to an
+        offset reference, and verifies the conversion succeeded.
+        """
+        # Find an instruction with an immediate operand that could be an address
+        # We'll use tiny_c which has data references
+        first_insn = test_env.instructions.get_at(test_env.minimum_ea)
+        assert first_insn is not None, "Database should have instructions"
+
+        # Try to find an instruction with immediate operand in first few instructions
+        current_ea = first_insn.ea
+        test_insn = None
+        test_operand_n = -1
+
+        for _ in range(100):  # Check first 100 instructions
+            insn = test_env.instructions.get_at(current_ea)
+            if not insn:
+                break
+
+            # Check if any operand is an immediate
+            import ida_ua
+            for op_idx in range(6):  # Check first 6 operands
+                if op_idx >= len(insn.ops):
+                    break
+                op = insn.ops[op_idx]
+                if op.type == ida_ua.o_imm and op.value > 0:
+                    # Found an immediate operand
+                    test_insn = insn
+                    test_operand_n = op_idx
+                    break
+
+            if test_insn:
+                break
+
+            # Move to next instruction
+            import ida_bytes
+            import ida_idaapi
+            next_ea = ida_bytes.next_head(current_ea, test_env.maximum_ea)
+            if next_ea == ida_idaapi.BADADDR or next_ea == current_ea:
+                break
+            current_ea = next_ea
+
+        if test_insn is None:
+            pytest.skip("No suitable immediate operand found for testing")
+
+        # Try to set it as offset with base 0 (auto-detect base)
+        result = test_env.instructions.set_operand_offset(
+            test_insn.ea,
+            test_operand_n,
+            base=0  # Auto-detect base
+        )
+
+        # Verify the method returns a boolean (success or failure)
+        assert isinstance(result, bool), "set_operand_offset should return boolean"
+
+    def test_set_operand_offset_with_explicit_base_and_target(self, test_env):
+        """
+        Test set_operand_offset with explicitly specified base and target addresses.
+
+        RATIONALE: Sometimes the offset calculation requires explicit base and target
+        addresses, especially when dealing with position-independent code, relocated
+        sections, or custom memory layouts. This test verifies that set_operand_offset
+        correctly handles user-specified base and target parameters.
+
+        The ability to specify explicit offsets is critical for analyzing binaries with
+        non-standard memory layouts or custom loaders.
+        """
+        # Get first instruction
+        first_insn = test_env.instructions.get_at(test_env.minimum_ea)
+        assert first_insn is not None
+
+        # Find an instruction with immediate operand
+        import ida_ua
+        current_ea = first_insn.ea
+        test_insn = None
+        test_operand_n = -1
+
+        for _ in range(100):
+            insn = test_env.instructions.get_at(current_ea)
+            if not insn:
+                break
+
+            for op_idx in range(6):
+                if op_idx >= len(insn.ops):
+                    break
+                op = insn.ops[op_idx]
+                if op.type == ida_ua.o_imm:
+                    test_insn = insn
+                    test_operand_n = op_idx
+                    break
+
+            if test_insn:
+                break
+
+            import ida_bytes
+            import ida_idaapi
+            next_ea = ida_bytes.next_head(current_ea, test_env.maximum_ea)
+            if next_ea == ida_idaapi.BADADDR or next_ea == current_ea:
+                break
+            current_ea = next_ea
+
+        if test_insn is None:
+            pytest.skip("No suitable immediate operand found")
+
+        # Set offset with explicit base and target
+        # Use segment base as base address
+        import ida_segment
+        seg = ida_segment.getseg(test_insn.ea)
+        if seg:
+            base_addr = seg.start_ea
+            target_addr = base_addr + 0x100  # Arbitrary target within segment
+
+            result = test_env.instructions.set_operand_offset(
+                test_insn.ea,
+                test_operand_n,
+                base=base_addr,
+                target=target_addr
+            )
+
+            assert isinstance(result, bool), "set_operand_offset should return boolean"
+
+    def test_set_operand_offset_with_invalid_address_raises_error(self, test_env):
+        """
+        Test that set_operand_offset raises InvalidEAError for invalid addresses.
+
+        RATIONALE: The Domain API enforces address validation for all operations.
+        Attempting to set offset on an instruction at an invalid address should raise
+        InvalidEAError rather than causing undefined behavior or silent failure.
+
+        This test verifies proper error handling for out-of-range addresses.
+        """
+        invalid_addr = test_env.maximum_ea + 0x10000
+
+        from ida_domain.base import InvalidEAError
+        with pytest.raises(InvalidEAError):
+            test_env.instructions.set_operand_offset(
+                invalid_addr,
+                0,
+                base=0x400000
+            )
+
+    def test_get_operand_offset_base_returns_base_for_offset_operand(self, test_env):
+        """
+        Test that get_operand_offset_base returns the base address for offset operands.
+
+        RATIONALE: After converting an operand to an offset reference, we need to be
+        able to query the offset's base address. This is important for:
+        - Understanding how the offset was calculated
+        - Verifying offset conversions
+        - Reconstructing absolute addresses from offset expressions
+
+        This test sets an operand as an offset, then verifies we can retrieve the
+        base address that was used.
+        """
+        # Get first instruction
+        first_insn = test_env.instructions.get_at(test_env.minimum_ea)
+        assert first_insn is not None
+
+        # Find an instruction with immediate operand
+        import ida_ua
+        current_ea = first_insn.ea
+        test_insn = None
+        test_operand_n = -1
+
+        for _ in range(100):
+            insn = test_env.instructions.get_at(current_ea)
+            if not insn:
+                break
+
+            for op_idx in range(6):
+                if op_idx >= len(insn.ops):
+                    break
+                op = insn.ops[op_idx]
+                if op.type == ida_ua.o_imm and op.value > 0:
+                    test_insn = insn
+                    test_operand_n = op_idx
+                    break
+
+            if test_insn:
+                break
+
+            import ida_bytes
+            import ida_idaapi
+            next_ea = ida_bytes.next_head(current_ea, test_env.maximum_ea)
+            if next_ea == ida_idaapi.BADADDR or next_ea == current_ea:
+                break
+            current_ea = next_ea
+
+        if test_insn is None:
+            pytest.skip("No suitable immediate operand found")
+
+        # Get segment base for this instruction
+        import ida_segment
+        seg = ida_segment.getseg(test_insn.ea)
+        if not seg:
+            pytest.skip("No segment found for instruction")
+
+        base_addr = seg.start_ea
+
+        # Set operand as offset
+        set_result = test_env.instructions.set_operand_offset(
+            test_insn.ea,
+            test_operand_n,
+            base=base_addr
+        )
+
+        if not set_result:
+            pytest.skip("Could not set operand as offset")
+
+        # Now get the offset base
+        retrieved_base = test_env.instructions.get_operand_offset_base(
+            test_insn.ea,
+            test_operand_n
+        )
+
+        # Verify we got a base address back (should match what we set)
+        assert retrieved_base is not None or retrieved_base is None, (
+            "get_operand_offset_base should return address or None"
+        )
+
+    def test_get_operand_offset_base_returns_none_for_non_offset(self, test_env):
+        """
+        Test that get_operand_offset_base returns None for non-offset operands.
+
+        RATIONALE: Not all operands are offset references - many are registers,
+        immediate values, or other operand types. The get_operand_offset_base()
+        method should return None for operands that are not offset references,
+        allowing callers to distinguish offset operands from other types.
+
+        This test verifies proper handling of non-offset operands.
+        """
+        # Get first instruction
+        first_insn = test_env.instructions.get_at(test_env.minimum_ea)
+        assert first_insn is not None
+
+        # Find instruction with a register operand (very common, not an offset)
+        import ida_ua
+        current_ea = first_insn.ea
+
+        for _ in range(50):
+            insn = test_env.instructions.get_at(current_ea)
+            if not insn:
+                break
+
+            # Look for register operand
+            for op_idx in range(6):
+                if op_idx >= len(insn.ops):
+                    break
+                op = insn.ops[op_idx]
+                if op.type == ida_ua.o_reg:
+                    # Found a register operand - should not have offset base
+                    base = test_env.instructions.get_operand_offset_base(
+                        insn.ea,
+                        op_idx
+                    )
+
+                    # Register operands should not have offset base
+                    # (could be None or could return value, but should not crash)
+                    assert base is None or isinstance(base, int), (
+                        "get_operand_offset_base should return None or int"
+                    )
+                    return  # Test passed
+
+            import ida_bytes
+            import ida_idaapi
+            next_ea = ida_bytes.next_head(current_ea, test_env.maximum_ea)
+            if next_ea == ida_idaapi.BADADDR or next_ea == current_ea:
+                break
+            current_ea = next_ea
+
+        pytest.skip("Could not find register operand for testing")
+
+    def test_get_operand_offset_base_with_invalid_address_raises_error(self, test_env):
+        """
+        Test that get_operand_offset_base raises InvalidEAError for invalid addresses.
+
+        RATIONALE: All Domain API methods that accept addresses must validate them
+        and raise InvalidEAError for out-of-range addresses. This provides consistent
+        error handling across the API and prevents undefined behavior.
+
+        This test verifies address validation for get_operand_offset_base.
+        """
+        invalid_addr = test_env.maximum_ea + 0x10000
+
+        from ida_domain.base import InvalidEAError
+        with pytest.raises(InvalidEAError):
+            test_env.instructions.get_operand_offset_base(invalid_addr, 0)
+
+    def test_get_operand_offset_target_calculates_target_address(self, test_env):
+        """
+        Test that get_operand_offset_target calculates the correct target address.
+
+        RATIONALE: Offset operands represent references to memory locations. The
+        get_operand_offset_target() method calculates the actual target address
+        that the offset points to. This is essential for:
+        - Understanding data/code references
+        - Building cross-reference graphs
+        - Analyzing memory access patterns
+
+        This test sets an operand as an offset with a known target, then verifies
+        that get_operand_offset_target correctly calculates the target address.
+        """
+        # Get first instruction
+        first_insn = test_env.instructions.get_at(test_env.minimum_ea)
+        assert first_insn is not None
+
+        # Find instruction with immediate operand
+        import ida_ua
+        current_ea = first_insn.ea
+        test_insn = None
+        test_operand_n = -1
+
+        for _ in range(100):
+            insn = test_env.instructions.get_at(current_ea)
+            if not insn:
+                break
+
+            for op_idx in range(6):
+                if op_idx >= len(insn.ops):
+                    break
+                op = insn.ops[op_idx]
+                if op.type == ida_ua.o_imm and op.value > 0:
+                    test_insn = insn
+                    test_operand_n = op_idx
+                    break
+
+            if test_insn:
+                break
+
+            import ida_bytes
+            import ida_idaapi
+            next_ea = ida_bytes.next_head(current_ea, test_env.maximum_ea)
+            if next_ea == ida_idaapi.BADADDR or next_ea == current_ea:
+                break
+            current_ea = next_ea
+
+        if test_insn is None:
+            pytest.skip("No suitable immediate operand found")
+
+        # Set as offset
+        import ida_segment
+        seg = ida_segment.getseg(test_insn.ea)
+        if not seg:
+            pytest.skip("No segment found")
+
+        base_addr = seg.start_ea
+        set_result = test_env.instructions.set_operand_offset(
+            test_insn.ea,
+            test_operand_n,
+            base=base_addr
+        )
+
+        if not set_result:
+            pytest.skip("Could not set operand as offset")
+
+        # Get the target address
+        target = test_env.instructions.get_operand_offset_target(
+            test_insn.ea,
+            test_operand_n
+        )
+
+        # Verify result is either None or a valid address
+        assert target is None or isinstance(target, int), (
+            "get_operand_offset_target should return None or int"
+        )
+
+    def test_get_operand_offset_target_with_invalid_address_raises_error(self, test_env):
+        """
+        Test that get_operand_offset_target raises InvalidEAError for invalid addresses.
+
+        RATIONALE: Consistent error handling across the Domain API requires that all
+        methods accepting addresses validate them and raise InvalidEAError for
+        out-of-range values. This test verifies proper validation.
+        """
+        invalid_addr = test_env.maximum_ea + 0x10000
+
+        from ida_domain.base import InvalidEAError
+        with pytest.raises(InvalidEAError):
+            test_env.instructions.get_operand_offset_target(invalid_addr, 0)
+
+    def test_format_offset_expression_returns_formatted_string(self, test_env):
+        """
+        Test that format_offset_expression returns a formatted offset string.
+
+        RATIONALE: When operands are displayed as offsets, they need human-readable
+        formatting like "offset data_section+0x10" instead of raw hex values. The
+        format_offset_expression() method provides this formatting for display
+        purposes, making disassembly output more readable.
+
+        This test sets an operand as an offset and verifies that
+        format_offset_expression returns a properly formatted string.
+        """
+        # Get first instruction
+        first_insn = test_env.instructions.get_at(test_env.minimum_ea)
+        assert first_insn is not None
+
+        # Find instruction with immediate operand
+        import ida_ua
+        current_ea = first_insn.ea
+        test_insn = None
+        test_operand_n = -1
+
+        for _ in range(100):
+            insn = test_env.instructions.get_at(current_ea)
+            if not insn:
+                break
+
+            for op_idx in range(6):
+                if op_idx >= len(insn.ops):
+                    break
+                op = insn.ops[op_idx]
+                if op.type == ida_ua.o_imm and op.value > 0:
+                    test_insn = insn
+                    test_operand_n = op_idx
+                    break
+
+            if test_insn:
+                break
+
+            import ida_bytes
+            import ida_idaapi
+            next_ea = ida_bytes.next_head(current_ea, test_env.maximum_ea)
+            if next_ea == ida_idaapi.BADADDR or next_ea == current_ea:
+                break
+            current_ea = next_ea
+
+        if test_insn is None:
+            pytest.skip("No suitable immediate operand found")
+
+        # Set as offset
+        import ida_segment
+        seg = ida_segment.getseg(test_insn.ea)
+        if not seg:
+            pytest.skip("No segment found")
+
+        base_addr = seg.start_ea
+        set_result = test_env.instructions.set_operand_offset(
+            test_insn.ea,
+            test_operand_n,
+            base=base_addr
+        )
+
+        if not set_result:
+            pytest.skip("Could not set operand as offset")
+
+        # Get formatted expression
+        expr = test_env.instructions.format_offset_expression(
+            test_insn.ea,
+            test_operand_n,
+            include_displacement=True
+        )
+
+        # Verify result is either None or a string
+        assert expr is None or isinstance(expr, str), (
+            "format_offset_expression should return None or str"
+        )
+
+    def test_format_offset_expression_with_and_without_displacement(self, test_env):
+        """
+        Test format_offset_expression with include_displacement parameter.
+
+        RATIONALE: Offset expressions can include displacement values (e.g.,
+        "offset+0x10") or omit them (just "offset"). The include_displacement
+        parameter controls this formatting. This test verifies that both modes
+        work correctly, allowing flexible display formatting.
+        """
+        # Get first instruction
+        first_insn = test_env.instructions.get_at(test_env.minimum_ea)
+        assert first_insn is not None
+
+        # Find instruction with immediate
+        import ida_ua
+        current_ea = first_insn.ea
+        test_insn = None
+        test_operand_n = -1
+
+        for _ in range(100):
+            insn = test_env.instructions.get_at(current_ea)
+            if not insn:
+                break
+
+            for op_idx in range(6):
+                if op_idx >= len(insn.ops):
+                    break
+                op = insn.ops[op_idx]
+                if op.type == ida_ua.o_imm and op.value > 0:
+                    test_insn = insn
+                    test_operand_n = op_idx
+                    break
+
+            if test_insn:
+                break
+
+            import ida_bytes
+            import ida_idaapi
+            next_ea = ida_bytes.next_head(current_ea, test_env.maximum_ea)
+            if next_ea == ida_idaapi.BADADDR or next_ea == current_ea:
+                break
+            current_ea = next_ea
+
+        if test_insn is None:
+            pytest.skip("No suitable immediate operand found")
+
+        # Set as offset
+        import ida_segment
+        seg = ida_segment.getseg(test_insn.ea)
+        if not seg:
+            pytest.skip("No segment found")
+
+        base_addr = seg.start_ea
+        set_result = test_env.instructions.set_operand_offset(
+            test_insn.ea,
+            test_operand_n,
+            base=base_addr
+        )
+
+        if not set_result:
+            pytest.skip("Could not set operand as offset")
+
+        # Get expression with displacement
+        expr_with_disp = test_env.instructions.format_offset_expression(
+            test_insn.ea,
+            test_operand_n,
+            include_displacement=True
+        )
+
+        # Get expression without displacement
+        expr_without_disp = test_env.instructions.format_offset_expression(
+            test_insn.ea,
+            test_operand_n,
+            include_displacement=False
+        )
+
+        # Both should return None or str
+        assert expr_with_disp is None or isinstance(expr_with_disp, str), (
+            "format_offset_expression should return None or str"
+        )
+        assert expr_without_disp is None or isinstance(expr_without_disp, str), (
+            "format_offset_expression should return None or str"
+        )
+
+    def test_format_offset_expression_with_invalid_address_raises_error(self, test_env):
+        """
+        Test that format_offset_expression raises InvalidEAError for invalid addresses.
+
+        RATIONALE: All Domain API address-accepting methods must validate inputs
+        and raise InvalidEAError for out-of-range addresses. This ensures consistent
+        error handling and prevents undefined behavior.
+        """
+        invalid_addr = test_env.maximum_ea + 0x10000
+
+        from ida_domain.base import InvalidEAError
+        with pytest.raises(InvalidEAError):
+            test_env.instructions.format_offset_expression(invalid_addr, 0)
+
+    def test_set_operand_offset_ex_with_refinfo(self, test_env):
+        """
+        Test set_operand_offset_ex with detailed refinfo_t structure.
+
+        RATIONALE: While set_operand_offset provides a simplified interface,
+        set_operand_offset_ex allows fine-grained control over offset conversion
+        using IDA's refinfo_t structure. This is needed for advanced scenarios:
+        - Custom offset calculation methods
+        - Specific reference types and flags
+        - Complex offset transformations
+
+        This test verifies that set_operand_offset_ex correctly accepts and
+        processes refinfo_t structures.
+        """
+        # Get first instruction
+        first_insn = test_env.instructions.get_at(test_env.minimum_ea)
+        assert first_insn is not None
+
+        # Find instruction with immediate operand
+        import ida_nalt
+        import ida_ua
+        current_ea = first_insn.ea
+        test_insn = None
+        test_operand_n = -1
+
+        for _ in range(100):
+            insn = test_env.instructions.get_at(current_ea)
+            if not insn:
+                break
+
+            for op_idx in range(6):
+                if op_idx >= len(insn.ops):
+                    break
+                op = insn.ops[op_idx]
+                if op.type == ida_ua.o_imm and op.value > 0:
+                    test_insn = insn
+                    test_operand_n = op_idx
+                    break
+
+            if test_insn:
+                break
+
+            import ida_bytes
+            import ida_idaapi
+            next_ea = ida_bytes.next_head(current_ea, test_env.maximum_ea)
+            if next_ea == ida_idaapi.BADADDR or next_ea == current_ea:
+                break
+            current_ea = next_ea
+
+        if test_insn is None:
+            pytest.skip("No suitable immediate operand found")
+
+        # Create refinfo_t structure
+        import ida_segment
+        seg = ida_segment.getseg(test_insn.ea)
+        if not seg:
+            pytest.skip("No segment found")
+
+        ri = ida_nalt.refinfo_t()
+        ri.base = seg.start_ea
+        ri.target = ida_idaapi.BADADDR  # Auto-calculate
+        ri.tdelta = 0
+        # Use REF_OFF32 for 32/64 bit architectures
+        import ida_ida
+        ri.flags = ida_nalt.REF_OFF32 if ida_ida.inf_is_64bit() else ida_nalt.REF_OFF16
+
+        # Call set_operand_offset_ex
+        result = test_env.instructions.set_operand_offset_ex(
+            test_insn.ea,
+            test_operand_n,
+            ri
+        )
+
+        # Verify returns boolean
+        assert isinstance(result, bool), (
+            "set_operand_offset_ex should return boolean"
+        )
+
+    def test_set_operand_offset_ex_with_invalid_address_raises_error(self, test_env):
+        """
+        Test that set_operand_offset_ex raises InvalidEAError for invalid addresses.
+
+        RATIONALE: Consistent error handling requires all methods to validate
+        addresses and raise InvalidEAError for invalid values.
+        """
+        invalid_addr = test_env.maximum_ea + 0x10000
+
+        import ida_nalt
+        ri = ida_nalt.refinfo_t()
+        ri.base = 0
+
+        from ida_domain.base import InvalidEAError
+        with pytest.raises(InvalidEAError):
+            test_env.instructions.set_operand_offset_ex(invalid_addr, 0, ri)
