@@ -1234,3 +1234,434 @@ class Types(DatabaseEntity):
             Comment text, or empty string if no comment exists.
         """
         return type_info.get_type_cmt() or ''
+
+    def get_by_ordinal(self, ordinal: int, library: Optional[til_t] = None) -> Optional[tinfo_t]:
+        """
+        Retrieve a type information object by its ordinal number.
+
+        Ordinals are numeric identifiers for types in a type library. This method enables
+        lookup of types by their numeric ID rather than by name.
+
+        Args:
+            ordinal: The ordinal number of the type to retrieve. Must be positive.
+            library: Type library to retrieve from. If None, uses the local (database) library.
+
+        Returns:
+            The type information object if found, None if the ordinal doesn't exist.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Get type at ordinal 5
+            >>> type_info = db.types.get_by_ordinal(5)
+            >>> if type_info:
+            ...     print(f"Type name: {type_info.get_type_name()}")
+        """
+        if not library:
+            library = ida_typeinf.get_idati()
+
+        # Enable numbered types for this library
+        ida_typeinf.enable_numbered_types(library, True)
+
+        # Try to get the type using set_numbered_type
+        tif = ida_typeinf.tinfo_t()
+        if tif.get_numbered_type(library, ordinal):
+            return tif
+
+        return None
+
+    def get_ordinal(self, name: str, library: Optional[til_t] = None) -> Optional[int]:
+        """
+        Get the ordinal number of a named type.
+
+        Each named type in a library can be referenced by both its name and a numeric ordinal.
+        This method maps from name to ordinal.
+
+        Args:
+            name: The name of the type to look up.
+            library: Type library to search. If None, uses the local (database) library.
+
+        Returns:
+            The ordinal number of the named type, or None if not found.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> ordinal = db.types.get_ordinal("size_t")
+            >>> if ordinal:
+            ...     print(f"size_t has ordinal {ordinal}")
+        """
+        if not library:
+            library = ida_typeinf.get_idati()
+
+        ordinal = ida_typeinf.get_type_ordinal(library, name)
+        if ordinal == 0:  # 0 means not found
+            return None
+
+        return ordinal
+
+    def apply_by_name(
+        self,
+        ea: ea_t,
+        name: str,
+        flags: TypeApplyFlags = TypeApplyFlags.DEFINITE
+    ) -> bool:
+        """
+        Apply a named type to the given address.
+
+        This is a convenience method that looks up a type by name and applies it to an
+        address in a single operation.
+
+        Args:
+            ea: The effective address where the type should be applied.
+            name: The name of the type to apply (e.g., "size_t", "HWND").
+            flags: Type apply flags controlling how the type is applied.
+
+        Returns:
+            True if the type was applied successfully, False otherwise.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Apply HWND type to a global variable
+            >>> success = db.types.apply_by_name(0x401000, "HWND")
+            >>> if success:
+            ...     print("Type applied successfully")
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        return ida_typeinf.apply_named_type(ea, name)
+
+    def apply_declaration(
+        self,
+        ea: ea_t,
+        decl: str,
+        flags: TypeFormattingFlags = TypeFormattingFlags.HTI_DCL
+    ) -> bool:
+        """
+        Parse a C declaration and apply it directly to an address.
+
+        This method parses a C-style type declaration string and applies the parsed type
+        to the specified address in a single operation.
+
+        Args:
+            ea: The effective address where the type should be applied.
+            decl: The C declaration string (e.g., "int *", "struct foo", "void (__cdecl *)(int)").
+            flags: Type formatting flags for parsing the declaration.
+
+        Returns:
+            True if the declaration was parsed and applied successfully, False otherwise.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+            InvalidParameterError: If the declaration string is empty.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Apply a function pointer type
+            >>> success = db.types.apply_declaration(0x401000, "void (__cdecl *)(int, char*)")
+            >>> if success:
+            ...     print("Function type applied")
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        if not decl:
+            raise InvalidParameterError('decl', decl, 'cannot be empty')
+
+        # Get local library for parsing context
+        til = ida_typeinf.get_idati()
+
+        # Apply C declaration directly
+        return ida_typeinf.apply_cdecl(til, ea, decl, flags)
+
+    def guess_at(self, ea: ea_t) -> Optional[tinfo_t]:
+        """
+        Leverage IDA's type inference to guess the type at an address.
+
+        IDA Pro has sophisticated type inference capabilities that can deduce types from
+        usage patterns, cross-references, and context. This method invokes IDA's type
+        guessing engine for a specific address.
+
+        Args:
+            ea: The effective address for which to infer the type.
+
+        Returns:
+            The inferred type information if successful, None if type cannot be guessed.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Let IDA guess the type of a function
+            >>> guessed_type = db.types.guess_at(0x401000)
+            >>> if guessed_type:
+            ...     print(f"Guessed type: {db.types.format_type(guessed_type)}")
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        tif = ida_typeinf.tinfo_t()
+        result = ida_typeinf.guess_tinfo(tif, ea)
+
+        # guess_tinfo returns GUESS_FUNC_* codes
+        # Non-zero means successful guess
+        if result != 0:
+            return tif
+
+        return None
+
+    def format_type(
+        self,
+        type_info: tinfo_t,
+        flags: TypeFormattingFlags = TypeFormattingFlags(0)
+    ) -> str:
+        """
+        Format a type as a C declaration string.
+
+        Converts a type information object into a human-readable C-style declaration string.
+        The formatting can be customized with flags to control aspects like typedef expansion,
+        spacing, and comment inclusion.
+
+        Args:
+            type_info: The type information object to format.
+            flags: Formatting flags controlling the output style.
+
+        Returns:
+            A C-style declaration string representing the type.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> type_info = db.types.get_by_name("size_t")
+            >>> if type_info:
+            ...     decl = db.types.format_type(type_info)
+            ...     print(f"Declaration: {decl}")
+        """
+        return type_info.dstr()
+
+    def format_type_at(
+        self,
+        ea: ea_t,
+        flags: TypeFormattingFlags = TypeFormattingFlags(0)
+    ) -> Optional[str]:
+        """
+        Format the type at an address as a C declaration string.
+
+        This is a convenience method that retrieves the type at an address and formats it
+        as a C declaration in a single operation.
+
+        Args:
+            ea: The effective address of the item to format.
+            flags: Formatting flags controlling the output style.
+
+        Returns:
+            A C-style declaration string, or None if no type exists at the address.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Format the type of a global variable
+            >>> decl = db.types.format_type_at(0x401000)
+            >>> if decl:
+            ...     print(f"Type: {decl}")
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        # Use print_type to format the type at an address
+        result = ida_typeinf.print_type(ea, False)  # False = don't force one line
+        if result:
+            return result
+
+        return None
+
+    def compare_types(self, type1: tinfo_t, type2: tinfo_t) -> bool:
+        """
+        Check if two types are structurally equivalent.
+
+        Performs a structural comparison of two type information objects to determine if
+        they represent the same type, even if they have different names or come from
+        different libraries.
+
+        Args:
+            type1: The first type to compare.
+            type2: The second type to compare.
+
+        Returns:
+            True if the types are equivalent, False otherwise.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> type1 = db.types.get_by_name("size_t")
+            >>> type2 = db.types.get_by_name("unsigned long")
+            >>> if type1 and type2:
+            ...     if db.types.compare_types(type1, type2):
+            ...         print("Types are equivalent")
+        """
+        # compare_tinfo returns 0 if types are equal
+        result = ida_typeinf.compare_tinfo(type1, type2, 0)
+        return result == 0
+
+    def validate_type(self, type_info: tinfo_t) -> bool:
+        """
+        Validate that a type is well-formed and correct.
+
+        Checks whether a type information object is valid according to IDA's type system
+        rules. This includes verifying that the type is properly constructed, all
+        references are resolved, and the type conforms to language semantics.
+
+        Args:
+            type_info: The type information object to validate.
+
+        Returns:
+            True if the type is valid, False if it contains errors.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> type_info = db.types.get_by_name("MyStruct")
+            >>> if type_info and db.types.validate_type(type_info):
+            ...     print("Type is well-formed")
+        """
+        return ida_typeinf.verify_tinfo(type_info)
+
+    def resolve_typedef(self, type_info: tinfo_t) -> tinfo_t:
+        """
+        Follow typedef chains to get the underlying concrete type.
+
+        When a type is a typedef (type alias), this method resolves it to the actual
+        underlying type. If the type is not a typedef, returns an equivalent type.
+
+        Args:
+            type_info: The type information object to resolve.
+
+        Returns:
+            A new type information object with typedefs resolved.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> type_info = db.types.get_by_name("DWORD")  # Often typedef to unsigned long
+            >>> resolved = db.types.resolve_typedef(type_info)
+            >>> print(f"DWORD resolves to: {db.types.format_type(resolved)}")
+        """
+        # Create a copy to avoid modifying original
+        result = ida_typeinf.tinfo_t()
+        ida_typeinf.copy_tinfo_t(result, type_info)
+
+        # Resolve typedef chain in-place
+        ida_typeinf.resolve_typedef(result)
+
+        return result
+
+    def remove_pointer(self, type_info: tinfo_t) -> Optional[tinfo_t]:
+        """
+        Strip pointer/reference from a type to get the pointed-to type.
+
+        If the given type is a pointer or reference, returns the type being pointed to.
+        For example, "int *" would return "int".
+
+        Args:
+            type_info: The type information object to dereference.
+
+        Returns:
+            The pointed-to type if the input is a pointer, None otherwise.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> ptr_type = db.types.get_at(0x401000)  # Assume this is "char *"
+            >>> if ptr_type:
+            ...     base_type = db.types.remove_pointer(ptr_type)
+            ...     if base_type:
+            ...         print(f"Points to: {db.types.format_type(base_type)}")
+        """
+        # Check if it's actually a pointer
+        if not type_info.is_ptr():
+            return None
+
+        # Create a copy to modify
+        result = ida_typeinf.tinfo_t()
+        ida_typeinf.copy_tinfo_t(result, type_info)
+
+        # Remove pointer modifier
+        if ida_typeinf.remove_pointer(result):
+            return result
+
+        return None
+
+    def is_enum(self, type_info: tinfo_t) -> bool:
+        """
+        Check if a type is an enumeration.
+
+        Args:
+            type_info: The type information object to test.
+
+        Returns:
+            True if the type is an enum, False otherwise.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> type_info = db.types.get_by_name("MyEnum")
+            >>> if type_info and db.types.is_enum(type_info):
+            ...     print("Type is an enumeration")
+        """
+        return type_info.is_enum()
+
+    def is_struct(self, type_info: tinfo_t) -> bool:
+        """
+        Check if a type is a structure.
+
+        Args:
+            type_info: The type information object to test.
+
+        Returns:
+            True if the type is a struct, False otherwise.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> type_info = db.types.get_by_name("MyStruct")
+            >>> if type_info and db.types.is_struct(type_info):
+            ...     print("Type is a structure")
+        """
+        return type_info.is_struct()
+
+    def is_union(self, type_info: tinfo_t) -> bool:
+        """
+        Check if a type is a union.
+
+        Args:
+            type_info: The type information object to test.
+
+        Returns:
+            True if the type is a union, False otherwise.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> type_info = db.types.get_by_name("MyUnion")
+            >>> if type_info and db.types.is_union(type_info):
+            ...     print("Type is a union")
+        """
+        return type_info.is_union()
+
+    def is_udt(self, type_info: tinfo_t) -> bool:
+        """
+        Check if a type is a user-defined type (structure or union).
+
+        A UDT (User-Defined Type) is either a struct or a union. This method is equivalent
+        to `is_struct(type_info) or is_union(type_info)`.
+
+        Args:
+            type_info: The type information object to test.
+
+        Returns:
+            True if the type is a UDT (struct or union), False otherwise.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> type_info = db.types.get_by_name("SomeType")
+            >>> if type_info and db.types.is_udt(type_info):
+            ...     print("Type is a user-defined type")
+        """
+        return type_info.is_udt()
