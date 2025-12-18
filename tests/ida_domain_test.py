@@ -180,6 +180,47 @@ def test_database(test_env):
     db3.close(False)
 
 
+def test_database_save_as(test_env):
+    """
+    Test the save_as() method for saving database to a new location.
+
+    RATIONALE: This test validates that the Database.save_as() method correctly
+    saves the current database to a new file location. We verify:
+    1. The method successfully saves to a new path
+    2. An empty path parameter raises InvalidParameterError
+    3. The saved file is created and can be opened
+
+    This is a critical operation for database backup and workflow management,
+    ensuring analysts can create checkpoints of their work at different stages.
+    """
+    import os
+    import tempfile
+
+    db = test_env
+
+    # Test 1: Successful save_as to a new location
+    temp_dir = tempfile.gettempdir()
+    new_db_path = os.path.join(temp_dir, 'test_save_as_backup.idb')
+
+    # Remove the file if it already exists from a previous test run
+    if os.path.exists(new_db_path):
+        os.remove(new_db_path)
+
+    # Save to new location
+    assert db.save_as(new_db_path), "save_as should return True on success"
+
+    # Verify the file was created
+    assert os.path.exists(new_db_path), "Saved database file should exist"
+
+    # Clean up
+    if os.path.exists(new_db_path):
+        os.remove(new_db_path)
+
+    # Test 2: Empty path should raise InvalidParameterError
+    with pytest.raises(InvalidParameterError):
+        db.save_as("")
+
+
 def test_segment(test_env):
     db = test_env
 

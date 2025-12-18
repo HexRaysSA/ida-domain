@@ -17,7 +17,7 @@ from ida_idaapi import ea_t
 from typing_extensions import TYPE_CHECKING, List, Literal, Optional, Tuple, Type, Union
 
 from .analysis import Analysis
-from .base import check_db_open
+from .base import InvalidParameterError, check_db_open
 from .bytes import Bytes
 from .comments import Comments
 from .entries import Entries
@@ -584,6 +584,46 @@ class Database:
             logger.error('Close is available only when running as a library.')
 
         self.unhook()
+
+    @check_db_open
+    def save_as(self, new_path: str, flags: int = 0) -> bool:
+        """
+        Saves the database to a new location (equivalent to "Save As" in UI).
+
+        Args:
+            new_path: Destination path for the new database file
+            flags: Database save flags (reserved for future use, defaults to 0)
+
+        Returns:
+            True if database was successfully saved, False otherwise
+
+        Raises:
+            InvalidParameterError: If new_path is empty
+            IOError: If file cannot be written
+
+        Example:
+            >>> db = Database.open("program.idb")
+            >>> # Perform analysis...
+            >>> if db.save_as("program_analyzed.idb"):
+            ...     print("Database saved to new location")
+            >>> # Save with different name
+            >>> db.save_as(f"program_backup.idb")
+
+        Note:
+            After save_as(), the database continues operating on the original file.
+            To switch to the new file, close and reopen it.
+        """
+        if not new_path:
+            raise InvalidParameterError('new_path', new_path, 'must not be empty')
+
+        # save_database(outfile, flags=0) saves the database to a new location
+        # Returns True on success, False on failure
+        success: bool = bool(ida_loader.save_database(new_path, flags))
+
+        if not success:
+            raise IOError(f'Failed to save database to {new_path}')
+
+        return success
 
     @check_db_open
     def execute_script(self, file_path: str) -> None:
