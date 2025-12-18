@@ -36,6 +36,7 @@ from .signature_files import SignatureFiles
 from .stack_frames import StackFrames
 from .strings import Strings
 from .switches import Switches
+from .try_blocks import TryBlocks
 from .types import Types
 from .xrefs import Xrefs
 
@@ -979,6 +980,11 @@ class Database:
     def exporter(self) -> Exporter:
         """Handler that provides access to file export operations."""
         return Exporter(self)
+
+    @property
+    def try_blocks(self) -> TryBlocks:
+        """Handler that provides access to exception handling try/catch blocks."""
+        return TryBlocks(self)
 
     @property
     def hooks(self) -> HooksList:

@@ -150,14 +150,22 @@ class Exporter(DatabaseEntity):
                 f"must be less than end_ea ({end_ea:#x})",
             )
 
+        import ida_fpro
+
         try:
-            # Open file for writing
-            with open(output_path, 'w') as fp:
-                # Generate MAP file
+            # Create IDA file handle
+            qf = ida_fpro.qfile_t()
+            if not qf.open(output_path, "w"):
+                raise IOError(f"Failed to open file for writing: {output_path}")
+
+            try:
+                # Generate MAP file using IDA file handle
                 result = ida_loader.gen_file(
-                    ida_loader.OFILE_MAP, fp, start_ea, end_ea, 0
+                    ida_loader.OFILE_MAP, qf.get_fp(), start_ea, end_ea, 0
                 )
                 return result >= 0  # Positive or zero = success
+            finally:
+                qf.close()
         except (IOError, OSError) as e:
             raise IOError(f"Failed to write MAP file: {e}") from e
 
@@ -212,12 +220,20 @@ class Exporter(DatabaseEntity):
                 f"must be less than end_ea ({end_ea:#x})",
             )
 
+        import ida_fpro
+
         try:
-            with open(output_path, 'w') as fp:
+            qf = ida_fpro.qfile_t()
+            if not qf.open(output_path, "w"):
+                raise IOError(f"Failed to open file for writing: {output_path}")
+
+            try:
                 result = ida_loader.gen_file(
-                    ida_loader.OFILE_ASM, fp, start_ea, end_ea, int(flags)
+                    ida_loader.OFILE_ASM, qf.get_fp(), start_ea, end_ea, int(flags)
                 )
                 return result >= 0
+            finally:
+                qf.close()
         except (IOError, OSError) as e:
             raise IOError(f"Failed to write assembly file: {e}") from e
 
@@ -273,12 +289,20 @@ class Exporter(DatabaseEntity):
                 f"must be less than end_ea ({end_ea:#x})",
             )
 
+        import ida_fpro
+
         try:
-            with open(output_path, 'w') as fp:
+            qf = ida_fpro.qfile_t()
+            if not qf.open(output_path, "w"):
+                raise IOError(f"Failed to open file for writing: {output_path}")
+
+            try:
                 result = ida_loader.gen_file(
-                    ida_loader.OFILE_LST, fp, start_ea, end_ea, int(flags)
+                    ida_loader.OFILE_LST, qf.get_fp(), start_ea, end_ea, int(flags)
                 )
                 return result >= 0
+            finally:
+                qf.close()
         except (IOError, OSError) as e:
             raise IOError(f"Failed to write listing file: {e}") from e
 
@@ -313,11 +337,19 @@ class Exporter(DatabaseEntity):
             Not all file formats support executable reconstruction. This
             depends on the original binary format and loader capabilities.
         """
+        import ida_fpro
+
         try:
-            with open(output_path, 'wb') as fp:
+            qf = ida_fpro.qfile_t()
+            if not qf.open(output_path, "wb"):
+                raise IOError(f"Failed to open file for writing: {output_path}")
+
+            try:
                 # gen_exe_file reconstructs the executable
-                result = ida_loader.gen_exe_file(fp)
+                result = ida_loader.gen_exe_file(qf.get_fp())
                 return result >= 0
+            finally:
+                qf.close()
         except (IOError, OSError) as e:
             raise IOError(f"Failed to write executable: {e}") from e
         except Exception as e:
@@ -374,12 +406,20 @@ class Exporter(DatabaseEntity):
                 f"must be less than end_ea ({end_ea:#x})",
             )
 
+        import ida_fpro
+
         try:
-            with open(output_path, 'w') as fp:
+            qf = ida_fpro.qfile_t()
+            if not qf.open(output_path, "w"):
+                raise IOError(f"Failed to open file for writing: {output_path}")
+
+            try:
                 result = ida_loader.gen_file(
-                    ida_loader.OFILE_IDC, fp, start_ea, end_ea, 0
+                    ida_loader.OFILE_IDC, qf.get_fp(), start_ea, end_ea, 0
                 )
                 return result >= 0
+            finally:
+                qf.close()
         except (IOError, OSError) as e:
             raise IOError(f"Failed to write IDC script: {e}") from e
 
@@ -434,12 +474,20 @@ class Exporter(DatabaseEntity):
                 f"must be less than end_ea ({end_ea:#x})",
             )
 
+        import ida_fpro
+
         try:
-            with open(output_path, 'w') as fp:
+            qf = ida_fpro.qfile_t()
+            if not qf.open(output_path, "w"):
+                raise IOError(f"Failed to open file for writing: {output_path}")
+
+            try:
                 result = ida_loader.gen_file(
-                    ida_loader.OFILE_DIF, fp, start_ea, end_ea, 0
+                    ida_loader.OFILE_DIF, qf.get_fp(), start_ea, end_ea, 0
                 )
                 return result >= 0
+            finally:
+                qf.close()
         except (IOError, OSError) as e:
             raise IOError(f"Failed to write diff file: {e}") from e
 
@@ -487,12 +535,23 @@ class Exporter(DatabaseEntity):
                 f"must be less than end_ea ({end_ea:#x})",
             )
 
+        import ida_fpro
+
         try:
-            with open(output_path, 'wb') as fp:
+            qf = ida_fpro.qfile_t()
+            if not qf.open(output_path, "wb"):
+                raise IOError(f"Failed to open file for writing: {output_path}")
+
+            try:
                 # base2file exports raw bytes from database
-                # Returns number of bytes written or -1 on error
-                num_bytes = ida_loader.base2file(fp, 0, start_ea, end_ea)
-                return num_bytes
+                # Returns 1 on success, -1 on error (not the byte count)
+                result = ida_loader.base2file(qf.get_fp(), 0, start_ea, end_ea)
+                if result < 0:
+                    return -1
+                # Calculate actual bytes written (end_ea is exclusive)
+                return end_ea - start_ea
+            finally:
+                qf.close()
         except (IOError, OSError) as e:
             raise IOError(f"Failed to export bytes: {e}") from e
 
@@ -617,11 +676,19 @@ class Exporter(DatabaseEntity):
             return self.generate_executable(output_path)
 
         # Standard formats use gen_file (text mode)
+        import ida_fpro
+
         try:
-            with open(output_path, 'w') as fp:
+            qf = ida_fpro.qfile_t()
+            if not qf.open(output_path, "w"):
+                raise IOError(f"Failed to open file for writing: {output_path}")
+
+            try:
                 result = ida_loader.gen_file(
-                    int(format), fp, start_ea, end_ea, int(flags)
+                    int(format), qf.get_fp(), start_ea, end_ea, int(flags)
                 )
                 return result >= 0
+            finally:
+                qf.close()
         except (IOError, OSError) as e:
             raise IOError(f"Failed to export range: {e}") from e

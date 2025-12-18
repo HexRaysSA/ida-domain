@@ -182,11 +182,13 @@ def test_generate_map_file_start_ea_greater_than_end_ea_raises_error(
     output_path = os.path.join(temp_output_dir, 'invalid_range.map')
 
     min_ea = exporter_db.minimum_ea
-    max_ea = exporter_db.maximum_ea
+    # Use valid addresses but in reversed order
+    start_ea = min_ea + 0x50
+    end_ea = min_ea
 
     with pytest.raises(InvalidParameterError):
         exporter_db.exporter.generate_map_file(
-            output_path, start_ea=max_ea, end_ea=min_ea
+            output_path, start_ea=start_ea, end_ea=end_ea
         )
 
 
