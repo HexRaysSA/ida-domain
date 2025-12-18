@@ -565,3 +565,91 @@ class Names(DatabaseEntity):
         else:
             # Name cannot be made valid, return original with False
             return (False, name)
+
+    def get_colored_name(self, ea: ea_t, local: bool = False) -> Optional[str]:
+        """
+        Get name with IDA color tags for syntax highlighting.
+
+        This method returns the name at the specified address with color tags
+        embedded in the string. Color tags are special sequences used by IDA's
+        UI for syntax highlighting.
+
+        Args:
+            ea: Linear address.
+            local: Try local names first if True.
+
+        Returns:
+            Colored name string with embedded color tags, or None if no name exists.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Get colored name for display
+            >>> colored = db.names.get_colored_name(0x401000)
+            >>> if colored:
+            ...     print(f"Colored name: {colored}")
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        # Use get_colored_long_name which supports gtn_flags
+        gtn_flags = ida_name.GN_LOCAL if local else 0
+        name = ida_name.get_colored_long_name(ea, gtn_flags)
+        return name if name else None
+
+    def format_expression(
+        self,
+        from_ea: ea_t,
+        n: int,
+        ea: ea_t,
+        offset: int,
+        include_struct_fields: bool = True
+    ) -> Optional[str]:
+        """
+        Convert address to name expression with displacement.
+
+        This method formats an address as a symbolic name expression, optionally
+        including offset displacement (e.g., "name+8") and structure field names.
+        This is useful for displaying operand values symbolically.
+
+        Args:
+            from_ea: Address of instruction/operand that references the name.
+            n: Operand number (0 for data items, 0-N for instruction operands).
+            ea: Address to convert to a name expression.
+            offset: The value the expression should represent (may differ from ea).
+            include_struct_fields: Append struct member names if applicable.
+
+        Returns:
+            Formatted name expression like "name", "name+offset", or "name.field",
+            or None on failure.
+
+        Raises:
+            InvalidEAError: If from_ea or ea is invalid.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Format an operand reference
+            >>> expr = db.names.format_expression(
+            ...     from_ea=0x401000,
+            ...     n=1,
+            ...     ea=0x405000,
+            ...     offset=0x405008
+            ... )
+            >>> if expr:
+            ...     print(f"Expression: {expr}")  # "data_405000+8" or similar
+        """
+        if not self.database.is_valid_ea(from_ea):
+            raise InvalidEAError(from_ea)
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        # GETN_APPZERO: append struct member names
+        # GETN_NODUMMY: don't use dummy names for unknown offsets
+        flags = ida_name.GETN_APPZERO if include_struct_fields else ida_name.GETN_NODUMMY
+
+        # get_name_expr returns the formatted expression string
+        result = ida_name.get_name_expr(from_ea, n, ea, offset, flags)
+
+        return result if result else None

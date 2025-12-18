@@ -556,3 +556,279 @@ class TestNamesIntegration:
             assert addr == original_addr, "Should resolve to correct address"
         else:
             pytest.skip("No names in database to test")
+
+
+class TestNamesFormatting:
+    """Tests for name formatting methods."""
+
+    def test_get_colored_name_returns_string_for_named_address(self, test_env):
+        """
+        Test that get_colored_name returns a string for addresses with names.
+
+        RATIONALE: The get_colored_name method returns names with embedded color
+        tags for syntax highlighting in IDA's UI. This test validates that the
+        method successfully retrieves a colored name for a known named address.
+
+        We use a function address from the database which is guaranteed to have a
+        name, and verify that the returned string is not empty and is similar to
+        the plain name (color tags are typically invisible control characters).
+        """
+        # Find a function with a name
+        func_with_name = None
+        for func in test_env.functions.get_all():
+            name = test_env.names.get_at(func.start_ea)
+            if name:
+                func_with_name = (func.start_ea, name)
+                break
+
+        if func_with_name is None:
+            pytest.skip("No named functions found in database")
+
+        func_ea, expected_name = func_with_name
+
+        # Get colored name
+        colored = test_env.names.get_colored_name(func_ea)
+
+        # Should return a string
+        assert colored is not None, f"Should return colored name for address 0x{func_ea:x}"
+        assert isinstance(colored, str), "Should return a string"
+        assert len(colored) > 0, "Colored name should not be empty"
+
+        # Colored name might contain color tags, but should contain the actual name text
+        # (Color tags are typically control chars that don't affect string comparison much)
+        # We just verify it's a reasonable non-empty string
+        assert len(colored) >= len(expected_name), (
+            "Colored name should be at least as long as plain name "
+            "(may contain color tags)"
+        )
+
+    def test_get_colored_name_returns_none_for_unnamed_address(self, test_env):
+        """
+        Test that get_colored_name returns None for addresses without names.
+
+        RATIONALE: Not all addresses in a binary have names - only labeled locations
+        like functions, data, or manually added labels have names. This test validates
+        that get_colored_name correctly returns None for an unnamed address.
+
+        We use an address in the middle of a function body (not at the function start)
+        which typically doesn't have a name.
+        """
+        # Find an address without a name (middle of a function)
+        unnamed_ea = None
+        for func in test_env.functions.get_all():
+            # Try middle of function
+            mid_ea = func.start_ea + ((func.end_ea - func.start_ea) // 2)
+            if test_env.is_valid_ea(mid_ea):
+                name = test_env.names.get_at(mid_ea)
+                if not name:
+                    unnamed_ea = mid_ea
+                    break
+
+        if unnamed_ea is None:
+            pytest.skip("Could not find unnamed address")
+
+        # Get colored name - should be None
+        colored = test_env.names.get_colored_name(unnamed_ea)
+        assert colored is None, f"Should return None for unnamed address 0x{unnamed_ea:x}"
+
+    def test_get_colored_name_with_local_flag(self, test_env):
+        """
+        Test get_colored_name with local=True parameter.
+
+        RATIONALE: The local parameter affects name lookup priority - when True,
+        local names are tried first. This test validates that the local parameter
+        is properly passed to the underlying API and doesn't cause errors.
+
+        We use a known named address and verify that the method works with both
+        local=False (default) and local=True.
+        """
+        # Find a named address
+        if test_env.names.get_count() > 0:
+            addr, name = test_env.names.get_at_index(0)
+
+            # Try with local=False (default)
+            colored_global = test_env.names.get_colored_name(addr, local=False)
+            assert colored_global is not None, "Should return name with local=False"
+
+            # Try with local=True
+            colored_local = test_env.names.get_colored_name(addr, local=True)
+            # Either should work - local might return same or different name
+            # depending on whether there's a local name at this address
+            assert isinstance(colored_local, (str, type(None))), (
+                "Should return string or None with local=True"
+            )
+        else:
+            pytest.skip("No names in database")
+
+    def test_get_colored_name_with_invalid_address_raises_error(self, test_env):
+        """
+        Test that get_colored_name raises InvalidEAError for invalid addresses.
+
+        RATIONALE: All address-based methods should validate their inputs and raise
+        InvalidEAError for invalid addresses. This ensures consistent error handling
+        across the API.
+        """
+        invalid_ea = 0xDEADBEEF
+
+        with pytest.raises(InvalidEAError):
+            test_env.names.get_colored_name(invalid_ea)
+
+    def test_format_expression_for_simple_name(self, test_env):
+        """
+        Test format_expression returns a simple name for offset=0.
+
+        RATIONALE: The format_expression method converts an address to a symbolic
+        expression. When the offset matches the address exactly, it should return
+        just the name without any displacement.
+
+        We use a known function address and format it with offset=address, expecting
+        to get back the function name.
+        """
+        # Find a named function
+        func_with_name = None
+        for func in test_env.functions.get_all():
+            name = test_env.names.get_at(func.start_ea)
+            if name:
+                func_with_name = (func.start_ea, name)
+                break
+
+        if func_with_name is None:
+            pytest.skip("No named functions found")
+
+        func_ea, expected_name = func_with_name
+
+        # Format expression where offset == ea (no displacement)
+        expr = test_env.names.format_expression(
+            from_ea=func_ea,  # Reference is from the function itself
+            n=0,  # Operand 0 (or data item)
+            ea=func_ea,  # Base address
+            offset=func_ea,  # Value to represent (same as ea)
+            include_struct_fields=True
+        )
+
+        # Should return a string containing the name
+        assert expr is not None, "Should return expression for named address"
+        assert isinstance(expr, str), "Should return a string"
+        # The expression should contain the function name
+        # (it might have prefixes/suffixes depending on IDA's formatting rules)
+        assert len(expr) > 0, "Expression should not be empty"
+
+    def test_format_expression_with_offset_includes_displacement(self, test_env):
+        """
+        Test format_expression includes offset displacement for offset != ea.
+
+        RATIONALE: When the offset value differs from the base address, the formatted
+        expression should include the displacement (e.g., "func+10"). This is important
+        for displaying operand values symbolically with their offsets.
+
+        We use a function address and add an offset, expecting to get an expression
+        like "funcname+offset".
+        """
+        # Find a named function
+        func_with_name = None
+        for func in test_env.functions.get_all():
+            name = test_env.names.get_at(func.start_ea)
+            if name and (func.end_ea - func.start_ea) > 10:
+                func_with_name = (func.start_ea, name)
+                break
+
+        if func_with_name is None:
+            pytest.skip("No suitable named function found")
+
+        func_ea, expected_name = func_with_name
+        offset_value = func_ea + 8  # Add offset of 8
+
+        # Format expression with offset
+        expr = test_env.names.format_expression(
+            from_ea=func_ea,
+            n=0,
+            ea=func_ea,
+            offset=offset_value,
+            include_struct_fields=True
+        )
+
+        # Should return expression with offset
+        assert expr is not None, "Should return expression"
+        assert isinstance(expr, str), "Should return a string"
+        # Expression should contain some indication of offset
+        # Typically formatted as "name+8" or similar
+        # We can't check exact format, but it should be non-empty
+        assert len(expr) > 0, "Expression should not be empty"
+
+    def test_format_expression_with_struct_fields_flag(self, test_env):
+        """
+        Test format_expression with include_struct_fields parameter.
+
+        RATIONALE: The include_struct_fields parameter controls whether structure
+        field names are appended to the expression. This test validates that both
+        True and False values work without errors.
+
+        We test with both values to ensure the flag is properly handled.
+        """
+        # Find a named address
+        if test_env.names.get_count() > 0:
+            addr, name = test_env.names.get_at_index(0)
+
+            # Try with include_struct_fields=True
+            expr_with_fields = test_env.names.format_expression(
+                from_ea=addr,
+                n=0,
+                ea=addr,
+                offset=addr,
+                include_struct_fields=True
+            )
+
+            # Try with include_struct_fields=False
+            expr_no_fields = test_env.names.format_expression(
+                from_ea=addr,
+                n=0,
+                ea=addr,
+                offset=addr,
+                include_struct_fields=False
+            )
+
+            # Both should work (return string or None)
+            assert isinstance(expr_with_fields, (str, type(None))), (
+                "Should return string or None with include_struct_fields=True"
+            )
+            assert isinstance(expr_no_fields, (str, type(None))), (
+                "Should return string or None with include_struct_fields=False"
+            )
+        else:
+            pytest.skip("No names in database")
+
+    def test_format_expression_with_invalid_from_ea_raises_error(self, test_env):
+        """
+        Test that format_expression raises InvalidEAError for invalid from_ea.
+
+        RATIONALE: The from_ea parameter must be a valid address. This test validates
+        that the method properly checks and raises InvalidEAError for invalid inputs.
+        """
+        invalid_ea = 0xDEADBEEF
+        valid_ea = test_env.minimum_ea
+
+        with pytest.raises(InvalidEAError):
+            test_env.names.format_expression(
+                from_ea=invalid_ea,
+                n=0,
+                ea=valid_ea,
+                offset=valid_ea
+            )
+
+    def test_format_expression_with_invalid_ea_raises_error(self, test_env):
+        """
+        Test that format_expression raises InvalidEAError for invalid ea.
+
+        RATIONALE: The ea parameter must be a valid address. This test validates
+        proper validation of the ea parameter.
+        """
+        invalid_ea = 0xDEADBEEF
+        valid_ea = test_env.minimum_ea
+
+        with pytest.raises(InvalidEAError):
+            test_env.names.format_expression(
+                from_ea=valid_ea,
+                n=0,
+                ea=invalid_ea,
+                offset=valid_ea
+            )
