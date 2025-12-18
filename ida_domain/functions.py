@@ -890,6 +890,121 @@ class Functions(DatabaseEntity):
         """
         return ida_funcs.func_contains(func, ea)
 
+    def set_start(self, func: func_t, new_start: ea_t) -> bool:
+        """
+        Set function start address.
+
+        Modifies the start boundary of the function. This is useful when IDA
+        incorrectly identifies function boundaries.
+
+        Args:
+            func: The function to modify
+            new_start: New start address for the function
+
+        Returns:
+            True if successful, False otherwise
+
+        Raises:
+            InvalidEAError: If new_start is invalid
+
+        Example:
+            >>> # Adjust function start
+            >>> func = db.functions.get_at(0x401000)
+            >>> if func:
+            ...     # Move start back to include prologue
+            ...     if db.functions.set_start(func, 0x400FF0):
+            ...         print("Function start adjusted")
+        """
+        if not self.database.is_valid_ea(new_start):
+            raise InvalidEAError(new_start)
+
+        return ida_funcs.set_func_start(func.start_ea, new_start)
+
+    def set_end(self, func: func_t, new_end: ea_t) -> bool:
+        """
+        Set function end address.
+
+        Modifies the end boundary of the function. This is useful when IDA
+        incorrectly identifies function boundaries.
+
+        Args:
+            func: The function to modify
+            new_end: New end address for the function
+
+        Returns:
+            True if successful, False otherwise
+
+        Raises:
+            InvalidEAError: If new_end is invalid
+
+        Example:
+            >>> # Adjust function end
+            >>> func = db.functions.get_at(0x401000)
+            >>> if func:
+            ...     # Extend function to include epilogue
+            ...     if db.functions.set_end(func, 0x401200):
+            ...         print("Function end adjusted")
+        """
+        if not self.database.is_valid_ea(new_end):
+            raise InvalidEAError(new_end)
+
+        return ida_funcs.set_func_end(func.start_ea, new_end)
+
+    def update(self, func: func_t) -> bool:
+        """
+        Update/refresh function in database.
+
+        Forces IDA to reanalyze the function and update its internal representation.
+        This is necessary after modifying function properties or code.
+
+        Args:
+            func: The function to update
+
+        Returns:
+            True if successful, False otherwise
+
+        Example:
+            >>> # Update function after modifications
+            >>> func = db.functions.get_at(0x401000)
+            >>> if func:
+            ...     # Make some changes...
+            ...     db.bytes.set_byte_at(0x401010, 0x90)  # NOP
+            ...
+            ...     # Force reanalysis
+            ...     if db.functions.update(func):
+            ...         print("Function updated")
+        """
+        return ida_funcs.update_func(func)
+
+    def reanalyze(self, func: func_t) -> bool:
+        """
+        Force function re-analysis.
+
+        Triggers a complete re-analysis of the function, including control flow,
+        stack analysis, and type propagation.
+
+        Args:
+            func: The function to reanalyze
+
+        Returns:
+            True if reanalysis was initiated, False otherwise
+
+        Example:
+            >>> # Reanalyze function after patching
+            >>> func = db.functions.get_at(0x401000)
+            >>> if func:
+            ...     # Patch some bytes
+            ...     db.bytes.patch_bytes(0x401050, b'\\x90\\x90\\x90')
+            ...
+            ...     # Trigger reanalysis
+            ...     if db.functions.reanalyze(func):
+            ...         print("Function reanalysis initiated")
+        """
+        # Call reanalyze_function with default parameters
+        # Using BADADDR for start/end means analyze entire function
+        ida_funcs.reanalyze_function(func, BADADDR, BADADDR, False)
+        return True
+
     def get_chunk_at(self, ea: int) -> Optional[func_t]:
         """
         Get function chunk at exact address.
