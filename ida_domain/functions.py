@@ -814,6 +814,82 @@ class Functions(DatabaseEntity):
             raise InvalidEAError(ea)
         return ida_funcs.get_next_func(ea)
 
+    def get_previous(self, ea: ea_t) -> Optional[func_t]:
+        """
+        Get the previous function before the given address.
+
+        Args:
+            ea: Address to search from
+
+        Returns:
+            Previous function before ea, or None if no previous function
+
+        Raises:
+            InvalidEAError: If the effective address is invalid
+
+        Example:
+            >>> # Get previous function
+            >>> current_func = db.functions.get_at(0x402000)
+            >>> if current_func:
+            ...     prev_func = db.functions.get_previous(current_func.start_ea)
+            ...     if prev_func:
+            ...         print(f"Previous function: {db.functions.get_name(prev_func)}")
+        """
+        if not self.database.is_valid_ea(ea, strict_check=False):
+            raise InvalidEAError(ea)
+        return ida_funcs.get_prev_func(ea)
+
+    def get_index(self, func: func_t) -> int:
+        """
+        Get the ordinal index number of a function.
+
+        Args:
+            func: Function object
+
+        Returns:
+            The ordinal number/index of the function (0-based)
+
+        Raises:
+            ValueError: If the function is not found in the database
+
+        Example:
+            >>> # Get function index
+            >>> func = db.functions.get_at(0x401000)
+            >>> if func:
+            ...     index = db.functions.get_index(func)
+            ...     print(f"Function is #{index}")
+        """
+        index = ida_funcs.get_func_num(func.start_ea)
+
+        if index == -1:
+            raise ValueError(f"Function at 0x{func.start_ea:x} not found in database")
+
+        return index
+
+    def contains(self, func: func_t, ea: ea_t) -> bool:
+        """
+        Check if an address is within the function boundaries.
+
+        This method checks if the given address falls within any chunk (main or tail)
+        of the function.
+
+        Args:
+            func: Function object to check
+            ea: Address to test
+
+        Returns:
+            True if the address is within the function, False otherwise
+
+        Example:
+            >>> # Check if address is in function
+            >>> func = db.functions.get_at(0x401000)
+            >>> if func:
+            ...     print(db.functions.contains(func, 0x401000))  # True - start
+            ...     print(db.functions.contains(func, 0x401050))  # True - middle
+            ...     print(db.functions.contains(func, 0x402000))  # False - outside
+        """
+        return ida_funcs.func_contains(func, ea)
+
     def get_chunk_at(self, ea: int) -> Optional[func_t]:
         """
         Get function chunk at exact address.
