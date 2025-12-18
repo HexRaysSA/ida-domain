@@ -2728,3 +2728,185 @@ def test_complex_variable_access(tiny_c_env):
     assert refs[2].access_type == LocalVariableAccessType.READ
     assert refs[2].context == LocalVariableContext.CALL_ARG
     assert refs[2].code_line == 'use_val(v9);'
+
+
+def test_analysis_wait_for_completion(test_env):
+    """
+    Test that wait_for_completion() blocks until all analysis queues are empty.
+
+    RATIONALE: This is the most critical auto-analysis operation. Every script
+    that performs analysis operations needs to wait for completion before
+    querying results. This test validates that:
+    1. The method can be called successfully
+    2. After calling it, is_complete returns True
+    3. The method returns True to indicate success
+
+    We use the test_env fixture which creates a new database, triggering
+    initial auto-analysis. We then wait for it to complete and verify
+    the state is stable.
+    """
+    db = test_env
+
+    # Wait for auto-analysis to complete
+    result = db.analysis.wait_for_completion()
+
+    # Should return True for success
+    assert result is True
+
+    # After waiting, analysis should be complete
+    assert db.analysis.is_complete is True
+
+
+def test_analysis_is_complete(test_env):
+    """
+    Test that is_complete property accurately reflects analysis state.
+
+    RATIONALE: This property allows non-blocking checks of analysis state.
+    It's critical for:
+    1. Polling-based analysis monitoring
+    2. Conditional logic based on analysis state
+    3. Performance optimization (don't wait if already complete)
+
+    The test validates that after initial analysis and wait_for_completion(),
+    the is_complete property returns True, indicating all queues are empty.
+    """
+    db = test_env
+
+    # Wait for initial analysis
+    db.analysis.wait_for_completion()
+
+    # Should be complete now
+    assert db.analysis.is_complete is True
+
+    # Property should be idempotent (can call multiple times)
+    assert db.analysis.is_complete is True
+
+
+def test_analysis_current_state(test_env):
+    """
+    Test that current_state property returns valid AnalysisState.
+
+    RATIONALE: The current_state property provides detailed information about
+    what the analyzer is currently doing. This is essential for:
+    1. Monitoring long-running analysis
+    2. Debugging analysis issues
+    3. Understanding which queue is being processed
+    4. Identifying the current address being analyzed
+
+    After analysis completes, we expect:
+    - queue_type to be NONE (idle)
+    - current_address to be None (not analyzing anything)
+    - is_complete to be True
+    """
+    from ida_domain.analysis import AnalysisQueueType
+
+    db = test_env
+
+    # Wait for analysis to complete
+    db.analysis.wait_for_completion()
+
+    # Get current state
+    state = db.analysis.current_state
+
+    # After completion, should be idle
+    assert state.queue_type == AnalysisQueueType.NONE
+    assert state.current_address is None
+    assert state.is_complete is True
+
+
+def test_analysis_analyze_range_with_wait(test_env):
+    """
+    Test analyze_range() with wait=True analyzes a specific range.
+
+    RATIONALE: analyze_range() is a critical convenience method that combines
+    scheduling and waiting. This test validates:
+    1. The method accepts valid address ranges
+    2. With wait=True, it blocks until analysis completes
+    3. It returns the number of addresses processed
+    4. After completion, the database is in a stable state
+
+    We use a small range within the test binary to ensure the operation
+    completes quickly and we can verify the result.
+    """
+    db = test_env
+
+    # First ensure initial analysis is done
+    db.analysis.wait_for_completion()
+
+    # Analyze a small range (first 16 bytes)
+    start = db.minimum_ea
+    end = db.minimum_ea + 0x10
+
+    # Analyze with wait=True
+    count = db.analysis.analyze_range(start, end, wait=True)
+
+    # Should return number of addresses processed (non-negative)
+    assert count >= 0
+
+    # After analysis with wait, should be complete
+    assert db.analysis.is_complete is True
+
+
+def test_analysis_analyze_range_without_wait(test_env):
+    """
+    Test analyze_range() with wait=False schedules but doesn't block.
+
+    RATIONALE: The wait=False mode allows background analysis scheduling.
+    This is important for:
+    1. Performance optimization (schedule multiple ranges before waiting)
+    2. Asynchronous workflows
+    3. UI responsiveness in interactive scripts
+
+    This test validates that:
+    1. With wait=False, the method returns immediately (returns 0)
+    2. We can manually wait afterward with wait_for_completion()
+    3. The analysis still completes successfully
+    """
+    db = test_env
+
+    # Ensure clean state
+    db.analysis.wait_for_completion()
+
+    # Schedule analysis without waiting
+    start = db.minimum_ea
+    end = db.minimum_ea + 0x10
+    count = db.analysis.analyze_range(start, end, wait=False)
+
+    # When wait=False, returns 0 (unknown count until processed)
+    assert count == 0
+
+    # Now manually wait
+    db.analysis.wait_for_completion()
+
+    # Should be complete
+    assert db.analysis.is_complete is True
+
+
+def test_analysis_analyze_range_invalid_params(test_env):
+    """
+    Test analyze_range() properly validates parameters.
+
+    RATIONALE: Robust error handling is critical for API usability. This test
+    validates that analyze_range() properly rejects invalid inputs:
+    1. Invalid start address (raises InvalidEAError)
+    2. Invalid end address (raises InvalidEAError)
+    3. start >= end (raises InvalidParameterError)
+
+    Proper validation prevents undefined behavior from reaching the legacy
+    IDA API and provides clear error messages to users.
+    """
+    from ida_domain.base import InvalidEAError, InvalidParameterError
+
+    db = test_env
+
+    # Test invalid start address
+    with pytest.raises(InvalidEAError):
+        db.analysis.analyze_range(0xFFFFFFFF, db.minimum_ea + 0x10)
+
+    # Test invalid end address
+    with pytest.raises(InvalidEAError):
+        db.analysis.analyze_range(db.minimum_ea, 0xFFFFFFFF)
+
+    # Test start >= end
+    with pytest.raises(InvalidParameterError):
+        db.analysis.analyze_range(db.minimum_ea + 0x10, db.minimum_ea)

@@ -16,6 +16,7 @@ import ida_typeinf
 from ida_idaapi import ea_t
 from typing_extensions import TYPE_CHECKING, List, Literal, Optional, Tuple, Type, Union
 
+from .analysis import Analysis
 from .base import check_db_open
 from .bytes import Bytes
 from .comments import Comments
@@ -831,6 +832,11 @@ class Database:
                 continue
 
         return DatabaseMetadata(**metadata_values)
+
+    @property
+    def analysis(self) -> Analysis:
+        """Handler that provides access to auto-analysis control operations."""
+        return Analysis(self)
 
     @property
     def segments(self) -> Segments:
