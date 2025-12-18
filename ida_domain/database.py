@@ -32,6 +32,7 @@ from .segments import Segments
 from .signature_files import SignatureFiles
 from .stack_frames import StackFrames
 from .strings import Strings
+from .switches import Switches
 from .types import Types
 from .xrefs import Xrefs
 
@@ -955,6 +956,11 @@ class Database:
     def stack_frames(self) -> StackFrames:
         """Handler that provides access to stack frame operations."""
         return StackFrames(self)
+
+    @property
+    def switches(self) -> Switches:
+        """Handler that provides access to switch statement operations."""
+        return Switches(self)
 
     @property
     def hooks(self) -> HooksList:
