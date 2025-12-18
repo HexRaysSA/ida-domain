@@ -984,7 +984,7 @@ class TestBytesSearchMethods:
         func = all_funcs[0]
 
         # Read first few bytes of the function as a pattern
-        pattern_bytes = db.bytes.get_bytes(func.start_ea, min(4, func.end_ea - func.start_ea))
+        pattern_bytes = db.bytes.get_bytes_at(func.start_ea, min(4, func.end_ea - func.start_ea))
 
         if pattern_bytes and len(pattern_bytes) >= 2:
             # Search for this pattern - should find at least the original location
@@ -1023,7 +1023,7 @@ class TestBytesSearchMethods:
             func1, func2 = func2, func1
 
         # Get a pattern from func2
-        pattern = db.bytes.get_bytes(func2.start_ea, min(3, func2.end_ea - func2.start_ea))
+        pattern = db.bytes.get_bytes_at(func2.start_ea, min(3, func2.end_ea - func2.start_ea))
 
         if pattern and len(pattern) >= 2:
             # Search only in range before func2 - should not find it

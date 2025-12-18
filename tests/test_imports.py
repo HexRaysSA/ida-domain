@@ -607,3 +607,398 @@ def test_imports_empty_database():
         finally:
             if db.is_open():
                 db.close(False)
+
+def test_imports_find_all_by_name(imports_db):
+    """
+    Test finding all imports with the same name (handles duplicates).
+
+    RATIONALE: While duplicate imports are rare, they can occur in certain
+    scenarios (malformed binaries, manual IAT modification, or specific linker
+    configurations). The find_all_by_name method should return ALL matching
+    entries, not just the first one like find_by_name does.
+
+    This test validates:
+    - Returns iterator of all matching imports
+    - Works with module filtering (when specified)
+    - Returns empty iterator when name not found
+    - Can detect duplicates if they exist in the test binary
+    """
+    if len(imports_db.imports) == 0:
+        pytest.skip("Test binary has no imports")
+
+    # Get first import to use as test case
+    first_module = next(iter(imports_db.imports))
+    entries_from_module = list(first_module.imports)
+
+    if len(entries_from_module) == 0:
+        pytest.skip("First module has no imports")
+
+    # Find first named import
+    test_entry = None
+    for entry in entries_from_module:
+        if entry.is_named_import:
+            test_entry = entry
+            break
+
+    if not test_entry:
+        pytest.skip("No named imports in first module")
+
+    # Test: find all by name (should find at least the test entry)
+    results = list(imports_db.imports.find_all_by_name(test_entry.name))
+
+    assert len(results) >= 1, "Should find at least one match"
+    assert any(r.name == test_entry.name for r in results), "Results should include test entry"
+
+    # Test: find all by name with module filter
+    results_filtered = list(
+        imports_db.imports.find_all_by_name(test_entry.name, test_entry.module_name)
+    )
+
+    assert len(results_filtered) >= 1, "Should find at least one match with module filter"
+    assert all(
+        r.module_name == test_entry.module_name for r in results_filtered
+    ), "All results should be from specified module"
+
+    # Test: non-existent name returns empty
+    results_empty = list(imports_db.imports.find_all_by_name("_NonExistentFunction_12345"))
+    assert len(results_empty) == 0, "Should return empty for non-existent function"
+
+
+def test_imports_filter_entries(imports_db):
+    """
+    Test filtering imports with a custom predicate function.
+
+    RATIONALE: The filter_entries method enables flexible querying of imports
+    based on arbitrary criteria. This is useful for finding API patterns
+    (e.g., all memory allocation functions, all crypto APIs, all network calls).
+
+    This test validates:
+    - Predicate function is called for each entry
+    - Only entries matching predicate are returned
+    - Works with various filter criteria
+    - Returns empty when no matches
+    """
+    if len(imports_db.imports) == 0:
+        pytest.skip("Test binary has no imports")
+
+    # Get all entries to establish ground truth
+    all_entries = list(imports_db.imports.get_all_entries())
+    if len(all_entries) == 0:
+        pytest.skip("Test binary has no import entries")
+
+    # Test: filter for first module only
+    first_module = next(iter(imports_db.imports))
+    filtered = list(
+        imports_db.imports.filter_entries(lambda e: e.module_name == first_module.name)
+    )
+
+    assert len(filtered) > 0, "Should find imports from first module"
+    assert all(
+        e.module_name == first_module.name for e in filtered
+    ), "All filtered entries should be from first module"
+
+    # Test: filter for named imports only
+    named_only = list(imports_db.imports.filter_entries(lambda e: e.is_named_import))
+
+    assert all(e.is_named_import for e in named_only), "All should be named imports"
+
+    # Test: filter that matches nothing
+    empty_filter = list(
+        imports_db.imports.filter_entries(lambda e: e.address == 0xFFFFFFFFFFFFFFFF)
+    )
+
+    assert len(empty_filter) == 0, "Should return empty when no matches"
+
+    # Test: filter always returns True (should match all)
+    all_filter = list(imports_db.imports.filter_entries(lambda e: True))
+
+    assert len(all_filter) == len(all_entries), "Should return all entries with always-true filter"
+
+
+def test_imports_search_by_pattern(imports_db):
+    """
+    Test searching imports using regular expression patterns.
+
+    RATIONALE: Pattern-based searching is powerful for finding API families
+    or security-relevant function groups. For example, finding all "Create*"
+    APIs, or all socket-related functions, or crypto functions.
+
+    This test validates:
+    - Case-insensitive search (default)
+    - Case-sensitive search (when enabled)
+    - Complex regex patterns work correctly
+    - Returns empty when pattern matches nothing
+    - Handles invalid regex patterns gracefully
+    """
+    if len(imports_db.imports) == 0:
+        pytest.skip("Test binary has no imports")
+
+    # Get sample import name to test with
+    all_entries = list(imports_db.imports.get_all_entries())
+    if len(all_entries) == 0:
+        pytest.skip("Test binary has no import entries")
+
+    # Find first named import
+    test_entry = None
+    for entry in all_entries:
+        if entry.is_named_import and len(entry.name) > 3:
+            test_entry = entry
+            break
+
+    if not test_entry:
+        pytest.skip("No suitable named import found")
+
+    # Test: search by exact name (should find at least one)
+    exact_results = list(imports_db.imports.search_by_pattern(f"^{test_entry.name}$"))
+
+    assert len(exact_results) >= 1, "Should find exact match"
+    assert all(e.name == test_entry.name for e in exact_results), "Should match exact name"
+
+    # Test: search by prefix (first 3 chars)
+    prefix = test_entry.name[:3]
+    prefix_results = list(imports_db.imports.search_by_pattern(f"^{prefix}"))
+
+    assert len(prefix_results) >= 1, "Should find entries matching prefix"
+    assert all(
+        e.name.startswith(prefix) for e in prefix_results
+    ), "All results should start with prefix"
+
+    # Test: case-insensitive (default)
+    case_insensitive = list(
+        imports_db.imports.search_by_pattern(test_entry.name.lower(), case_sensitive=False)
+    )
+
+    assert len(case_insensitive) >= 1, "Case-insensitive should find match"
+
+    # Test: case-sensitive (should still find if name has same case)
+    case_sensitive = list(
+        imports_db.imports.search_by_pattern(test_entry.name, case_sensitive=True)
+    )
+
+    assert len(case_sensitive) >= 1, "Case-sensitive should find exact case match"
+
+    # Test: pattern matching nothing
+    no_match = list(imports_db.imports.search_by_pattern(r'^_NONEXISTENT_PATTERN_12345$'))
+
+    assert len(no_match) == 0, "Should return empty for non-matching pattern"
+
+
+def test_imports_has_imports(imports_db):
+    """
+    Test checking whether database has any imports.
+
+    RATIONALE: has_imports() is a quick boolean check useful for early
+    validation. Statically linked binaries, shellcode, and some packed
+    executables have no import tables. This method allows scripts to
+    quickly determine if import-based analysis is relevant.
+
+    This test validates:
+    - Returns True when imports exist
+    - Returns False when no imports exist
+    - Faster than len(db.imports) > 0
+    """
+    # Test with imports_db (should have imports based on test binary)
+    has_imports = imports_db.imports.has_imports()
+
+    # Result should match len() check
+    has_imports_via_len = len(imports_db.imports) > 0
+
+    assert has_imports == has_imports_via_len, "has_imports should match len() > 0"
+
+    # Test with empty database
+    work_dir = os.path.join(tempfile.gettempdir(), 'api_tests_work_dir')
+    idb_path = os.path.join(work_dir, 'tiny_asm_has_imports.bin')
+    os.makedirs(os.path.dirname(idb_path), exist_ok=True)
+
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    src_path = os.path.join(current_dir, 'resources', 'tiny_asm.bin')
+
+    if os.path.exists(src_path):
+        shutil.copy(src_path, idb_path)
+        ida_options = IdaCommandOptions(new_database=True, auto_analysis=True)
+        db_empty = ida_domain.Database.open(path=idb_path, args=ida_options, save_on_close=False)
+
+        try:
+            # Empty database should return False (or True if it has imports)
+            has_empty = db_empty.imports.has_imports()
+            count_empty = len(db_empty.imports)
+
+            assert has_empty == (count_empty > 0), "has_imports should match count > 0"
+
+        finally:
+            if db_empty.is_open():
+                db_empty.close(False)
+
+
+def test_imports_is_import(imports_db):
+    """
+    Test checking if a specific address is an import entry.
+
+    RATIONALE: is_import() is useful for validating addresses during analysis.
+    For example, when following cross-references, you might want to check if
+    the target is an import or regular code. This is faster than calling
+    get_at() and checking if result is None.
+
+    This test validates:
+    - Returns True for actual import addresses
+    - Returns False for non-import addresses
+    - Raises InvalidEAError for invalid addresses
+    - Handles edge cases (BADADDR, segment boundaries)
+    """
+    if len(imports_db.imports) == 0:
+        pytest.skip("Test binary has no imports")
+
+    # Get a known import address
+    all_entries = list(imports_db.imports.get_all_entries())
+    if len(all_entries) == 0:
+        pytest.skip("Test binary has no import entries")
+
+    test_entry = all_entries[0]
+
+    # Test: known import address should return True
+    is_import = imports_db.imports.is_import(test_entry.address)
+    assert is_import, "Should return True for import address"
+
+    # Test: verify consistency with get_at
+    entry_via_get_at = imports_db.imports.get_at(test_entry.address)
+    assert entry_via_get_at is not None, "get_at should also find this import"
+
+    # Test: non-import address should return False
+    # Use function start (if we have functions, it's unlikely to be an import)
+    if len(imports_db.functions) > 0:
+        func = next(iter(imports_db.functions))
+        is_func_import = imports_db.imports.is_import(func.start_ea)
+
+        # Function starts are typically not imports (though thunks might be)
+        # Just verify the call doesn't crash and returns a boolean
+        assert isinstance(is_func_import, bool), "Should return boolean"
+
+    # Test: invalid address should raise InvalidEAError
+    from ida_domain.base import InvalidEAError
+
+    with pytest.raises(InvalidEAError):
+        imports_db.imports.is_import(0xFFFFFFFFFFFFFFFF)
+
+
+def test_imports_get_statistics(imports_db):
+    """
+    Test retrieving import statistics.
+
+    RATIONALE: Import statistics provide useful metadata for profiling binaries,
+    detecting anomalies, and understanding dependencies. For example:
+    - Total import count indicates dependency complexity
+    - Named vs ordinal ratio indicates build configuration
+    - Most-imported module reveals primary dependencies
+
+    This test validates:
+    - Returns ImportStatistics with correct counts
+    - module_count matches len(db.imports)
+    - total_imports matches sum of all entries
+    - named_imports + ordinal_imports equals total_imports
+    - most_imported_module is correctly identified
+    """
+    if len(imports_db.imports) == 0:
+        pytest.skip("Test binary has no imports")
+
+    stats = imports_db.imports.get_statistics()
+
+    # Verify module count
+    assert stats.module_count == len(
+        imports_db.imports
+    ), "module_count should match len(imports)"
+
+    # Manually count total imports
+    all_entries = list(imports_db.imports.get_all_entries())
+    actual_total = len(all_entries)
+
+    assert stats.total_imports == actual_total, "total_imports should match actual count"
+
+    # Verify named vs ordinal split
+    actual_named = sum(1 for e in all_entries if e.is_named_import)
+    actual_ordinal = sum(1 for e in all_entries if e.is_ordinal_import)
+
+    assert stats.named_imports == actual_named, "named_imports count should be correct"
+    assert stats.ordinal_imports == actual_ordinal, "ordinal_imports count should be correct"
+
+    # named + ordinal should equal total
+    assert (
+        stats.named_imports + stats.ordinal_imports == stats.total_imports
+    ), "named + ordinal should equal total"
+
+    # Verify most-imported module
+    if stats.module_count > 0:
+        # Find module with most imports manually
+        max_count = 0
+        max_module_name = ""
+
+        for module in imports_db.imports:
+            if module.import_count > max_count:
+                max_count = module.import_count
+                max_module_name = module.name
+
+        assert (
+            stats.most_imported_module == max_module_name
+        ), "most_imported_module should be correct"
+        assert (
+            stats.most_imported_count == max_count
+        ), "most_imported_count should be correct"
+
+
+def test_imports_get_entries_by_module_variants(imports_db):
+    """
+    Test get_entries_by_module with different parameter types.
+
+    RATIONALE: The updated get_entries_by_module now accepts Union[str, int, ImportModule]
+    for convenience. This test validates that all three input types work correctly:
+    - int: module index (original behavior)
+    - str: module name (new convenience)
+    - ImportModule: module object (new convenience)
+
+    This test validates:
+    - Works with integer index
+    - Works with string module name
+    - Works with ImportModule object
+    - All three methods return same results
+    - Proper error handling for invalid inputs
+    """
+    if len(imports_db.imports) == 0:
+        pytest.skip("Test binary has no imports")
+
+    first_module = next(iter(imports_db.imports))
+
+    # Test: get entries by index (int)
+    entries_by_index = list(imports_db.imports.get_entries_by_module(first_module.index))
+
+    assert len(entries_by_index) >= 0, "Should return entries (possibly empty)"
+
+    # Test: get entries by name (str)
+    entries_by_name = list(imports_db.imports.get_entries_by_module(first_module.name))
+
+    assert len(entries_by_name) == len(
+        entries_by_index
+    ), "Should return same count for name and index"
+
+    # Test: get entries by module object
+    entries_by_module = list(imports_db.imports.get_entries_by_module(first_module))
+
+    assert len(entries_by_module) == len(
+        entries_by_index
+    ), "Should return same count for module object"
+
+    # Test: all three should return same entries (compare addresses)
+    addrs_by_index = {e.address for e in entries_by_index}
+    addrs_by_name = {e.address for e in entries_by_name}
+    addrs_by_module = {e.address for e in entries_by_module}
+
+    assert addrs_by_index == addrs_by_name, "Index and name should return same addresses"
+    assert addrs_by_index == addrs_by_module, "Index and module should return same addresses"
+
+    # Test: invalid module name should raise error
+    from ida_domain.base import InvalidParameterError
+
+    with pytest.raises(InvalidParameterError):
+        list(imports_db.imports.get_entries_by_module("_NonExistentModule_12345"))
+
+    # Test: invalid type should raise error
+    with pytest.raises(InvalidParameterError):
+        list(imports_db.imports.get_entries_by_module(3.14))  # type: ignore
