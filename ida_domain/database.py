@@ -21,6 +21,7 @@ from .base import InvalidParameterError, check_db_open
 from .bytes import Bytes
 from .comments import Comments
 from .entries import Entries
+from .exporter import Exporter
 from .fixups import Fixups
 from .functions import Functions
 from .heads import Heads
@@ -973,6 +974,11 @@ class Database:
     def problems(self) -> Problems:
         """Handler that provides access to problem list operations."""
         return Problems(self)
+
+    @property
+    def exporter(self) -> Exporter:
+        """Handler that provides access to file export operations."""
+        return Exporter(self)
 
     @property
     def hooks(self) -> HooksList:
