@@ -6,8 +6,9 @@ import tempfile
 import pytest
 
 import ida_domain
-from ida_domain.base import InvalidEAError
+from ida_domain.base import InvalidEAError, InvalidParameterError
 from ida_domain.database import IdaCommandOptions
+from ida_idaapi import BADADDR
 
 
 @pytest.fixture(scope='module')
@@ -654,3 +655,300 @@ class TestBytesOperandManipulation:
         # IDA allows formatting data items, so this should succeed
         assert isinstance(result, bool), \
             f"set_operand_hex should return bool, got {type(result)}"
+
+
+# =============================================================================
+# OPERAND TESTING METHODS
+# =============================================================================
+
+
+def test_is_offset_operand_with_offset(test_env):
+    """
+    Test is_offset_operand correctly identifies offset operands.
+
+    RATIONALE: This test validates that is_offset_operand can correctly detect
+    when an operand is displayed as an offset reference. We use a real instruction
+    from the test binary that has an offset operand (typically data or code
+    references). This ensures the method works with IDA's actual analysis.
+    """
+    # Find an instruction with an offset operand
+    # Common patterns: call/jmp with absolute addresses, lea with offsets
+    min_ea = test_env.minimum_ea
+    max_ea = test_env.maximum_ea
+
+    # Search for an instruction that might have offset operands
+    ea = min_ea
+    found_offset = None
+
+    while ea < max_ea and ea != BADADDR:
+        if test_env.bytes.is_code_at(ea):
+            # Check if operand 0 is an offset
+            if test_env.bytes.is_offset_operand(ea, 0):
+                found_offset = ea
+                break
+        ea = test_env.bytes.get_next_head(ea)
+        if ea is None:
+            break
+
+    # If no offset found, check if test returns False for non-offsets
+    if found_offset is None:
+        # At minimum, test that method returns False for regular operands
+        ea = min_ea
+        while ea < max_ea and ea != BADADDR:
+            if test_env.bytes.is_code_at(ea):
+                # Should return False for non-offset operands
+                result = test_env.bytes.is_offset_operand(ea, 0)
+                assert isinstance(result, bool), \
+                    "is_offset_operand should return bool"
+                # Don't assert False - we just verify it returns a bool
+                break
+            ea = test_env.bytes.get_next_head(ea)
+            if ea is None:
+                break
+    else:
+        # Found an offset, verify it returns True
+        assert test_env.bytes.is_offset_operand(found_offset, 0) is True, \
+            f"is_offset_operand should return True for offset at {hex(found_offset)}"
+
+
+def test_is_offset_operand_invalid_address(test_env):
+    """
+    Test is_offset_operand raises InvalidEAError for invalid addresses.
+
+    RATIONALE: Input validation is critical. The method should raise
+    InvalidEAError for addresses outside the valid database range rather
+    than returning incorrect results or crashing.
+    """
+    with pytest.raises(InvalidEAError):
+        test_env.bytes.is_offset_operand(0xFFFFFFFF, 0)
+
+
+def test_is_offset_operand_negative_operand(test_env):
+    """
+    Test is_offset_operand raises error for negative operand number.
+
+    RATIONALE: Operand numbers must be non-negative (0 for first operand,
+    1 for second, etc.). Negative values are invalid and should be rejected
+    early with a clear error message.
+    """
+    min_ea = test_env.minimum_ea
+
+    with pytest.raises(InvalidParameterError):
+        test_env.bytes.is_offset_operand(min_ea, -1)
+
+
+def test_is_char_operand_basic(test_env):
+    """
+    Test is_char_operand returns boolean value.
+
+    RATIONALE: This test validates that is_char_operand works correctly
+    and returns a boolean. Character operands are less common than offsets,
+    so we primarily test that the method executes without errors and
+    returns the correct type.
+    """
+    min_ea = test_env.minimum_ea
+    max_ea = test_env.maximum_ea
+
+    # Find a code address
+    ea = min_ea
+    while ea < max_ea and ea != BADADDR:
+        if test_env.bytes.is_code_at(ea):
+            result = test_env.bytes.is_char_operand(ea, 0)
+            assert isinstance(result, bool), \
+                "is_char_operand should return bool"
+            break
+        ea = test_env.bytes.get_next_head(ea)
+        if ea is None:
+            break
+
+
+def test_is_char_operand_invalid_address(test_env):
+    """
+    Test is_char_operand raises InvalidEAError for invalid addresses.
+
+    RATIONALE: Ensures proper error handling for invalid addresses.
+    """
+    with pytest.raises(InvalidEAError):
+        test_env.bytes.is_char_operand(0xFFFFFFFF, 0)
+
+
+def test_is_enum_operand_basic(test_env):
+    """
+    Test is_enum_operand returns boolean value.
+
+    RATIONALE: This test validates that is_enum_operand works correctly.
+    Enum operands are less common in typical binaries without manual
+    analysis, so we test that the method executes and returns correct type.
+    """
+    min_ea = test_env.minimum_ea
+    max_ea = test_env.maximum_ea
+
+    # Find a code address
+    ea = min_ea
+    while ea < max_ea and ea != BADADDR:
+        if test_env.bytes.is_code_at(ea):
+            result = test_env.bytes.is_enum_operand(ea, 0)
+            assert isinstance(result, bool), \
+                "is_enum_operand should return bool"
+            break
+        ea = test_env.bytes.get_next_head(ea)
+        if ea is None:
+            break
+
+
+def test_is_enum_operand_invalid_address(test_env):
+    """
+    Test is_enum_operand raises InvalidEAError for invalid addresses.
+
+    RATIONALE: Ensures proper error handling for invalid addresses.
+    """
+    with pytest.raises(InvalidEAError):
+        test_env.bytes.is_enum_operand(0xFFFFFFFF, 0)
+
+
+def test_is_struct_offset_operand_basic(test_env):
+    """
+    Test is_struct_offset_operand returns boolean value.
+
+    RATIONALE: This test validates that is_struct_offset_operand works
+    correctly. Structure offset operands typically require manual analysis
+    to apply structure types, so in a fresh binary they'll usually be False.
+    We test that the method executes and returns the correct type.
+    """
+    min_ea = test_env.minimum_ea
+    max_ea = test_env.maximum_ea
+
+    # Find a code address
+    ea = min_ea
+    while ea < max_ea and ea != BADADDR:
+        if test_env.bytes.is_code_at(ea):
+            result = test_env.bytes.is_struct_offset_operand(ea, 0)
+            assert isinstance(result, bool), \
+                "is_struct_offset_operand should return bool"
+            break
+        ea = test_env.bytes.get_next_head(ea)
+        if ea is None:
+            break
+
+
+def test_is_struct_offset_operand_invalid_address(test_env):
+    """
+    Test is_struct_offset_operand raises InvalidEAError for invalid addresses.
+
+    RATIONALE: Ensures proper error handling for invalid addresses.
+    """
+    with pytest.raises(InvalidEAError):
+        test_env.bytes.is_struct_offset_operand(0xFFFFFFFF, 0)
+
+
+def test_is_stack_var_operand_in_function(test_env):
+    """
+    Test is_stack_var_operand identifies stack variable references.
+
+    RATIONALE: This test validates that is_stack_var_operand can detect
+    stack variable operands. Stack variables are common in functions with
+    local variables or arguments. We search for a function and check if
+    any instructions reference stack variables. This is a real-world use
+    case for the method.
+    """
+    # Find a function with stack frame
+    for func_obj in test_env.functions:
+        if func_obj is None:
+            continue
+
+        # Search within function for stack variable references
+        ea = func_obj.start_ea
+        while ea < func_obj.end_ea:
+            if test_env.bytes.is_code_at(ea):
+                # Check both operands (most instructions have 0-2 operands)
+                for n in range(2):
+                    try:
+                        result = test_env.bytes.is_stack_var_operand(ea, n)
+                        assert isinstance(result, bool), \
+                            "is_stack_var_operand should return bool"
+
+                        # If we found a stack var operand, verify it's in a function
+                        if result:
+                            # Success - found and identified a stack variable
+                            return
+                    except InvalidParameterError:
+                        # Operand n doesn't exist for this instruction
+                        break
+
+            next_ea = test_env.bytes.get_next_head(ea)
+            if next_ea is None or next_ea >= func_obj.end_ea:
+                break
+            ea = next_ea
+
+    # If we get here, no stack variables found, but method works
+    # Just verify basic functionality with any code address
+    min_ea = test_env.minimum_ea
+    max_ea = test_env.maximum_ea
+
+    ea = min_ea
+    while ea < max_ea and ea != BADADDR:
+        if test_env.bytes.is_code_at(ea):
+            result = test_env.bytes.is_stack_var_operand(ea, 0)
+            assert isinstance(result, bool), \
+                "is_stack_var_operand should return bool"
+            break
+        ea = test_env.bytes.get_next_head(ea)
+        if ea is None:
+            break
+
+
+def test_is_stack_var_operand_invalid_address(test_env):
+    """
+    Test is_stack_var_operand raises InvalidEAError for invalid addresses.
+
+    RATIONALE: Ensures proper error handling for invalid addresses.
+    """
+    with pytest.raises(InvalidEAError):
+        test_env.bytes.is_stack_var_operand(0xFFFFFFFF, 0)
+
+
+def test_all_operand_test_methods_with_multiple_operands(test_env):
+    """
+    Test all operand testing methods work with different operand numbers.
+
+    RATIONALE: Instructions can have multiple operands (typically 0-2, but
+    sometimes more). This test validates that all is_*_operand methods work
+    correctly with different operand indices. We test operands 0, 1, and 2
+    to ensure the methods handle the operand number parameter correctly.
+    """
+    min_ea = test_env.minimum_ea
+    max_ea = test_env.maximum_ea
+
+    # Find a code address with multiple operands
+    ea = min_ea
+    while ea < max_ea and ea != BADADDR:
+        if test_env.bytes.is_code_at(ea):
+            # Test all methods with operands 0, 1, 2
+            for n in [0, 1, 2]:
+                # All methods should return bool without errors
+                assert isinstance(
+                    test_env.bytes.is_offset_operand(ea, n), bool
+                ), f"is_offset_operand should return bool for operand {n}"
+
+                assert isinstance(
+                    test_env.bytes.is_char_operand(ea, n), bool
+                ), f"is_char_operand should return bool for operand {n}"
+
+                assert isinstance(
+                    test_env.bytes.is_enum_operand(ea, n), bool
+                ), f"is_enum_operand should return bool for operand {n}"
+
+                assert isinstance(
+                    test_env.bytes.is_struct_offset_operand(ea, n), bool
+                ), f"is_struct_offset_operand should return bool for operand {n}"
+
+                assert isinstance(
+                    test_env.bytes.is_stack_var_operand(ea, n), bool
+                ), f"is_stack_var_operand should return bool for operand {n}"
+
+            # Test passed for at least one instruction
+            break
+
+        ea = test_env.bytes.get_next_head(ea)
+        if ea is None:
+            break

@@ -2459,3 +2459,176 @@ class Bytes(DatabaseEntity):
             raise InvalidParameterError("enum_id", enum_id, "must be non-negative")
 
         return bool(ida_bytes.op_enum(ea, n, enum_id, serial))
+
+    def is_offset_operand(self, ea: ea_t, n: int) -> bool:
+        """
+        Check if an operand is displayed as an offset.
+
+        This method determines whether an operand at the specified address is
+        formatted as an offset reference (pointer to another location in the
+        database). Offset operands typically show as addresses or offsets from
+        a base address.
+
+        Args:
+            ea: The effective address of the instruction.
+            n: Operand number (0-based). 0 is first operand, 1 is second, etc.
+
+        Returns:
+            True if the operand is displayed as an offset, False otherwise.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+            InvalidParameterError: If operand number is negative.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Check if operand 0 at address is an offset
+            >>> if db.bytes.is_offset_operand(0x401000, 0):
+            ...     print("Operand 0 is an offset reference")
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        if n < 0:
+            raise InvalidParameterError("n", n, "operand number must be non-negative")
+
+        flags = ida_bytes.get_flags(ea)
+        return ida_bytes.is_off(flags, n)
+
+    def is_char_operand(self, ea: ea_t, n: int) -> bool:
+        """
+        Check if an operand is displayed as a character.
+
+        This method determines whether an operand at the specified address is
+        formatted as a character literal (e.g., 'A' instead of 65). Character
+        operands display as quoted characters in the disassembly.
+
+        Args:
+            ea: The effective address of the instruction.
+            n: Operand number (0-based). 0 is first operand, 1 is second, etc.
+
+        Returns:
+            True if the operand is displayed as a character, False otherwise.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+            InvalidParameterError: If operand number is negative.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Check if operand 1 is displayed as character
+            >>> if db.bytes.is_char_operand(0x401000, 1):
+            ...     print("Operand 1 is a character literal")
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        if n < 0:
+            raise InvalidParameterError("n", n, "operand number must be non-negative")
+
+        flags = ida_bytes.get_flags(ea)
+        return ida_bytes.is_char(flags, n)
+
+    def is_enum_operand(self, ea: ea_t, n: int) -> bool:
+        """
+        Check if an operand is displayed as an enum member.
+
+        This method determines whether an operand at the specified address is
+        formatted as an enum member name (e.g., FILE_READ instead of 1).
+        Enum operands display as symbolic enum member names in the disassembly.
+
+        Args:
+            ea: The effective address of the instruction.
+            n: Operand number (0-based). 0 is first operand, 1 is second, etc.
+
+        Returns:
+            True if the operand is displayed as an enum member, False otherwise.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+            InvalidParameterError: If operand number is negative.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Check if operand 1 is an enum member
+            >>> if db.bytes.is_enum_operand(0x401000, 1):
+            ...     print("Operand 1 is an enum member")
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        if n < 0:
+            raise InvalidParameterError("n", n, "operand number must be non-negative")
+
+        flags = ida_bytes.get_flags(ea)
+        return ida_bytes.is_enum(flags, n)
+
+    def is_struct_offset_operand(self, ea: ea_t, n: int) -> bool:
+        """
+        Check if an operand is displayed as a structure offset.
+
+        This method determines whether an operand at the specified address is
+        formatted as a structure member offset (e.g., MyStruct.field instead
+        of a numeric offset). Structure offset operands show symbolic field
+        names in the disassembly.
+
+        Args:
+            ea: The effective address of the instruction.
+            n: Operand number (0-based). 0 is first operand, 1 is second, etc.
+
+        Returns:
+            True if the operand is displayed as a structure offset, False otherwise.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+            InvalidParameterError: If operand number is negative.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Check if operand 1 is a structure offset
+            >>> if db.bytes.is_struct_offset_operand(0x401000, 1):
+            ...     print("Operand 1 is a structure offset")
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        if n < 0:
+            raise InvalidParameterError("n", n, "operand number must be non-negative")
+
+        flags = ida_bytes.get_flags(ea)
+        return ida_bytes.is_stroff(flags, n)
+
+    def is_stack_var_operand(self, ea: ea_t, n: int) -> bool:
+        """
+        Check if an operand is a stack variable reference.
+
+        This method determines whether an operand at the specified address
+        references a stack variable (local variable or function argument).
+        Stack variable operands display as symbolic variable names (e.g.,
+        var_10 or arg_0) instead of stack pointer offsets.
+
+        Args:
+            ea: The effective address of the instruction.
+            n: Operand number (0-based). 0 is first operand, 1 is second, etc.
+
+        Returns:
+            True if the operand is a stack variable reference, False otherwise.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+            InvalidParameterError: If operand number is negative.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Check if operand 0 is a stack variable
+            >>> if db.bytes.is_stack_var_operand(0x401000, 0):
+            ...     print("Operand 0 is a stack variable")
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        if n < 0:
+            raise InvalidParameterError("n", n, "operand number must be non-negative")
+
+        flags = ida_bytes.get_flags(ea)
+        return ida_bytes.is_stkvar(flags, n)
