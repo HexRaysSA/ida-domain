@@ -519,13 +519,31 @@ class StackFrames(DatabaseEntity):
         if not func:
             raise InvalidEAError(func_ea)
 
-        # Verify variable exists
+        # Verify variable exists and get its struct offset
         var = self.get_variable(func_ea, offset)
         if not var:
             raise LookupError(f"No variable at offset {offset}")
 
-        # Convert frame offset to struct offset
-        struct_offset = ida_frame.fpoff_to_soff(func, offset)
+        # Find the struct offset by iterating through frame members
+        frame_type = tinfo_t()
+        if not ida_frame.get_func_frame(frame_type, func):
+            return False
+
+        udt_data = ida_typeinf.udt_type_data_t()
+        if not frame_type.get_udt_details(udt_data):
+            return False
+
+        # Search for member at FP offset and get its struct offset
+        struct_offset = None
+        for i in range(udt_data.size()):
+            member = udt_data[i]
+            member_offset = ida_frame.soff_to_fpoff(func, member.offset)
+            if member_offset == offset:
+                struct_offset = member.offset
+                break
+
+        if struct_offset is None:
+            raise LookupError(f"No variable at offset {offset}")
 
         return ida_frame.set_frame_member_type(
             func, offset=struct_offset, tif=var_type, repr=None, etf_flags=0
@@ -581,8 +599,27 @@ class StackFrames(DatabaseEntity):
         if not func:
             raise InvalidEAError(func_ea)
 
-        # Convert to struct offset
-        struct_offset = ida_frame.fpoff_to_soff(func, offset)
+        # Find the struct offset by iterating through frame members
+        frame_type = tinfo_t()
+        if not ida_frame.get_func_frame(frame_type, func):
+            return False
+
+        udt_data = ida_typeinf.udt_type_data_t()
+        if not frame_type.get_udt_details(udt_data):
+            return False
+
+        # Search for member at FP offset and get its struct offset
+        struct_offset = None
+        for i in range(udt_data.size()):
+            member = udt_data[i]
+            member_offset = ida_frame.soff_to_fpoff(func, member.offset)
+            if member_offset == offset:
+                struct_offset = member.offset
+                break
+
+        if struct_offset is None:
+            # No variable at this offset - return False (not an error)
+            return False
 
         # Delete single member (end = start + 1)
         return ida_frame.delete_frame_members(
@@ -615,19 +652,28 @@ class StackFrames(DatabaseEntity):
         if not func:
             raise InvalidEAError(func_ea)
 
-        # Count members in range first
+        # Find all variables in the FP offset range and collect their struct offsets
+        frame_type = tinfo_t()
+        if not ida_frame.get_func_frame(frame_type, func):
+            return 0
+
+        udt_data = ida_typeinf.udt_type_data_t()
+        if not frame_type.get_udt_details(udt_data):
+            return 0
+
+        # Collect variables in range with their struct offsets
+        to_delete = []
+        for i in range(udt_data.size()):
+            member = udt_data[i]
+            fp_offset = ida_frame.soff_to_fpoff(func, member.offset)
+            if start_offset <= fp_offset < end_offset:
+                to_delete.append(member.offset)
+
+        # Delete each variable individually
         count = 0
-        frame_instance = StackFrameInstance(self.database, func_ea, func)
-        for var in frame_instance.variables:
-            if start_offset <= var.offset < end_offset:
+        for struct_offset in to_delete:
+            if ida_frame.delete_frame_members(func, struct_offset, struct_offset + 1):
                 count += 1
-
-        # Convert to struct offsets
-        struct_start = ida_frame.fpoff_to_soff(func, start_offset)
-        struct_end = ida_frame.fpoff_to_soff(func, end_offset)
-
-        # Delete range
-        ida_frame.delete_frame_members(func, struct_start, struct_end)
 
         return count
 
@@ -653,8 +699,26 @@ class StackFrames(DatabaseEntity):
         if not func:
             raise InvalidEAError(func_ea)
 
-        # Convert to struct offset
-        struct_offset = ida_frame.fpoff_to_soff(func, offset)
+        # Find the struct offset by iterating through frame members
+        frame_type = tinfo_t()
+        if not ida_frame.get_func_frame(frame_type, func):
+            return
+
+        udt_data = ida_typeinf.udt_type_data_t()
+        if not frame_type.get_udt_details(udt_data):
+            return
+
+        # Search for member at FP offset and get its struct offset
+        struct_offset = None
+        for i in range(udt_data.size()):
+            member = udt_data[i]
+            member_offset = ida_frame.soff_to_fpoff(func, member.offset)
+            if member_offset == offset:
+                struct_offset = member.offset
+                break
+
+        if struct_offset is None:
+            return
 
         # Build xrefs for single variable (small range)
         xrefs = ida_frame.build_stkvar_xrefs(

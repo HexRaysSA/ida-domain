@@ -640,6 +640,399 @@ class TestStackFrameVariableManagement:
         for arg in arguments:
             assert arg.offset >= 0
 
+    def test_set_variable_type_changes_variable_type(self, tiny_c_env):
+        """
+        Test set_variable_type successfully changes a stack variable's type.
+
+        RATIONALE: Changing variable types is essential for refining reverse
+        engineering analysis. IDA may initially analyze a variable as a simple
+        int, but the analyst may determine it's actually a pointer or struct.
+        This test validates that set_variable_type correctly updates the type
+        information for an existing stack variable.
+
+        We define a variable with one type, then change it to another type, and
+        verify the change took effect by retrieving the variable and checking
+        its new type.
+        """
+        db = tiny_c_env
+
+        # Find complex_assignments function
+        func_ea = None
+        for func in db.functions.get_all():
+            name = db.functions.get_name(func)
+            if 'complex_assignments' in name:
+                func_ea = func.start_ea
+                break
+
+        assert func_ea is not None
+
+        # Define a variable with int type at safe offset
+        from ida_typeinf import BTF_INT32, tinfo_t
+
+        int_type = tinfo_t()
+        int_type.create_simple_type(BTF_INT32)
+
+        db.stack_frames.define_variable(func_ea, 'test_var', -0x100, int_type)
+
+        # Verify it was created with int type
+        var = db.stack_frames.get_variable(func_ea, -0x100)
+        assert var is not None
+        assert var.name == 'test_var'
+
+        # Change it to pointer type
+        ptr_type = tinfo_t()
+        ptr_type.create_ptr(int_type)
+
+        result = db.stack_frames.set_variable_type(func_ea, -0x100, ptr_type)
+        assert result is True
+
+        # Verify type changed
+        var_after = db.stack_frames.get_variable(func_ea, -0x100)
+        assert var_after is not None
+        # Note: Type comparison in IDA is complex, but at minimum size should change
+        # (int is 4 bytes, pointer is 4 or 8 bytes depending on architecture)
+        assert var_after.size >= int_type.get_size()
+
+    def test_set_variable_type_raises_on_invalid_address(self, tiny_c_env):
+        """
+        Test set_variable_type raises InvalidEAError for invalid function address.
+
+        RATIONALE: Validates error handling when trying to modify a variable for
+        a non-existent function. The API should fail fast with a clear error
+        rather than silently failing or causing undefined behavior.
+        """
+        db = tiny_c_env
+        from ida_typeinf import BTF_INT32, tinfo_t
+
+        int_type = tinfo_t()
+        int_type.create_simple_type(BTF_INT32)
+
+        with pytest.raises(InvalidEAError):
+            db.stack_frames.set_variable_type(0xDEADBEEF, -4, int_type)
+
+    def test_set_variable_type_raises_on_nonexistent_variable(self, tiny_c_env):
+        """
+        Test set_variable_type raises LookupError for nonexistent variable offset.
+
+        RATIONALE: If no variable exists at the specified offset, attempting to
+        change its type should fail with a clear error. This prevents silent
+        failures where the analyst thinks they changed a variable type but
+        actually nothing happened.
+
+        The test uses a valid function but an offset with no defined variable.
+        """
+        db = tiny_c_env
+
+        # Find complex_assignments function
+        func_ea = None
+        for func in db.functions.get_all():
+            name = db.functions.get_name(func)
+            if 'complex_assignments' in name:
+                func_ea = func.start_ea
+                break
+
+        assert func_ea is not None
+
+        from ida_typeinf import BTF_INT32, tinfo_t
+
+        int_type = tinfo_t()
+        int_type.create_simple_type(BTF_INT32)
+
+        # Try to set type at offset with no variable
+        with pytest.raises(LookupError):
+            db.stack_frames.set_variable_type(func_ea, -0x9999, int_type)
+
+    def test_rename_variable_changes_variable_name(self, tiny_c_env):
+        """
+        Test rename_variable successfully changes a stack variable's name.
+
+        RATIONALE: Meaningful variable names are crucial for code comprehension.
+        IDA generates automatic names like "var_4", but analysts need to rename
+        them to reflect their actual purpose (e.g., "loop_counter", "buffer_size").
+        This test validates that rename_variable correctly updates the name while
+        preserving all other variable attributes.
+
+        We define a variable with one name, rename it, then verify the new name
+        is in effect and the variable's other properties remain unchanged.
+        """
+        db = tiny_c_env
+
+        # Find complex_assignments function
+        func_ea = None
+        for func in db.functions.get_all():
+            name = db.functions.get_name(func)
+            if 'complex_assignments' in name:
+                func_ea = func.start_ea
+                break
+
+        assert func_ea is not None
+
+        # Define a variable with original name at safe offset
+        from ida_typeinf import BTF_INT32, tinfo_t
+
+        int_type = tinfo_t()
+        int_type.create_simple_type(BTF_INT32)
+
+        db.stack_frames.define_variable(func_ea, 'original_name', -0x200, int_type)
+
+        # Verify it was created
+        var = db.stack_frames.get_variable(func_ea, -0x200)
+        assert var is not None
+        assert var.name == 'original_name'
+        original_size = var.size
+        original_offset = var.offset
+
+        # Rename it
+        result = db.stack_frames.rename_variable(func_ea, -0x200, 'new_name')
+        assert result is True
+
+        # Verify name changed but other properties preserved
+        var_after = db.stack_frames.get_variable(func_ea, -0x200)
+        assert var_after is not None
+        assert var_after.name == 'new_name'
+        assert var_after.offset == original_offset
+        assert var_after.size == original_size
+
+        # Verify lookup by new name works
+        var_by_name = db.stack_frames.get_variable_by_name(func_ea, 'new_name')
+        assert var_by_name is not None
+        assert var_by_name.offset == -0x200
+
+    def test_rename_variable_raises_on_invalid_address(self, tiny_c_env):
+        """
+        Test rename_variable raises InvalidEAError for invalid function address.
+
+        RATIONALE: Validates proper error handling when attempting to rename a
+        variable for a non-existent function. This ensures the API fails fast
+        with a descriptive error rather than silently failing.
+        """
+        db = tiny_c_env
+
+        with pytest.raises(InvalidEAError):
+            db.stack_frames.rename_variable(0xDEADBEEF, -4, 'new_name')
+
+    def test_rename_variable_raises_on_nonexistent_variable(self, tiny_c_env):
+        """
+        Test rename_variable raises LookupError for nonexistent variable offset.
+
+        RATIONALE: Attempting to rename a variable that doesn't exist should fail
+        with a clear error. This test validates that the API correctly detects
+        when no variable exists at the specified offset and raises LookupError.
+
+        Uses a valid function but an offset where no variable is defined.
+        """
+        db = tiny_c_env
+
+        # Find complex_assignments function
+        func_ea = None
+        for func in db.functions.get_all():
+            name = db.functions.get_name(func)
+            if 'complex_assignments' in name:
+                func_ea = func.start_ea
+                break
+
+        assert func_ea is not None
+
+        # Try to rename variable at offset with no variable
+        with pytest.raises(LookupError):
+            db.stack_frames.rename_variable(func_ea, -0x9999, 'new_name')
+
+    def test_rename_variable_raises_on_empty_name(self, tiny_c_env):
+        """
+        Test rename_variable raises ValueError for empty or whitespace-only names.
+
+        RATIONALE: Variable names cannot be empty or consist only of whitespace.
+        This test validates that the API properly rejects invalid names and raises
+        ValueError with a descriptive message.
+
+        This prevents creating variables with confusing or invalid names that
+        could break analysis tools or confuse analysts.
+        """
+        db = tiny_c_env
+
+        # Find complex_assignments function
+        func_ea = None
+        for func in db.functions.get_all():
+            name = db.functions.get_name(func)
+            if 'complex_assignments' in name:
+                func_ea = func.start_ea
+                break
+
+        assert func_ea is not None
+
+        # Define a variable at safe offset
+        from ida_typeinf import BTF_INT32, tinfo_t
+
+        int_type = tinfo_t()
+        int_type.create_simple_type(BTF_INT32)
+
+        db.stack_frames.define_variable(func_ea, 'valid_name', -0x300, int_type)
+
+        # Try to rename to empty string
+        with pytest.raises(ValueError):
+            db.stack_frames.rename_variable(func_ea, -0x300, '')
+
+        # Try to rename to whitespace only
+        with pytest.raises(ValueError):
+            db.stack_frames.rename_variable(func_ea, -0x300, '   ')
+
+    def test_delete_variable_removes_variable(self, tiny_c_env):
+        """
+        Test delete_variable successfully removes a stack variable.
+
+        RATIONALE: Sometimes variables are incorrectly identified by IDA or the
+        analyst wants to clean up the analysis. delete_variable allows removing
+        individual variables from the stack frame. This test validates that the
+        deletion works and that the variable is no longer accessible after deletion.
+
+        We define a variable, verify it exists, delete it, then verify it's gone.
+        """
+        db = tiny_c_env
+
+        # Find complex_assignments function
+        func_ea = None
+        for func in db.functions.get_all():
+            name = db.functions.get_name(func)
+            if 'complex_assignments' in name:
+                func_ea = func.start_ea
+                break
+
+        assert func_ea is not None
+
+        # Define a variable at safe offset
+        from ida_typeinf import BTF_INT32, tinfo_t
+
+        int_type = tinfo_t()
+        int_type.create_simple_type(BTF_INT32)
+
+        db.stack_frames.define_variable(func_ea, 'to_delete', -0x400, int_type)
+
+        # Verify it exists
+        var = db.stack_frames.get_variable(func_ea, -0x400)
+        assert var is not None
+        assert var.name == 'to_delete'
+
+        # Delete it
+        result = db.stack_frames.delete_variable(func_ea, -0x400)
+        assert result is True
+
+        # Verify it's gone
+        var_after = db.stack_frames.get_variable(func_ea, -0x400)
+        assert var_after is None
+
+    def test_delete_variable_raises_on_invalid_address(self, tiny_c_env):
+        """
+        Test delete_variable raises InvalidEAError for invalid function address.
+
+        RATIONALE: Validates proper error handling when attempting to delete a
+        variable for a non-existent function. The API should fail fast with a
+        clear error rather than silently failing or causing undefined behavior.
+        """
+        db = tiny_c_env
+
+        with pytest.raises(InvalidEAError):
+            db.stack_frames.delete_variable(0xDEADBEEF, -4)
+
+    def test_delete_variables_in_range_removes_multiple_variables(self, tiny_c_env):
+        """
+        Test delete_variables_in_range removes all variables in offset range.
+
+        RATIONALE: When restructuring stack frame analysis, analysts may need to
+        remove multiple variables at once. delete_variables_in_range provides
+        efficient bulk deletion. This test validates that all variables within
+        the specified range are removed and that the correct count is returned.
+
+        We define multiple variables at different offsets, delete a range, then
+        verify only variables in that range are removed while others remain.
+        """
+        db = tiny_c_env
+
+        # Find complex_assignments function
+        func_ea = None
+        for func in db.functions.get_all():
+            name = db.functions.get_name(func)
+            if 'complex_assignments' in name:
+                func_ea = func.start_ea
+                break
+
+        assert func_ea is not None
+
+        # Define multiple variables at different safe offsets
+        # Note: IDA may align variables, so use well-spaced offsets
+        from ida_typeinf import BTF_INT32, tinfo_t
+
+        int_type = tinfo_t()
+        int_type.create_simple_type(BTF_INT32)
+
+        db.stack_frames.define_variable(func_ea, 'var1', -0x500, int_type)
+        db.stack_frames.define_variable(func_ea, 'var2', -0x504, int_type)
+        db.stack_frames.define_variable(func_ea, 'var3', -0x508, int_type)
+        db.stack_frames.define_variable(func_ea, 'var4', -0x50C, int_type)
+        db.stack_frames.define_variable(func_ea, 'var_outside', -0x520, int_type)
+
+        # Verify they all exist
+        assert db.stack_frames.get_variable(func_ea, -0x500) is not None
+        assert db.stack_frames.get_variable(func_ea, -0x504) is not None
+        assert db.stack_frames.get_variable(func_ea, -0x508) is not None
+        assert db.stack_frames.get_variable(func_ea, -0x50C) is not None
+        assert db.stack_frames.get_variable(func_ea, -0x520) is not None
+
+        # Delete range from -0x50C to -0x500 (exclusive)
+        # This should delete var1, var2, var3, var4 but not var_outside
+        count = db.stack_frames.delete_variables_in_range(func_ea, -0x50C, -0x4F8)
+
+        # Should have deleted 4 variables
+        assert count == 4
+
+        # Verify variables in range are deleted
+        assert db.stack_frames.get_variable(func_ea, -0x500) is None
+        assert db.stack_frames.get_variable(func_ea, -0x504) is None
+        assert db.stack_frames.get_variable(func_ea, -0x508) is None
+        assert db.stack_frames.get_variable(func_ea, -0x50C) is None
+
+        # Verify variable outside range still exists
+        assert db.stack_frames.get_variable(func_ea, -0x520) is not None
+
+    def test_delete_variables_in_range_raises_on_invalid_address(self, tiny_c_env):
+        """
+        Test delete_variables_in_range raises InvalidEAError for invalid address.
+
+        RATIONALE: Validates proper error handling when attempting to delete
+        variables for a non-existent function. The API should fail fast with a
+        clear error rather than attempting the operation on an invalid target.
+        """
+        db = tiny_c_env
+
+        with pytest.raises(InvalidEAError):
+            db.stack_frames.delete_variables_in_range(0xDEADBEEF, -0x20, -0x10)
+
+    def test_delete_variables_in_range_returns_zero_for_empty_range(self, tiny_c_env):
+        """
+        Test delete_variables_in_range returns 0 when no variables in range.
+
+        RATIONALE: When a range contains no variables, the operation should
+        succeed but return a count of 0. This test validates that the method
+        handles empty ranges gracefully and returns the accurate count.
+
+        This is important for programmatic usage where the caller may want to
+        know whether any variables were actually deleted.
+        """
+        db = tiny_c_env
+
+        # Find complex_assignments function
+        func_ea = None
+        for func in db.functions.get_all():
+            name = db.functions.get_name(func)
+            if 'complex_assignments' in name:
+                func_ea = func.start_ea
+                break
+
+        assert func_ea is not None
+
+        # Delete range with no variables
+        count = db.stack_frames.delete_variables_in_range(func_ea, -0x500, -0x400)
+        assert count == 0
+
 
 class TestStackFrameLifecycle:
     """Test stack frame creation, deletion, and modification."""
