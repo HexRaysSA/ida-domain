@@ -509,8 +509,8 @@ class Instructions(DatabaseEntity):
         if not self.database.is_valid_ea(to_ea):
             raise InvalidEAError(to_ea)
 
-        # Add cross-reference (operand number 0, reference_type)
-        ida_ua.add_cref(from_ea, to_ea, reference_type)
+        # Add cross-reference using ida_xref
+        ida_xref.add_cref(from_ea, to_ea, reference_type)
 
     def add_data_reference(
         self,
@@ -539,8 +539,8 @@ class Instructions(DatabaseEntity):
         if not self.database.is_valid_ea(to_ea):
             raise InvalidEAError(to_ea)
 
-        # Add data cross-reference
-        ida_ua.add_dref(from_ea, to_ea, reference_type)
+        # Add data cross-reference using ida_xref
+        ida_xref.add_dref(from_ea, to_ea, reference_type)
 
     def get_data_type_size(self, dtype: int) -> int:
         """

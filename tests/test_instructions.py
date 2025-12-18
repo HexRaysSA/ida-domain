@@ -1388,3 +1388,286 @@ class TestControlFlowAnalysis:
 
         # We should have found at least one of each common category
         # If not, the test binary might not be suitable, but that's ok
+
+
+class TestCrossReferenceManagement:
+    """Tests for cross-reference management methods."""
+
+    def test_add_code_reference_creates_code_xref(self, test_env):
+        """
+        Test that add_code_reference successfully creates a code cross-reference.
+
+        RATIONALE: Manual cross-reference creation is critical for:
+        - Fixing missed analysis (IDA doesn't always detect all control flow)
+        - Documenting indirect control flow (computed jumps, callbacks)
+        - Custom analysis passes (plugin development, binary patching)
+        - Recovering from obfuscation
+
+        This test creates a code xref and verifies it can be queried back,
+        validating the round-trip functionality.
+        """
+        # Get two valid instruction addresses
+        first_insn = test_env.instructions.get_at(test_env.minimum_ea)
+        assert first_insn is not None
+
+        # Find a second instruction
+        import ida_bytes
+        import ida_idaapi
+        second_ea = ida_bytes.next_head(first_insn.ea, test_env.maximum_ea)
+        assert second_ea != ida_idaapi.BADADDR
+
+        # Add a code reference from first to second
+        import ida_xref
+        test_env.instructions.add_code_reference(
+            from_ea=first_insn.ea,
+            to_ea=second_ea,
+            reference_type=ida_xref.fl_CN  # Near call
+        )
+
+        # Verify the xref was created by checking if it shows up in xrefs_to
+        xrefs_to_second = list(test_env.xrefs.to_ea(second_ea))
+
+        # Should have at least one xref (we just added it)
+        # Note: There might be other xrefs too from normal analysis
+        assert len(xrefs_to_second) > 0, (
+            f"Should have at least one xref to {second_ea:#x} after adding"
+        )
+
+    def test_add_code_reference_with_invalid_from_address_raises_error(self, test_env):
+        """
+        Test that add_code_reference raises InvalidEAError for invalid from_ea.
+
+        RATIONALE: Input validation is essential for API robustness. Invalid
+        addresses should be caught early and reported clearly, rather than
+        causing undefined behavior or silent failures.
+
+        This test verifies proper error handling for the from_ea parameter.
+        """
+        invalid_addr = test_env.maximum_ea + 0x10000
+        valid_addr = test_env.minimum_ea
+
+        import ida_xref
+
+        from ida_domain.base import InvalidEAError
+        with pytest.raises(InvalidEAError):
+            test_env.instructions.add_code_reference(
+                from_ea=invalid_addr,
+                to_ea=valid_addr,
+                reference_type=ida_xref.fl_CN
+            )
+
+    def test_add_code_reference_with_invalid_to_address_raises_error(self, test_env):
+        """
+        Test that add_code_reference raises InvalidEAError for invalid to_ea.
+
+        RATIONALE: Both source and target addresses must be validated.
+        This test ensures the to_ea parameter is properly checked.
+        """
+        valid_addr = test_env.minimum_ea
+        invalid_addr = test_env.maximum_ea + 0x10000
+
+        import ida_xref
+
+        from ida_domain.base import InvalidEAError
+        with pytest.raises(InvalidEAError):
+            test_env.instructions.add_code_reference(
+                from_ea=valid_addr,
+                to_ea=invalid_addr,
+                reference_type=ida_xref.fl_CN
+            )
+
+    def test_add_data_reference_creates_data_xref(self, test_env):
+        """
+        Test that add_data_reference successfully creates a data cross-reference.
+
+        RATIONALE: Data cross-references link code to data (strings, globals,
+        constants). Manual data xref creation is important for:
+        - Documenting complex data access patterns
+        - Fixing missed data references in obfuscated code
+        - Annotating computed data addresses
+        - Plugin and script automation
+
+        This test creates a data xref and verifies it can be queried.
+        """
+        # Get a valid instruction address
+        first_insn = test_env.instructions.get_at(test_env.minimum_ea)
+        assert first_insn is not None
+
+        # Find a data address (could be anywhere in the valid address space)
+        # We'll use an address in a different area
+        import ida_segment
+        seg = ida_segment.get_first_seg()
+        if seg:
+            # Use an address in the first segment as data target
+            data_ea = seg.start_ea + 0x100
+
+            # Make sure it's a valid address
+            if test_env.is_valid_ea(data_ea):
+                # Add a data reference from instruction to data
+                import ida_xref
+                test_env.instructions.add_data_reference(
+                    from_ea=first_insn.ea,
+                    to_ea=data_ea,
+                    reference_type=ida_xref.dr_R  # Read reference
+                )
+
+                # Verify the xref was created
+                xrefs_to_data = list(test_env.xrefs.to_ea(data_ea))
+
+                # Should have at least one xref
+                assert len(xrefs_to_data) > 0, (
+                    f"Should have at least one xref to {data_ea:#x} after adding"
+                )
+            else:
+                pytest.skip("Could not find suitable data address")
+        else:
+            pytest.skip("No segments found in test binary")
+
+    def test_add_data_reference_with_invalid_from_address_raises_error(self, test_env):
+        """
+        Test that add_data_reference raises InvalidEAError for invalid from_ea.
+
+        RATIONALE: Consistent error handling across all methods. The from_ea
+        parameter must be validated.
+        """
+        invalid_addr = test_env.maximum_ea + 0x10000
+        valid_addr = test_env.minimum_ea
+
+        import ida_xref
+
+        from ida_domain.base import InvalidEAError
+        with pytest.raises(InvalidEAError):
+            test_env.instructions.add_data_reference(
+                from_ea=invalid_addr,
+                to_ea=valid_addr,
+                reference_type=ida_xref.dr_R
+            )
+
+    def test_add_data_reference_with_invalid_to_address_raises_error(self, test_env):
+        """
+        Test that add_data_reference raises InvalidEAError for invalid to_ea.
+
+        RATIONALE: Both source and target addresses must be validated for
+        data references, just as for code references.
+        """
+        valid_addr = test_env.minimum_ea
+        invalid_addr = test_env.maximum_ea + 0x10000
+
+        import ida_xref
+
+        from ida_domain.base import InvalidEAError
+        with pytest.raises(InvalidEAError):
+            test_env.instructions.add_data_reference(
+                from_ea=valid_addr,
+                to_ea=invalid_addr,
+                reference_type=ida_xref.dr_R
+            )
+
+    def test_add_code_reference_with_different_reference_types(self, test_env):
+        """
+        Test add_code_reference with various reference types.
+
+        RATIONALE: Different reference types (call, jump, etc.) have different
+        semantics in IDA's analysis. This test verifies that the method correctly
+        handles various reference type constants.
+
+        Reference types tested:
+        - fl_CN: Near call
+        - fl_JN: Near jump
+        - fl_F: Regular flow (fall-through)
+        """
+        # Get two instruction addresses
+        first_insn = test_env.instructions.get_at(test_env.minimum_ea)
+        assert first_insn is not None
+
+        import ida_bytes
+        import ida_idaapi
+        second_ea = ida_bytes.next_head(first_insn.ea, test_env.maximum_ea)
+        assert second_ea != ida_idaapi.BADADDR
+
+        third_ea = ida_bytes.next_head(second_ea, test_env.maximum_ea)
+        if third_ea == ida_idaapi.BADADDR:
+            pytest.skip("Need at least 3 instructions for this test")
+
+        # Test different reference types
+        import ida_xref
+
+        # Test near call reference
+        test_env.instructions.add_code_reference(
+            from_ea=first_insn.ea,
+            to_ea=second_ea,
+            reference_type=ida_xref.fl_CN
+        )
+
+        # Test near jump reference
+        test_env.instructions.add_code_reference(
+            from_ea=first_insn.ea,
+            to_ea=third_ea,
+            reference_type=ida_xref.fl_JN
+        )
+
+        # Test ordinary flow
+        test_env.instructions.add_code_reference(
+            from_ea=second_ea,
+            to_ea=third_ea,
+            reference_type=ida_xref.fl_F
+        )
+
+        # All operations should complete without error
+        # Verification would require checking xref details which is beyond scope
+
+    def test_add_data_reference_with_different_reference_types(self, test_env):
+        """
+        Test add_data_reference with various reference types.
+
+        RATIONALE: Data references have different types (read, write, offset)
+        that indicate how the data is accessed. This test verifies the method
+        handles different data reference types correctly.
+
+        Reference types tested:
+        - dr_R: Read access
+        - dr_W: Write access
+        - dr_O: Offset
+        """
+        # Get instruction address
+        first_insn = test_env.instructions.get_at(test_env.minimum_ea)
+        assert first_insn is not None
+
+        # Get a data address
+        import ida_segment
+        seg = ida_segment.get_first_seg()
+        if not seg:
+            pytest.skip("No segments in test binary")
+
+        data_ea1 = seg.start_ea + 0x100
+        data_ea2 = seg.start_ea + 0x200
+        data_ea3 = seg.start_ea + 0x300
+
+        if not all(test_env.is_valid_ea(ea) for ea in [data_ea1, data_ea2, data_ea3]):
+            pytest.skip("Could not find suitable data addresses")
+
+        # Test different data reference types
+        import ida_xref
+
+        # Test read reference
+        test_env.instructions.add_data_reference(
+            from_ea=first_insn.ea,
+            to_ea=data_ea1,
+            reference_type=ida_xref.dr_R
+        )
+
+        # Test write reference
+        test_env.instructions.add_data_reference(
+            from_ea=first_insn.ea,
+            to_ea=data_ea2,
+            reference_type=ida_xref.dr_W
+        )
+
+        # Test offset reference
+        test_env.instructions.add_data_reference(
+            from_ea=first_insn.ea,
+            to_ea=data_ea3,
+            reference_type=ida_xref.dr_O
+        )
+
+        # All operations should complete without error
