@@ -13,7 +13,7 @@ import ida_range
 import ida_search
 import idc
 from ida_idaapi import BADADDR, ea_t
-from typing_extensions import TYPE_CHECKING, List, Optional
+from typing_extensions import TYPE_CHECKING, List, Optional, cast
 
 from .base import (
     DatabaseEntity,
@@ -221,7 +221,7 @@ class Bytes(DatabaseEntity):
         if not allow_uninitialized and not ida_bytes.is_loaded(ea):
             raise NoValueError(ea)
 
-        return ida_bytes.get_byte(ea)
+        return cast(int, ida_bytes.get_byte(ea))
 
     def get_word_at(self, ea: ea_t, allow_uninitialized: bool = False) -> int:
         """
@@ -245,7 +245,7 @@ class Bytes(DatabaseEntity):
         if not allow_uninitialized and not ida_bytes.is_loaded(ea):
             raise NoValueError(ea)
 
-        return ida_bytes.get_word(ea)
+        return cast(int, ida_bytes.get_word(ea))
 
     def get_dword_at(self, ea: ea_t, allow_uninitialized: bool = False) -> int:
         """
@@ -269,7 +269,7 @@ class Bytes(DatabaseEntity):
         if not allow_uninitialized and not ida_bytes.is_loaded(ea):
             raise NoValueError(ea)
 
-        return ida_bytes.get_dword(ea)
+        return cast(int, ida_bytes.get_dword(ea))
 
     def get_qword_at(self, ea: ea_t, allow_uninitialized: bool = False) -> int:
         """
@@ -293,7 +293,7 @@ class Bytes(DatabaseEntity):
         if not allow_uninitialized and not ida_bytes.is_loaded(ea):
             raise NoValueError(ea)
 
-        return ida_bytes.get_qword(ea)
+        return cast(int, ida_bytes.get_qword(ea))
 
     def _read_floating_point(self, ea: ea_t, data_flags: int) -> float:
         """
@@ -336,10 +336,10 @@ class Bytes(DatabaseEntity):
 
         if size == 4:
             # IEEE 754 single precision (32-bit float)
-            return struct.unpack(f'{endian}f', data)[0]
+            return cast(float, struct.unpack(f'{endian}f', data)[0])
         elif size == 8:
             # IEEE 754 double precision (64-bit double)
-            return struct.unpack(f'{endian}d', data)[0]
+            return cast(float, struct.unpack(f'{endian}d', data)[0])
         else:
             raise UnsupportedValueError(
                 f'Unsupported float value size {size} for floating-point data at 0x{ea:x}'
@@ -433,7 +433,7 @@ class Bytes(DatabaseEntity):
             options |= ida_lines.GENDSM_REMOVE_TAGS
         line = ida_lines.generate_disasm_line(ea, options)
         if line:
-            return line
+            return cast(Optional[str], line)
         else:
             logger.error(f'Failed to generate disassembly line at address 0x{ea:x}')
             return None
@@ -459,7 +459,7 @@ class Bytes(DatabaseEntity):
         if value < 0 or value > 0xFF:
             raise InvalidParameterError('value', value, 'must be between 0 and 0xFF')
 
-        return ida_bytes.put_byte(ea, value)
+        return cast(bool, ida_bytes.put_byte(ea, value))
 
     def set_word_at(self, ea: ea_t, value: int) -> None:
         """
@@ -566,7 +566,7 @@ class Bytes(DatabaseEntity):
         if not (0 <= value <= 0xFF):
             raise InvalidParameterError('value', value, 'must be between 0 and 0xFF')
 
-        return ida_bytes.patch_byte(ea, value)
+        return cast(bool, ida_bytes.patch_byte(ea, value))
 
     def patch_word_at(self, ea: ea_t, value: int) -> bool:
         """
@@ -590,7 +590,7 @@ class Bytes(DatabaseEntity):
         if value < 0 or value > 0xFFFF:
             raise InvalidParameterError('value', value, 'must be between 0 and 0xFFFF')
 
-        return ida_bytes.patch_word(ea, value)
+        return cast(bool, ida_bytes.patch_word(ea, value))
 
     def patch_dword_at(self, ea: ea_t, value: int) -> bool:
         """
@@ -614,7 +614,7 @@ class Bytes(DatabaseEntity):
         if value < 0 or value > 0xFFFFFFFF:
             raise InvalidParameterError('value', value, 'must be between 0 and 0xFFFFFFFF')
 
-        return ida_bytes.patch_dword(ea, value)
+        return cast(bool, ida_bytes.patch_dword(ea, value))
 
     def patch_qword_at(self, ea: ea_t, value: int) -> bool:
         """
@@ -638,7 +638,7 @@ class Bytes(DatabaseEntity):
         if value < 0 or value > 0xFFFFFFFFFFFFFFFF:
             raise InvalidParameterError('value', value, 'must be between 0 and 0xFFFFFFFFFFFFFFFF')
 
-        return ida_bytes.patch_qword(ea, value)
+        return cast(bool, ida_bytes.patch_qword(ea, value))
 
     def patch_bytes_at(self, ea: ea_t, data: bytes) -> None:
         """
@@ -680,7 +680,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.revert_byte(ea)
+        return cast(bool, ida_bytes.revert_byte(ea))
 
     def get_original_byte_at(self, ea: ea_t) -> Optional[int]:
         """
@@ -698,7 +698,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.get_original_byte(ea)
+        return cast(Optional[int], ida_bytes.get_original_byte(ea))
 
     def get_original_word_at(self, ea: ea_t) -> Optional[int]:
         """
@@ -716,7 +716,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.get_original_word(ea)
+        return cast(Optional[int], ida_bytes.get_original_word(ea))
 
     def get_original_dword_at(self, ea: ea_t) -> Optional[int]:
         """
@@ -734,7 +734,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.get_original_dword(ea)
+        return cast(Optional[int], ida_bytes.get_original_dword(ea))
 
     def get_original_qword_at(self, ea: ea_t) -> Optional[int]:
         """
@@ -752,7 +752,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.get_original_qword(ea)
+        return cast(Optional[int], ida_bytes.get_original_qword(ea))
 
     def find_bytes_between(
         self, pattern: bytes, start_ea: ea_t = None, end_ea: ea_t = None
@@ -904,7 +904,7 @@ class Bytes(DatabaseEntity):
 
         element_size = ida_bytes.get_data_elsize(ea, ida_bytes.byte_flag())
         length = element_size * count
-        return ida_bytes.create_byte(ea, length, force)
+        return cast(bool, ida_bytes.create_byte(ea, length, force))
 
     def create_word_at(self, ea: ea_t, count: int = 1, force: bool = False) -> bool:
         """
@@ -930,7 +930,7 @@ class Bytes(DatabaseEntity):
 
         element_size = ida_bytes.get_data_elsize(ea, ida_bytes.word_flag())
         length = element_size * count
-        return ida_bytes.create_word(ea, length, force)
+        return cast(bool, ida_bytes.create_word(ea, length, force))
 
     def create_dword_at(self, ea: ea_t, count: int = 1, force: bool = False) -> bool:
         """
@@ -956,7 +956,7 @@ class Bytes(DatabaseEntity):
 
         element_size = ida_bytes.get_data_elsize(ea, ida_bytes.dword_flag())
         length = element_size * count
-        return ida_bytes.create_dword(ea, length, force)
+        return cast(bool, ida_bytes.create_dword(ea, length, force))
 
     def create_qword_at(self, ea: ea_t, count: int = 1, force: bool = False) -> bool:
         """
@@ -982,7 +982,7 @@ class Bytes(DatabaseEntity):
 
         element_size = ida_bytes.get_data_elsize(ea, ida_bytes.qword_flag())
         length = element_size * count
-        return ida_bytes.create_qword(ea, length, force)
+        return cast(bool, ida_bytes.create_qword(ea, length, force))
 
     def create_oword_at(self, ea: ea_t, count: int = 1, force: bool = False) -> bool:
         """
@@ -1008,7 +1008,7 @@ class Bytes(DatabaseEntity):
 
         element_size = ida_bytes.get_data_elsize(ea, ida_bytes.oword_flag())
         length = element_size * count
-        return ida_bytes.create_oword(ea, length, force)
+        return cast(bool, ida_bytes.create_oword(ea, length, force))
 
     def create_yword_at(self, ea: ea_t, count: int = 1, force: bool = False) -> bool:
         """
@@ -1034,7 +1034,7 @@ class Bytes(DatabaseEntity):
 
         element_size = ida_bytes.get_data_elsize(ea, ida_bytes.yword_flag())
         length = element_size * count
-        return ida_bytes.create_yword(ea, length, force)
+        return cast(bool, ida_bytes.create_yword(ea, length, force))
 
     def create_zword_at(self, ea: ea_t, count: int = 1, force: bool = False) -> bool:
         """
@@ -1060,7 +1060,7 @@ class Bytes(DatabaseEntity):
 
         element_size = ida_bytes.get_data_elsize(ea, ida_bytes.zword_flag())
         length = element_size * count
-        return ida_bytes.create_zword(ea, length, force)
+        return cast(bool, ida_bytes.create_zword(ea, length, force))
 
     def create_tbyte_at(self, ea: ea_t, count: int = 1, force: bool = False) -> bool:
         """
@@ -1086,7 +1086,7 @@ class Bytes(DatabaseEntity):
 
         element_size = ida_bytes.get_data_elsize(ea, ida_bytes.tbyte_flag())
         length = element_size * count
-        return ida_bytes.create_tbyte(ea, length, force)
+        return cast(bool, ida_bytes.create_tbyte(ea, length, force))
 
     def create_float_at(self, ea: ea_t, count: int = 1, force: bool = False) -> bool:
         """
@@ -1112,7 +1112,7 @@ class Bytes(DatabaseEntity):
 
         element_size = ida_bytes.get_data_elsize(ea, ida_bytes.float_flag())
         length = element_size * count
-        return ida_bytes.create_float(ea, length, force)
+        return cast(bool, ida_bytes.create_float(ea, length, force))
 
     def create_double_at(self, ea: ea_t, count: int = 1, force: bool = False) -> bool:
         """
@@ -1138,7 +1138,7 @@ class Bytes(DatabaseEntity):
 
         element_size = ida_bytes.get_data_elsize(ea, ida_bytes.double_flag())
         length = element_size * count
-        return ida_bytes.create_double(ea, length, force)
+        return cast(bool, ida_bytes.create_double(ea, length, force))
 
     def create_packed_real_at(self, ea: ea_t, count: int = 1, force: bool = False) -> bool:
         """
@@ -1165,7 +1165,7 @@ class Bytes(DatabaseEntity):
 
         element_size = ida_bytes.get_data_elsize(ea, ida_bytes.packreal_flag())
         length = element_size * count
-        return ida_bytes.create_packed_real(ea, length, force)
+        return cast(bool, ida_bytes.create_packed_real(ea, length, force))
 
     def create_struct_at(self, ea: ea_t, count: int, tid: int, force: bool = False) -> bool:
         """
@@ -1205,7 +1205,7 @@ class Bytes(DatabaseEntity):
             raise InvalidParameterError('tid', tid, 'invalid struct type ID')
 
         length = element_size * count
-        return ida_bytes.create_struct(ea, length, tid, force)
+        return cast(bool, ida_bytes.create_struct(ea, length, tid, force))
 
     def create_alignment_at(self, ea: ea_t, length: int, alignment: int) -> bool:
         """
@@ -1233,7 +1233,7 @@ class Bytes(DatabaseEntity):
         if alignment < 0:
             raise InvalidParameterError('alignment', alignment, 'must be non-negative')
 
-        return ida_bytes.create_align(ea, length, alignment)
+        return cast(bool, ida_bytes.create_align(ea, length, alignment))
 
     def create_string_at(
         self, ea: ea_t, length: Optional[int] = None, string_type: StringType = StringType.C
@@ -1261,9 +1261,9 @@ class Bytes(DatabaseEntity):
 
         if length is None:
             # Auto-detect string length
-            return ida_bytes.create_strlit(ea, 0, string_type)
+            return cast(bool, ida_bytes.create_strlit(ea, 0, string_type))
         else:
-            return ida_bytes.create_strlit(ea, length, string_type)
+            return cast(bool, ida_bytes.create_strlit(ea, length, string_type))
 
     def get_data_size_at(self, ea: ea_t) -> int:
         """
@@ -1281,7 +1281,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.get_item_size(ea)
+        return cast(int, ida_bytes.get_item_size(ea))
 
     def is_value_initialized_at(self, ea: ea_t) -> bool:
         """
@@ -1299,7 +1299,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.is_loaded(ea)
+        return cast(bool, ida_bytes.is_loaded(ea))
 
     def delete_value_at(self, ea: ea_t) -> None:
         """
@@ -1332,7 +1332,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.is_code(ida_bytes.get_flags(ea))
+        return cast(bool, ida_bytes.is_code(ida_bytes.get_flags(ea)))
 
     def is_data_at(self, ea: ea_t) -> bool:
         """
@@ -1350,7 +1350,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.is_data(ida_bytes.get_flags(ea))
+        return cast(bool, ida_bytes.is_data(ida_bytes.get_flags(ea)))
 
     def is_tail_at(self, ea: ea_t) -> bool:
         """
@@ -1368,7 +1368,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.is_tail(ida_bytes.get_flags(ea))
+        return cast(bool, ida_bytes.is_tail(ida_bytes.get_flags(ea)))
 
     def is_not_tail_at(self, ea: ea_t) -> bool:
         """
@@ -1386,7 +1386,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.is_not_tail(ida_bytes.get_flags(ea))
+        return cast(bool, ida_bytes.is_not_tail(ida_bytes.get_flags(ea)))
 
     def is_unknown_at(self, ea: ea_t) -> bool:
         """
@@ -1404,7 +1404,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.is_unknown(ida_bytes.get_flags(ea))
+        return cast(bool, ida_bytes.is_unknown(ida_bytes.get_flags(ea)))
 
     def is_head_at(self, ea: ea_t) -> bool:
         """
@@ -1422,7 +1422,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.is_head(ida_bytes.get_flags(ea))
+        return cast(bool, ida_bytes.is_head(ida_bytes.get_flags(ea)))
 
     def is_flowed_at(self, ea: ea_t) -> bool:
         """
@@ -1440,7 +1440,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.is_flow(ida_bytes.get_flags(ea))
+        return cast(bool, ida_bytes.is_flow(ida_bytes.get_flags(ea)))
 
     def is_byte_at(self, ea: ea_t) -> bool:
         """
@@ -1458,7 +1458,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.is_byte(ida_bytes.get_flags(ea))
+        return cast(bool, ida_bytes.is_byte(ida_bytes.get_flags(ea)))
 
     def is_word_at(self, ea: ea_t) -> bool:
         """
@@ -1476,7 +1476,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.is_word(ida_bytes.get_flags(ea))
+        return cast(bool, ida_bytes.is_word(ida_bytes.get_flags(ea)))
 
     def is_dword_at(self, ea: ea_t) -> bool:
         """
@@ -1494,7 +1494,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.is_dword(ida_bytes.get_flags(ea))
+        return cast(bool, ida_bytes.is_dword(ida_bytes.get_flags(ea)))
 
     def is_qword_at(self, ea: ea_t) -> bool:
         """
@@ -1512,7 +1512,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.is_qword(ida_bytes.get_flags(ea))
+        return cast(bool, ida_bytes.is_qword(ida_bytes.get_flags(ea)))
 
     def is_oword_at(self, ea: ea_t) -> bool:
         """
@@ -1530,7 +1530,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.is_oword(ida_bytes.get_flags(ea))
+        return cast(bool, ida_bytes.is_oword(ida_bytes.get_flags(ea)))
 
     def is_yword_at(self, ea: ea_t) -> bool:
         """
@@ -1548,7 +1548,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.is_yword(ida_bytes.get_flags(ea))
+        return cast(bool, ida_bytes.is_yword(ida_bytes.get_flags(ea)))
 
     def is_zword_at(self, ea: ea_t) -> bool:
         """
@@ -1566,7 +1566,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.is_zword(ida_bytes.get_flags(ea))
+        return cast(bool, ida_bytes.is_zword(ida_bytes.get_flags(ea)))
 
     def is_tbyte_at(self, ea: ea_t) -> bool:
         """
@@ -1584,7 +1584,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.is_tbyte(ida_bytes.get_flags(ea))
+        return cast(bool, ida_bytes.is_tbyte(ida_bytes.get_flags(ea)))
 
     def is_float_at(self, ea: ea_t) -> bool:
         """
@@ -1602,7 +1602,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.is_float(ida_bytes.get_flags(ea))
+        return cast(bool, ida_bytes.is_float(ida_bytes.get_flags(ea)))
 
     def is_double_at(self, ea: ea_t) -> bool:
         """
@@ -1620,7 +1620,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.is_double(ida_bytes.get_flags(ea))
+        return cast(bool, ida_bytes.is_double(ida_bytes.get_flags(ea)))
 
     def is_packed_real_at(self, ea: ea_t) -> bool:
         """
@@ -1638,7 +1638,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.is_pack_real(ida_bytes.get_flags(ea))
+        return cast(bool, ida_bytes.is_pack_real(ida_bytes.get_flags(ea)))
 
     def is_string_literal_at(self, ea: ea_t) -> bool:
         """
@@ -1656,7 +1656,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.is_strlit(ida_bytes.get_flags(ea))
+        return cast(bool, ida_bytes.is_strlit(ida_bytes.get_flags(ea)))
 
     def is_struct_at(self, ea: ea_t) -> bool:
         """
@@ -1674,7 +1674,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.is_struct(ida_bytes.get_flags(ea))
+        return cast(bool, ida_bytes.is_struct(ida_bytes.get_flags(ea)))
 
     def is_alignment_at(self, ea: ea_t) -> bool:
         """
@@ -1692,7 +1692,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.is_align(ida_bytes.get_flags(ea))
+        return cast(bool, ida_bytes.is_align(ida_bytes.get_flags(ea)))
 
     def is_manual_insn_at(self, ea: ea_t) -> bool:
         """
@@ -1710,7 +1710,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.is_manual_insn(ea)
+        return cast(bool, ida_bytes.is_manual_insn(ea))
 
     def is_forced_operand_at(self, ea: ea_t, n: int) -> bool:
         """
@@ -1733,7 +1733,7 @@ class Bytes(DatabaseEntity):
         if n < 0:
             raise InvalidParameterError('n', n, 'operand number must be non-negative')
 
-        return ida_bytes.is_forced_operand(ea, n)
+        return cast(bool, ida_bytes.is_forced_operand(ea, n))
 
     def get_string_at(self, ea: ea_t, max_length: Optional[int] = None) -> Optional[str]:
         """
@@ -1771,11 +1771,11 @@ class Bytes(DatabaseEntity):
             try:
                 # Decode bytes to string
                 decoded_string = string_data.decode('utf-8')
-                return decoded_string
+                return cast(Optional[str], decoded_string)
             except Exception:
                 # Try latin-1 as fallback
                 decoded_string = string_data.decode('latin-1')
-                return decoded_string
+                return cast(Optional[str], decoded_string)
         else:
             return None
 
@@ -1871,7 +1871,7 @@ class Bytes(DatabaseEntity):
         if size <= 0:
             raise InvalidParameterError('size', size, 'must be positive')
 
-        return ida_bytes.get_bytes(ea, size, ida_bytes.GMB_READALL)
+        return cast(Optional[bytes], ida_bytes.get_bytes(ea, size, ida_bytes.GMB_READALL))
 
     def has_user_name_at(self, ea: ea_t) -> bool:
         """
@@ -1889,7 +1889,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.has_user_name(ida_bytes.get_flags(ea))
+        return cast(bool, ida_bytes.has_user_name(ida_bytes.get_flags(ea)))
 
     def get_flags_at(self, ea: ea_t) -> ByteFlags:
         """
@@ -2120,7 +2120,7 @@ class Bytes(DatabaseEntity):
             raise InvalidEAError(ea)
 
         flags = ida_bytes.get_flags(ea)
-        return (flags & flag_mask) == flag_mask
+        return cast(bool, (flags & flag_mask) == flag_mask)
 
     def has_any_flags_at(self, ea: ea_t, flag_mask: ByteFlags) -> bool:
         """
@@ -2140,7 +2140,7 @@ class Bytes(DatabaseEntity):
             raise InvalidEAError(ea)
 
         flags = ida_bytes.get_flags(ea)
-        return (flags & flag_mask) != 0
+        return cast(bool, (flags & flag_mask) != 0)
 
     def find_binary_sequence(
         self, pattern: bytes, start_ea: ea_t = None, end_ea: ea_t = None
@@ -2493,7 +2493,7 @@ class Bytes(DatabaseEntity):
             raise InvalidParameterError("n", n, "operand number must be non-negative")
 
         flags = ida_bytes.get_flags(ea)
-        return ida_bytes.is_off(flags, n)
+        return cast(bool, ida_bytes.is_off(flags, n))
 
     def is_char_operand(self, ea: ea_t, n: int) -> bool:
         """
@@ -2527,7 +2527,7 @@ class Bytes(DatabaseEntity):
             raise InvalidParameterError("n", n, "operand number must be non-negative")
 
         flags = ida_bytes.get_flags(ea)
-        return ida_bytes.is_char(flags, n)
+        return cast(bool, ida_bytes.is_char(flags, n))
 
     def is_enum_operand(self, ea: ea_t, n: int) -> bool:
         """
@@ -2561,7 +2561,7 @@ class Bytes(DatabaseEntity):
             raise InvalidParameterError("n", n, "operand number must be non-negative")
 
         flags = ida_bytes.get_flags(ea)
-        return ida_bytes.is_enum(flags, n)
+        return cast(bool, ida_bytes.is_enum(flags, n))
 
     def is_struct_offset_operand(self, ea: ea_t, n: int) -> bool:
         """
@@ -2596,7 +2596,7 @@ class Bytes(DatabaseEntity):
             raise InvalidParameterError("n", n, "operand number must be non-negative")
 
         flags = ida_bytes.get_flags(ea)
-        return ida_bytes.is_stroff(flags, n)
+        return cast(bool, ida_bytes.is_stroff(flags, n))
 
     def is_stack_var_operand(self, ea: ea_t, n: int) -> bool:
         """
@@ -2631,4 +2631,4 @@ class Bytes(DatabaseEntity):
             raise InvalidParameterError("n", n, "operand number must be non-negative")
 
         flags = ida_bytes.get_flags(ea)
-        return ida_bytes.is_stkvar(flags, n)
+        return cast(bool, ida_bytes.is_stkvar(flags, n))

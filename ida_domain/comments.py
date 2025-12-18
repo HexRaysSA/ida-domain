@@ -15,7 +15,7 @@ from ida_ida import inf_get_max_ea, inf_get_min_ea
 from ida_idaapi import BADADDR, ea_t
 from ida_segment import segment_t
 from ida_typeinf import tinfo_t
-from typing_extensions import TYPE_CHECKING, Iterator, Optional
+from typing_extensions import TYPE_CHECKING, Iterator, Optional, cast
 
 from .base import (
     DatabaseEntity,
@@ -135,7 +135,7 @@ class Comments(DatabaseEntity):
             raise InvalidEAError(ea)
 
         repeatable = comment_kind == CommentKind.REPEATABLE
-        return ida_bytes.set_cmt(ea, comment, repeatable)
+        return cast(bool, ida_bytes.set_cmt(ea, comment, repeatable))
 
     def delete_at(self, ea: int, comment_kind: CommentKind = CommentKind.REGULAR) -> None:
         """
@@ -214,7 +214,7 @@ class Comments(DatabaseEntity):
             raise InvalidEAError(ea)
 
         base_idx = ida_lines.E_PREV if kind == ExtraCommentKind.ANTERIOR else ida_lines.E_NEXT
-        return ida_lines.update_extra_cmt(ea, base_idx + index, comment)
+        return cast(bool, ida_lines.update_extra_cmt(ea, base_idx + index, comment))
 
     def get_extra_at(self, ea: int, index: int, kind: ExtraCommentKind) -> Optional[str]:
         """
@@ -235,7 +235,7 @@ class Comments(DatabaseEntity):
             raise InvalidEAError(ea)
 
         base_idx = ida_lines.E_PREV if kind == ExtraCommentKind.ANTERIOR else ida_lines.E_NEXT
-        return ida_lines.get_extra_cmt(ea, base_idx + index)
+        return cast(Optional[str], ida_lines.get_extra_cmt(ea, base_idx + index))
 
     def get_all_extra_at(self, ea: int, kind: ExtraCommentKind) -> Iterator[str]:
         """
@@ -282,7 +282,7 @@ class Comments(DatabaseEntity):
             raise InvalidEAError(ea)
 
         base_idx = ida_lines.E_PREV if kind == ExtraCommentKind.ANTERIOR else ida_lines.E_NEXT
-        return ida_lines.del_extra_cmt(ea, base_idx + index)
+        return cast(bool, ida_lines.del_extra_cmt(ea, base_idx + index))
 
     def delete_all_extra_at(self, ea: int, kind: ExtraCommentKind) -> int:
         """
@@ -464,7 +464,7 @@ class Comments(DatabaseEntity):
             >>> clean = db.comments.strip_color_tags(colored)
             >>> print(clean)  # Plain text without color codes
         """
-        return ida_lines.tag_remove(text)
+        return cast(str, ida_lines.tag_remove(text))
 
     def calculate_visual_length(self, text: str) -> int:
         """
@@ -483,7 +483,7 @@ class Comments(DatabaseEntity):
             >>> actual_len = len(colored)
             >>> print(f"Visual length: {visual_len}, Actual length: {actual_len}")
         """
-        return ida_lines.tag_strlen(text)
+        return cast(int, ida_lines.tag_strlen(text))
 
     def skip_color_tags(self, text: str, start_offset: int = 0) -> int:
         """
@@ -558,7 +558,7 @@ class Comments(DatabaseEntity):
             >>> print(f"Instruction: {colored}")
             >>> print(f"Register: {colored_reg}")
         """
-        return ida_lines.COLSTR(text, color_code)
+        return cast(str, ida_lines.COLSTR(text, color_code))
 
     def requires_color_escape(self, char: str) -> bool:
         """
@@ -577,7 +577,7 @@ class Comments(DatabaseEntity):
         """
         if len(char) != 1:
             return False
-        return ida_lines.requires_color_esc(ord(char))
+        return cast(bool, ida_lines.requires_color_esc(ord(char)))
 
     def get_prefix_color(self, ea: int) -> int:
         """
@@ -600,7 +600,7 @@ class Comments(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_lines.calc_prefix_color(ea)
+        return cast(int, ida_lines.calc_prefix_color(ea))
 
     def get_background_color(self, ea: int) -> int:
         """
@@ -623,7 +623,7 @@ class Comments(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_lines.calc_bg_color(ea)
+        return cast(int, ida_lines.calc_bg_color(ea))
 
     def add_sourcefile(self, start_ea: int, end_ea: int, filename: str) -> bool:
         """
@@ -654,7 +654,7 @@ class Comments(DatabaseEntity):
         if start_ea >= end_ea:
             raise InvalidParameterError('start_ea', start_ea, 'must be less than end_ea')
 
-        return ida_lines.add_sourcefile(start_ea, end_ea, filename)
+        return cast(bool, ida_lines.add_sourcefile(start_ea, end_ea, filename))
 
     def get_sourcefile(self, ea: int) -> Optional[tuple[str, int, int]]:
         """
@@ -710,4 +710,4 @@ class Comments(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_lines.del_sourcefile(ea)
+        return cast(bool, ida_lines.del_sourcefile(ea))

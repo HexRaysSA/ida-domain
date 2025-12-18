@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import ida_entry
 import ida_idaapi
 from ida_idaapi import ea_t
-from typing_extensions import TYPE_CHECKING, Iterator, Optional
+from typing_extensions import TYPE_CHECKING, Iterator, Optional, cast
 
 if TYPE_CHECKING:
     from .database import Database
@@ -80,7 +80,7 @@ class Entries(DatabaseEntity):
         Returns:
             int: Number of entry points in the program
         """
-        return ida_entry.get_entry_qty()
+        return cast(int, ida_entry.get_entry_qty())
 
     def get_at_index(self, index: int) -> EntryInfo:
         """Get entry point by its index in the entry table.
@@ -171,7 +171,7 @@ class Entries(DatabaseEntity):
             bool: True if successful
         """
         ord_num = ordinal if ordinal is not None else address
-        return ida_entry.add_entry(ord_num, address, name, make_code)
+        return cast(bool, ida_entry.add_entry(ord_num, address, name, make_code))
 
     def rename(self, ordinal: int, new_name: str) -> bool:
         """Rename an existing entry point.
@@ -183,7 +183,7 @@ class Entries(DatabaseEntity):
         Returns:
             bool: True if successful
         """
-        return ida_entry.rename_entry(ordinal, new_name)
+        return cast(bool, ida_entry.rename_entry(ordinal, new_name))
 
     def set_forwarder(self, ordinal: int, forwarder_name: str) -> bool:
         """Set forwarder name for an entry point.
@@ -195,7 +195,7 @@ class Entries(DatabaseEntity):
         Returns:
             bool: True if successful
         """
-        return ida_entry.set_entry_forwarder(ordinal, forwarder_name)
+        return cast(bool, ida_entry.set_entry_forwarder(ordinal, forwarder_name))
 
     def get_forwarders(self) -> Iterator[ForwarderInfo]:
         """Get all entry points that have forwarders.
@@ -230,7 +230,7 @@ class Entries(DatabaseEntity):
         Returns:
             bool: True if entry point exists
         """
-        return ida_entry.get_entry(ordinal) != ida_idaapi.BADADDR
+        return cast(bool, ida_entry.get_entry(ordinal) != ida_idaapi.BADADDR)
 
     def get_ordinals(self) -> Iterator[int]:
         """Get all ordinal numbers.

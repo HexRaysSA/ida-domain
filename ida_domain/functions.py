@@ -14,7 +14,7 @@ from ida_funcs import func_t
 from ida_idaapi import BADADDR, ea_t
 from ida_typeinf import tinfo_t
 from ida_ua import insn_t
-from typing_extensions import TYPE_CHECKING, Any, Iterator, List, Optional
+from typing_extensions import TYPE_CHECKING, Any, Iterator, List, Optional, Tuple, cast
 
 import ida_domain
 import ida_domain.flowchart
@@ -251,7 +251,7 @@ _ASSIGNMENT_OPS = (
 )
 
 
-class _LVarRefsVisitor(ida_hexrays.ctree_parentee_t):
+class _LVarRefsVisitor(ida_hexrays.ctree_parentee_t):  # type: ignore[misc]
     """Visitor to find references to a specific local variable in pseudocode.
 
     Uses ctree_parentee_t which properly maintains parent information.
@@ -359,7 +359,7 @@ class _LVarRefsVisitor(ida_hexrays.ctree_parentee_t):
                 stack.append(current.z)
         return False
 
-    def _find_assignment_in_ancestors(self) -> tuple:
+    def _find_assignment_in_ancestors(self) -> Tuple[Any, bool]:
         """Find an assignment operator in the ancestor chain.
 
         Traverses from the immediate parent upward through the ancestor chain
@@ -550,7 +550,7 @@ class Functions(DatabaseEntity):
         Returns:
             int: The number of functions in the program.
         """
-        return ida_funcs.get_func_qty()
+        return cast(int, ida_funcs.get_func_qty())
 
     def get_between(self, start_ea: ea_t, end_ea: ea_t) -> Iterator[func_t]:
         """
@@ -632,7 +632,7 @@ class Functions(DatabaseEntity):
             raise InvalidParameterError('name', name, 'The name parameter cannot be empty')
 
         flags = ida_name.SN_NOCHECK if auto_correct else ida_name.SN_CHECK
-        return ida_name.set_name(func.start_ea, name, flags)
+        return cast(bool, ida_name.set_name(func.start_ea, name, flags))
 
     def get_flowchart(
         self, func: func_t, flags: FlowChartFlags = FlowChartFlags.NONE
@@ -748,7 +748,7 @@ class Functions(DatabaseEntity):
             The function signature as a string,
             or empty string if unavailable or function is invalid.
         """
-        return ida_typeinf.idc_get_type(func.start_ea)
+        return cast(str, ida_typeinf.idc_get_type(func.start_ea))
 
     def get_name(self, func: func_t) -> str:
         """
@@ -778,7 +778,7 @@ class Functions(DatabaseEntity):
         """
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
-        return ida_funcs.add_func(ea)
+        return cast(bool, ida_funcs.add_func(ea))
 
     def remove(self, ea: ea_t) -> bool:
         """
@@ -795,7 +795,7 @@ class Functions(DatabaseEntity):
         """
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
-        return ida_funcs.del_func(ea)
+        return cast(bool, ida_funcs.del_func(ea))
 
     def get_next(self, ea: int) -> Optional[func_t]:
         """
@@ -864,7 +864,7 @@ class Functions(DatabaseEntity):
         if index == -1:
             raise ValueError(f"Function at 0x{func.start_ea:x} not found in database")
 
-        return index
+        return cast(int, index)
 
     def contains(self, func: func_t, ea: ea_t) -> bool:
         """
@@ -888,7 +888,7 @@ class Functions(DatabaseEntity):
             ...     print(db.functions.contains(func, 0x401050))  # True - middle
             ...     print(db.functions.contains(func, 0x402000))  # False - outside
         """
-        return ida_funcs.func_contains(func, ea)
+        return cast(bool, ida_funcs.func_contains(func, ea))
 
     def set_start(self, func: func_t, new_start: ea_t) -> bool:
         """
@@ -918,7 +918,7 @@ class Functions(DatabaseEntity):
         if not self.database.is_valid_ea(new_start):
             raise InvalidEAError(new_start)
 
-        return ida_funcs.set_func_start(func.start_ea, new_start)
+        return cast(bool, ida_funcs.set_func_start(func.start_ea, new_start))
 
     def set_end(self, func: func_t, new_end: ea_t) -> bool:
         """
@@ -948,7 +948,7 @@ class Functions(DatabaseEntity):
         if not self.database.is_valid_ea(new_end):
             raise InvalidEAError(new_end)
 
-        return ida_funcs.set_func_end(func.start_ea, new_end)
+        return cast(bool, ida_funcs.set_func_end(func.start_ea, new_end))
 
     def update(self, func: func_t) -> bool:
         """
@@ -974,7 +974,7 @@ class Functions(DatabaseEntity):
             ...     if db.functions.update(func):
             ...         print("Function updated")
         """
-        return ida_funcs.update_func(func)
+        return cast(bool, ida_funcs.update_func(func))
 
     def reanalyze(self, func: func_t) -> bool:
         """
@@ -1032,7 +1032,7 @@ class Functions(DatabaseEntity):
         Returns:
             True if this is an entry chunk, False otherwise
         """
-        return ida_funcs.is_func_entry(chunk)
+        return cast(bool, ida_funcs.is_func_entry(chunk))
 
     def is_tail_chunk(self, chunk: func_t) -> bool:
         """
@@ -1044,7 +1044,7 @@ class Functions(DatabaseEntity):
         Returns:
             True if this is a tail chunk, False otherwise
         """
-        return ida_funcs.is_func_tail(chunk)
+        return cast(bool, ida_funcs.is_func_tail(chunk))
 
     def get_flags(self, func: func_t) -> FunctionFlags:
         """
@@ -1068,7 +1068,7 @@ class Functions(DatabaseEntity):
         Returns:
             True if function is far, False otherwise
         """
-        return func.is_far()
+        return cast(bool, func.is_far())
 
     def does_return(self, func: func_t) -> bool:
         """
@@ -1080,7 +1080,7 @@ class Functions(DatabaseEntity):
         Returns:
             True if function returns, False if it's noreturn
         """
-        return func.does_return()
+        return cast(bool, func.does_return())
 
     def get_callers(self, func: func_t) -> List[func_t]:
         """
@@ -1242,7 +1242,7 @@ class Functions(DatabaseEntity):
         if not self.database.is_valid_ea(tail_end):
             raise InvalidEAError(tail_end)
 
-        return ida_funcs.append_func_tail(func, tail_start, tail_end)
+        return cast(bool, ida_funcs.append_func_tail(func, tail_start, tail_end))
 
     def remove_tail(self, func: func_t, tail_ea: ea_t) -> bool:
         """
@@ -1269,7 +1269,7 @@ class Functions(DatabaseEntity):
         if not self.database.is_valid_ea(tail_ea):
             raise InvalidEAError(tail_ea)
 
-        return ida_funcs.remove_func_tail(func, tail_ea)
+        return cast(bool, ida_funcs.remove_func_tail(func, tail_ea))
 
     def get_data_items(self, func: func_t) -> Iterator[ea_t]:
         """
@@ -1345,7 +1345,7 @@ class Functions(DatabaseEntity):
         Returns:
             True if successful, False otherwise.
         """
-        return ida_funcs.set_func_cmt(func, comment, repeatable)
+        return cast(bool, ida_funcs.set_func_cmt(func, comment, repeatable))
 
     def get_comment(self, func: func_t, repeatable: bool = False) -> str:
         """

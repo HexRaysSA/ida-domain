@@ -5,7 +5,7 @@ from enum import IntFlag
 
 import ida_name
 from ida_idaapi import BADADDR, ea_t
-from typing_extensions import TYPE_CHECKING, Iterator, Optional, Tuple, Union
+from typing_extensions import TYPE_CHECKING, Iterator, Optional, Tuple, Union, cast
 
 from .base import DatabaseEntity, InvalidEAError, check_db_open, decorate_all_methods
 
@@ -121,7 +121,7 @@ class Names(DatabaseEntity):
         Returns:
             The number of named elements.
         """
-        return ida_name.get_nlist_size()
+        return cast(int, ida_name.get_nlist_size())
 
     def get_at_index(self, index: int) -> Tuple[ea_t, str] | None:
         """
@@ -153,7 +153,7 @@ class Names(DatabaseEntity):
         """
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
-        return ida_name.get_name(ea)
+        return cast(Optional[str], ida_name.get_name(ea))
 
     def get_all(self) -> Iterator[Tuple[ea_t, str]]:
         """
@@ -186,7 +186,7 @@ class Names(DatabaseEntity):
         """
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
-        return ida_name.set_name(ea, name, flags)
+        return cast(bool, ida_name.set_name(ea, name, flags))
 
     def force_name(
         self, ea: ea_t, name: str, flags: Union[int, SetNameFlags] = SetNameFlags.NOCHECK
@@ -207,7 +207,7 @@ class Names(DatabaseEntity):
         """
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
-        return ida_name.force_name(ea, name, flags)
+        return cast(bool, ida_name.force_name(ea, name, flags))
 
     def delete(self, ea: ea_t) -> bool:
         """
@@ -224,7 +224,7 @@ class Names(DatabaseEntity):
         """
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
-        return ida_name.del_global_name(ea)
+        return cast(bool, ida_name.del_global_name(ea))
 
     def is_valid_name(self, name: str) -> bool:
         """
@@ -236,7 +236,7 @@ class Names(DatabaseEntity):
         Returns:
             True if valid, False otherwise.
         """
-        return ida_name.is_uname(name)
+        return cast(bool, ida_name.is_uname(name))
 
     def is_public_name(self, ea: ea_t) -> bool:
         """
@@ -253,7 +253,7 @@ class Names(DatabaseEntity):
         """
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
-        return ida_name.is_public_name(ea)
+        return cast(bool, ida_name.is_public_name(ea))
 
     def make_name_public(self, ea: ea_t) -> None:
         """
@@ -298,7 +298,7 @@ class Names(DatabaseEntity):
         """
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
-        return ida_name.is_weak_name(ea)
+        return cast(bool, ida_name.is_weak_name(ea))
 
     def make_name_weak(self, ea: ea_t) -> None:
         """
@@ -347,7 +347,7 @@ class Names(DatabaseEntity):
         """
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
-        return ida_name.get_demangled_name(ea, inhibitor, demform)
+        return cast(Optional[str], ida_name.get_demangled_name(ea, inhibitor, demform))
 
     def demangle_name(self, name: str, disable_mask: Union[int, DemangleFlags] = 0) -> str:
         """
@@ -360,7 +360,7 @@ class Names(DatabaseEntity):
         Returns:
             Demangled name or original name if demangling failed.
         """
-        return ida_name.demangle_name(name, disable_mask)
+        return cast(str, ida_name.demangle_name(name, disable_mask))
 
     def resolve_name(self, name: str, from_ea: ea_t = BADADDR) -> Optional[ea_t]:
         """
@@ -455,7 +455,7 @@ class Names(DatabaseEntity):
         """
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
-        return ida_name.del_local_name(ea)
+        return cast(bool, ida_name.del_local_name(ea))
 
     def create_dummy(self, from_ea: ea_t, ea: ea_t) -> bool:
         """
@@ -488,7 +488,7 @@ class Names(DatabaseEntity):
             raise InvalidEAError(from_ea)
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
-        return ida_name.set_dummy_name(from_ea, ea)
+        return cast(bool, ida_name.set_dummy_name(from_ea, ea))
 
     def get_visible_name(self, ea: ea_t, local: bool = False) -> Optional[str]:
         """
@@ -524,7 +524,7 @@ class Names(DatabaseEntity):
         # If local flag is set and no name was found, that's expected
         # The local parameter is a hint but we can't easily distinguish
         # between local and global names with the simple API
-        return name
+        return cast(Optional[str], name)
 
     def validate(self, name: str, strict: bool = False) -> Tuple[bool, str]:
         """

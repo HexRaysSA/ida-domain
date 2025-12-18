@@ -17,7 +17,7 @@ from ida_typeinf import (
     tinfo_t,
     udt_type_data_t,
 )
-from typing_extensions import TYPE_CHECKING, Callable, Dict, Iterator, Optional, Tuple
+from typing_extensions import TYPE_CHECKING, Callable, Dict, Iterator, Optional, Tuple, cast
 
 from . import __ida_version__
 from .base import (
@@ -236,7 +236,7 @@ class UdtDetails:
         type_name = UdtAttr.__name__
         attr_name = str(UdtAttr.TUPLE.name)
         if _is_supported(type_name, attr_name, warn=False):
-            return u.is_tuple()
+            return cast(bool, u.is_tuple())
         return False
 
     _HANDLERS: Dict[UdtAttr, Callable[[udt_type_data_t], bool]] = {
@@ -846,7 +846,7 @@ class TypeDetails:
         return details
 
 
-class TypeDetailsVisitor(ida_typeinf.tinfo_visitor_t):
+class TypeDetailsVisitor(ida_typeinf.tinfo_visitor_t):  # type: ignore[misc]
     """
     Visitor class for types.
     Used to recursively traverse types and gather the type members details.
@@ -959,7 +959,7 @@ class Types(DatabaseEntity):
             True if the operation succeeded, False otherwise.
         """
         ida_typeinf.compact_til(library)
-        return ida_typeinf.store_til(library, str(file.parents), str(file))
+        return cast(bool, ida_typeinf.store_til(library, str(file.parents), str(file)))
 
     def import_type(self, source: til_t, name: str) -> int:
         """
@@ -979,7 +979,7 @@ class Types(DatabaseEntity):
         result = ida_typeinf.copy_named_type(ida_typeinf.get_idati(), source, name)
         if result == 0:
             raise RuntimeError(f'error importing type {name}')
-        return result
+        return cast(int, result)
 
     def export_type(self, destination: til_t, name: str) -> int:
         """
@@ -1002,7 +1002,7 @@ class Types(DatabaseEntity):
         result = ida_typeinf.copy_named_type(destination, ida_typeinf.get_idati(), name)
         if result == 0:
             raise RuntimeError(f'error exporting type {name}')
-        return result
+        return cast(int, result)
 
     def copy_type(self, source: til_t, destination: til_t, name: str) -> int:
         """
@@ -1022,7 +1022,7 @@ class Types(DatabaseEntity):
         result = ida_typeinf.copy_named_type(source, destination, name)
         if result == 0:
             raise RuntimeError(f'error exporting type {name}')
-        return result
+        return cast(int, result)
 
     def parse_header_file(
         self,
@@ -1041,7 +1041,7 @@ class Types(DatabaseEntity):
         Returns:
             Number of parse errors.
         """
-        return ida_typeinf.parse_decls(library, header, None, flags)
+        return cast(int, ida_typeinf.parse_decls(library, header, None, flags))
 
     def parse_declarations(
         self,
@@ -1060,7 +1060,7 @@ class Types(DatabaseEntity):
         Returns:
             Number of parse errors.
         """
-        return ida_typeinf.parse_decls(library, decl, None, flags)
+        return cast(int, ida_typeinf.parse_decls(library, decl, None, flags))
 
     def parse_one_declaration(
         self,
@@ -1158,7 +1158,7 @@ class Types(DatabaseEntity):
         """
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
-        return ida_typeinf.apply_tinfo(ea, type, flags)
+        return cast(bool, ida_typeinf.apply_tinfo(ea, type, flags))
 
     def get_all(
         self, library: Optional[til_t] = None, type_kind: TypeKind = TypeKind.NAMED
@@ -1195,7 +1195,7 @@ class Types(DatabaseEntity):
             True if traversal was successful, False otherwise.
 
         """
-        return visitor.apply_to(type_info) == 0
+        return cast(None, visitor.apply_to(type_info) == 0)
 
     def get_details(self, type_info: tinfo_t) -> TypeDetails:
         """
@@ -1221,7 +1221,7 @@ class Types(DatabaseEntity):
         Returns:
             True if successful, False otherwise.
         """
-        return type_info.set_type_cmt(comment) == 0
+        return cast(bool, type_info.set_type_cmt(comment) == 0)
 
     def get_comment(self, type_info: tinfo_t) -> str:
         """
@@ -1296,7 +1296,7 @@ class Types(DatabaseEntity):
         if ordinal == 0:  # 0 means not found
             return None
 
-        return ordinal
+        return cast(Optional[int], ordinal)
 
     def apply_by_name(
         self,
@@ -1331,7 +1331,7 @@ class Types(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_typeinf.apply_named_type(ea, name)
+        return cast(bool, ida_typeinf.apply_named_type(ea, name))
 
     def apply_declaration(
         self,
@@ -1374,7 +1374,7 @@ class Types(DatabaseEntity):
         til = ida_typeinf.get_idati()
 
         # Apply C declaration directly
-        return ida_typeinf.apply_cdecl(til, ea, decl, flags)
+        return cast(bool, ida_typeinf.apply_cdecl(til, ea, decl, flags))
 
     def guess_at(self, ea: ea_t) -> Optional[tinfo_t]:
         """
@@ -1439,7 +1439,7 @@ class Types(DatabaseEntity):
             ...     decl = db.types.format_type(type_info)
             ...     print(f"Declaration: {decl}")
         """
-        return type_info.dstr()
+        return cast(str, type_info.dstr())
 
     def format_type_at(
         self,
@@ -1475,7 +1475,7 @@ class Types(DatabaseEntity):
         # Use print_type to format the type at an address
         result = ida_typeinf.print_type(ea, False)  # False = don't force one line
         if result:
-            return result
+            return cast(Optional[str], result)
 
         return None
 
@@ -1504,7 +1504,7 @@ class Types(DatabaseEntity):
         """
         # compare_tinfo returns 0 if types are equal
         result = ida_typeinf.compare_tinfo(type1, type2, 0)
-        return result == 0
+        return cast(bool, result == 0)
 
     def validate_type(self, type_info: tinfo_t) -> bool:
         """
@@ -1526,7 +1526,7 @@ class Types(DatabaseEntity):
             >>> if type_info and db.types.validate_type(type_info):
             ...     print("Type is well-formed")
         """
-        return ida_typeinf.verify_tinfo(type_info)
+        return cast(bool, ida_typeinf.verify_tinfo(type_info))
 
     def resolve_typedef(self, type_info: tinfo_t) -> tinfo_t:
         """
@@ -1607,7 +1607,7 @@ class Types(DatabaseEntity):
             >>> if type_info and db.types.is_enum(type_info):
             ...     print("Type is an enumeration")
         """
-        return type_info.is_enum()
+        return cast(bool, type_info.is_enum())
 
     def is_struct(self, type_info: tinfo_t) -> bool:
         """
@@ -1625,7 +1625,7 @@ class Types(DatabaseEntity):
             >>> if type_info and db.types.is_struct(type_info):
             ...     print("Type is a structure")
         """
-        return type_info.is_struct()
+        return cast(bool, type_info.is_struct())
 
     def is_union(self, type_info: tinfo_t) -> bool:
         """
@@ -1643,7 +1643,7 @@ class Types(DatabaseEntity):
             >>> if type_info and db.types.is_union(type_info):
             ...     print("Type is a union")
         """
-        return type_info.is_union()
+        return cast(bool, type_info.is_union())
 
     def is_udt(self, type_info: tinfo_t) -> bool:
         """
@@ -1664,4 +1664,4 @@ class Types(DatabaseEntity):
             >>> if type_info and db.types.is_udt(type_info):
             ...     print("Type is a user-defined type")
         """
-        return type_info.is_udt()
+        return cast(bool, type_info.is_udt())

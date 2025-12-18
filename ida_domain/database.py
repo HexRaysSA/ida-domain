@@ -14,7 +14,7 @@ import ida_loader
 import ida_nalt
 import ida_typeinf
 from ida_idaapi import ea_t
-from typing_extensions import TYPE_CHECKING, List, Literal, Optional, Tuple, Type, Union
+from typing_extensions import TYPE_CHECKING, List, Literal, Optional, Tuple, Type, Union, cast
 
 from .analysis import Analysis
 from .base import InvalidParameterError, check_db_open
@@ -661,9 +661,9 @@ class Database:
             True if address is valid according to the check level.
         """
         if strict_check:
-            return ida_bytes.is_mapped(ea)
+            return cast(bool, ida_bytes.is_mapped(ea))
         else:
-            return self.minimum_ea <= ea <= self.maximum_ea
+            return cast(bool, self.minimum_ea <= ea <= self.maximum_ea)
 
     def hook(self) -> None:
         """

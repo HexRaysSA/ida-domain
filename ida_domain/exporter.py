@@ -9,7 +9,7 @@ executables, and other standard output formats.
 from __future__ import annotations
 
 from enum import IntEnum, IntFlag
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, cast
 
 import ida_ida
 import ida_loader
@@ -163,7 +163,7 @@ class Exporter(DatabaseEntity):
                 result = ida_loader.gen_file(
                     ida_loader.OFILE_MAP, qf.get_fp(), start_ea, end_ea, 0
                 )
-                return result >= 0  # Positive or zero = success
+                return cast(bool, result >= 0)  # Positive or zero = success
             finally:
                 qf.close()
         except (IOError, OSError) as e:
@@ -231,7 +231,7 @@ class Exporter(DatabaseEntity):
                 result = ida_loader.gen_file(
                     ida_loader.OFILE_ASM, qf.get_fp(), start_ea, end_ea, int(flags)
                 )
-                return result >= 0
+                return cast(bool, result >= 0)
             finally:
                 qf.close()
         except (IOError, OSError) as e:
@@ -300,7 +300,7 @@ class Exporter(DatabaseEntity):
                 result = ida_loader.gen_file(
                     ida_loader.OFILE_LST, qf.get_fp(), start_ea, end_ea, int(flags)
                 )
-                return result >= 0
+                return cast(bool, result >= 0)
             finally:
                 qf.close()
         except (IOError, OSError) as e:
@@ -347,7 +347,7 @@ class Exporter(DatabaseEntity):
             try:
                 # gen_exe_file reconstructs the executable
                 result = ida_loader.gen_exe_file(qf.get_fp())
-                return result >= 0
+                return cast(bool, result >= 0)
             finally:
                 qf.close()
         except (IOError, OSError) as e:
@@ -417,7 +417,7 @@ class Exporter(DatabaseEntity):
                 result = ida_loader.gen_file(
                     ida_loader.OFILE_IDC, qf.get_fp(), start_ea, end_ea, 0
                 )
-                return result >= 0
+                return cast(bool, result >= 0)
             finally:
                 qf.close()
         except (IOError, OSError) as e:
@@ -485,7 +485,7 @@ class Exporter(DatabaseEntity):
                 result = ida_loader.gen_file(
                     ida_loader.OFILE_DIF, qf.get_fp(), start_ea, end_ea, 0
                 )
-                return result >= 0
+                return cast(bool, result >= 0)
             finally:
                 qf.close()
         except (IOError, OSError) as e:
@@ -549,7 +549,7 @@ class Exporter(DatabaseEntity):
                 if result < 0:
                     return -1
                 # Calculate actual bytes written (end_ea is exclusive)
-                return end_ea - start_ea
+                return cast(int, end_ea - start_ea)
             finally:
                 qf.close()
         except (IOError, OSError) as e:
@@ -687,7 +687,7 @@ class Exporter(DatabaseEntity):
                 result = ida_loader.gen_file(
                     int(format), qf.get_fp(), start_ea, end_ea, int(flags)
                 )
-                return result >= 0
+                return cast(bool, result >= 0)
             finally:
                 qf.close()
         except (IOError, OSError) as e:

@@ -5,7 +5,7 @@ import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum, IntEnum
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 import ida_idp
 import ida_lines
@@ -104,7 +104,7 @@ class Operand(ABC):
     @property
     def number(self) -> int:
         """Get the operand number (0, 1, 2, etc.)."""
-        return self._op.n
+        return cast(int, self._op.n)
 
     @property
     def type(self) -> OperandType:
@@ -119,17 +119,17 @@ class Operand(ABC):
     @property
     def flags(self) -> int:
         """Get the operand flags."""
-        return self._op.flags
+        return cast(int, self._op.flags)
 
     @property
     def is_shown(self) -> bool:
         """Check if the operand should be displayed."""
-        return self._op.shown()
+        return cast(bool, self._op.shown())
 
     @property
     def size_bytes(self) -> int:
         """Get the size of the operand in bytes."""
-        return ida_ua.get_dtype_size(self._op.dtype)
+        return cast(int, ida_ua.get_dtype_size(self._op.dtype))
 
     @property
     def size_bits(self) -> int:
@@ -138,7 +138,7 @@ class Operand(ABC):
 
     def is_floating_point(self) -> bool:
         """Check if this is a floating point operand."""
-        return ida_ua.is_floating_dtype(self._op.dtype)
+        return cast(bool, ida_ua.is_floating_dtype(self._op.dtype))
 
     def is_read(self) -> bool:
         """Check if this operand is read (used) by the instruction."""
@@ -147,7 +147,7 @@ class Operand(ABC):
             return False
         ph = ida_idp.get_ph()
         feature = ph.get_canon_feature(insn.itype)
-        return ida_idp.has_cf_use(feature, self.number)
+        return cast(bool, ida_idp.has_cf_use(feature, self.number))
 
     def is_write(self) -> bool:
         """Check if this operand is written (modified) by the instruction."""
@@ -156,7 +156,7 @@ class Operand(ABC):
             return False
         ph = ida_idp.get_ph()
         feature = ph.get_canon_feature(insn.itype)
-        return ida_idp.has_cf_chg(feature, self.number)
+        return cast(bool, ida_idp.has_cf_chg(feature, self.number))
 
     def get_access_type(self) -> AccessType:
         """Get a string description of how this operand is accessed."""
@@ -205,14 +205,14 @@ class RegisterOperand(Operand):
     @property
     def register_number(self) -> int:
         """Get the register number."""
-        return self._op.reg
+        return cast(int, self._op.reg)
 
     def get_value(self) -> int:
         return self.register_number
 
     def get_register_name(self) -> str:
         """Get the name of this register using the operand's size."""
-        return ida_idp.get_reg_name(self.register_number, self.size_bytes)
+        return cast(str, ida_idp.get_reg_name(self.register_number, self.size_bytes))
 
     def __str__(self) -> str:
         class_name = self.__class__.__name__
@@ -227,8 +227,8 @@ class ImmediateOperand(Operand):
     def get_value(self) -> int:
         """Get the immediate value or address."""
         if self.type in (OperandType.FAR_ADDRESS, OperandType.NEAR_ADDRESS):
-            return self._op.addr
-        return self._op.value
+            return cast(int, self._op.addr)
+        return cast(int, self._op.value)
 
     def is_address(self) -> bool:
         """Check if this is an address operand (far/near)."""
@@ -291,7 +291,7 @@ class MemoryOperand(Operand):
     def get_phrase_number(self) -> Optional[int]:
         """Get the phrase number for register-based operands."""
         if self.is_register_based():
-            return self._op.phrase
+            return cast(int, self._op.phrase)
         return None
 
     def get_displacement(self) -> Optional[int]:
@@ -301,7 +301,7 @@ class MemoryOperand(Operand):
         Stored in op_t.addr field.
         """
         if self.type == OperandType.DISPLACEMENT:
-            return self._op.addr
+            return cast(int, self._op.addr)
         return None
 
     def get_outer_displacement(self) -> Optional[int]:
@@ -314,7 +314,7 @@ class MemoryOperand(Operand):
             and self._op.value
             and self.has_outer_displacement()
         ):
-            return self._op.value
+            return cast(int, self._op.value)
         return None
 
     def has_outer_displacement(self) -> bool:
@@ -334,7 +334,7 @@ class MemoryOperand(Operand):
     def get_formatted_string(self) -> Optional[str]:
         """Get the formatted operand string from IDA."""
         ret = ida_ua.print_operand(self._instruction_ea, self.number)
-        return ida_lines.tag_remove(ret)
+        return cast(str, ida_lines.tag_remove(ret))
 
     def __str__(self) -> str:
         class_name = self.__class__.__name__
@@ -357,7 +357,7 @@ class ProcessorSpecificOperand(Operand):
 
     def __init__(self, database: Database, operand: ida_ua.op_t, instruction_ea: int):
         super().__init__(database, operand, instruction_ea)
-        self._spec_type = operand.type - ida_ua.o_idpspec0
+        self._spec_type: int = cast(int, operand.type - ida_ua.o_idpspec0)
 
     def get_value(self) -> Any:
         """Return raw value for processor-specific operands."""

@@ -58,7 +58,7 @@ class Instructions(DatabaseEntity):
         Returns:
             `True` if the instruction is valid, `False` otherwise.
         """
-        return insn and insn.itype != 0
+        return cast(bool, insn and insn.itype != 0)
 
     def get_disassembly(self, insn: insn_t, remove_tags: bool = True) -> Optional[str]:
         """
@@ -74,7 +74,7 @@ class Instructions(DatabaseEntity):
         options = ida_lines.GENDSM_MULTI_LINE
         if remove_tags:
             options |= ida_lines.GENDSM_REMOVE_TAGS
-        return ida_lines.generate_disasm_line(insn.ea, options)
+        return cast(Optional[str], ida_lines.generate_disasm_line(insn.ea, options))
 
     def get_at(self, ea: ea_t) -> Optional[insn_t]:
         """
@@ -165,7 +165,7 @@ class Instructions(DatabaseEntity):
             A string representing the mnemonic of the given instruction.
             If retrieving fails, returns None.
         """
-        return ida_ua.print_insn_mnem(insn.ea)
+        return cast(Optional[str], ida_ua.print_insn_mnem(insn.ea))
 
     def get_operands_count(self, insn: insn_t) -> int:
         """
@@ -891,7 +891,7 @@ class Instructions(DatabaseEntity):
         # Note: include_displacement parameter is documented but the underlying
         # ida_offset.get_offset_expression doesn't have a direct flag for this.
         # The parameter is kept for API compatibility but currently has no effect.
-        return result
+        return cast(Optional[str], result)
 
     def calculate_offset_base(
         self,

@@ -7,7 +7,7 @@ from typing import Any
 import ida_gdl
 from ida_gdl import qbasic_block_t, qflow_chart_t
 from ida_ua import insn_t
-from typing_extensions import TYPE_CHECKING, Iterator, Optional
+from typing_extensions import TYPE_CHECKING, Iterator, Optional, cast
 
 from .base import (
     DatabaseEntity,
@@ -36,7 +36,7 @@ class FlowChartFlags(IntFlag):
 
 
 @decorate_all_methods(check_db_open)
-class BasicBlock(ida_gdl.BasicBlock, DatabaseEntity):
+class BasicBlock(ida_gdl.BasicBlock, DatabaseEntity):  # type: ignore[misc]
     """
     Provides access to basic block properties and navigation
     between connected blocks within a control flow graph.
@@ -62,11 +62,11 @@ class BasicBlock(ida_gdl.BasicBlock, DatabaseEntity):
 
     def get_successors(self) -> Iterator[BasicBlock]:
         """Iterator over successor blocks."""
-        return self.succs()
+        return cast(Iterator[BasicBlock], self.succs())
 
     def get_predecessors(self) -> Iterator[BasicBlock]:
         """Iterator over predecessor blocks."""
-        return self.preds()
+        return cast(Iterator[BasicBlock], self.preds())
 
     def count_successors(self) -> int:
         """Count the number of successor blocks."""
@@ -87,7 +87,7 @@ class BasicBlock(ida_gdl.BasicBlock, DatabaseEntity):
 
 
 @decorate_all_methods(check_db_open)
-class FlowChart(ida_gdl.FlowChart, DatabaseEntity):
+class FlowChart(ida_gdl.FlowChart, DatabaseEntity):  # type: ignore[misc]
     """
     Provides analysis and iteration over basic blocks within
     functions or address ranges.
@@ -161,4 +161,4 @@ class FlowChart(ida_gdl.FlowChart, DatabaseEntity):
         Returns:
             int: Number of basic blocks.
         """
-        return self.size
+        return cast(int, self.size)

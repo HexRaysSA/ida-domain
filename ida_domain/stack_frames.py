@@ -16,7 +16,7 @@ import ida_range
 import ida_typeinf
 from ida_idaapi import BADADDR, ea_t
 from ida_typeinf import tinfo_t
-from typing_extensions import TYPE_CHECKING, Iterator, Optional
+from typing_extensions import TYPE_CHECKING, Iterator, Optional, cast
 
 from .base import (
     DatabaseEntity,
@@ -199,9 +199,9 @@ class StackFrames(DatabaseEntity):
         if ida_frame.get_func_frame(frame_type, func):
             raise RuntimeError(f"Frame already exists at 0x{func_ea:x}")
 
-        return ida_frame.add_frame(
+        return cast(bool, ida_frame.add_frame(
             func, frsize=local_size, frregs=saved_regs_size, argsize=argument_size
-        )
+        ))
 
     def delete(self, func_ea: ea_t) -> bool:
         """
@@ -223,7 +223,7 @@ class StackFrames(DatabaseEntity):
         if not func:
             raise InvalidEAError(func_ea)
 
-        return ida_frame.del_frame(func)
+        return cast(bool, ida_frame.del_frame(func))
 
     def resize(
         self,
@@ -267,9 +267,9 @@ class StackFrames(DatabaseEntity):
         if argument_size is None:
             argument_size = func.argsize
 
-        return ida_frame.set_frame_size(
+        return cast(bool, ida_frame.set_frame_size(
             func, frsize=local_size, frregs=saved_regs_size, argsize=argument_size
-        )
+        ))
 
     def set_purged_bytes(self, func_ea: ea_t, nbytes: int, override: bool = True) -> bool:
         """
@@ -293,7 +293,7 @@ class StackFrames(DatabaseEntity):
             >>> # Mark as __stdcall with 12 bytes of arguments
             >>> db.stack_frames.set_purged_bytes(0x401000, 12)
         """
-        return ida_frame.set_purged(func_ea, nbytes, override_old_value=override)
+        return cast(bool, ida_frame.set_purged(func_ea, nbytes, override_old_value=override))
 
     # ========================================================================
     # Section Accessor Methods
@@ -411,7 +411,9 @@ class StackFrames(DatabaseEntity):
         if not func:
             raise InvalidEAError(func_ea)
 
-        return ida_frame.define_stkvar(func, name=name, off=offset, tif=var_type, repr=None)
+        return cast(
+            bool, ida_frame.define_stkvar(func, name=name, off=offset, tif=var_type, repr=None)
+        )
 
     def get_variable(self, func_ea: ea_t, offset: int) -> Optional[StackVariable]:
         """
@@ -545,9 +547,9 @@ class StackFrames(DatabaseEntity):
         if struct_offset is None:
             raise LookupError(f"No variable at offset {offset}")
 
-        return ida_frame.set_frame_member_type(
+        return cast(bool, ida_frame.set_frame_member_type(
             func, offset=struct_offset, tif=var_type, repr=None, etf_flags=0
-        )
+        ))
 
     def rename_variable(self, func_ea: ea_t, offset: int, new_name: str) -> bool:
         """
@@ -622,9 +624,9 @@ class StackFrames(DatabaseEntity):
             return False
 
         # Delete single member (end = start + 1)
-        return ida_frame.delete_frame_members(
+        return cast(bool, ida_frame.delete_frame_members(
             func, start_offset=struct_offset, end_offset=struct_offset + 1
-        )
+        ))
 
     def delete_variables_in_range(
         self, func_ea: ea_t, start_offset: int, end_offset: int
@@ -793,7 +795,7 @@ class StackFrames(DatabaseEntity):
         # Calculate runtime offset
         runtime_offset = frame_offset - sp_delta
 
-        return runtime_offset
+        return cast(int, runtime_offset)
 
     def calc_frame_offset(self, func_ea: ea_t, runtime_offset: int, insn_ea: ea_t) -> int:
         """
@@ -827,7 +829,7 @@ class StackFrames(DatabaseEntity):
 
         frame_offset = ida_frame.calc_frame_offset(func, off=runtime_offset, insn=insn, op=None)
 
-        return frame_offset
+        return cast(int, frame_offset)
 
     def generate_auto_name(self, func_ea: ea_t, offset: int) -> str:
         """
@@ -884,9 +886,9 @@ class StackFrames(DatabaseEntity):
             func = ida_funcs.get_func(func_ea)
             if not func:
                 raise InvalidEAError(func_ea)
-            return ida_frame.add_auto_stkpnt(func, ea, delta)
+            return cast(bool, ida_frame.add_auto_stkpnt(func, ea, delta))
         else:
-            return ida_frame.add_user_stkpnt(ea, delta)
+            return cast(bool, ida_frame.add_user_stkpnt(ea, delta))
 
     def delete_sp_change_point(self, func_ea: ea_t, ea: ea_t) -> bool:
         """
@@ -909,7 +911,7 @@ class StackFrames(DatabaseEntity):
         if not func:
             raise InvalidEAError(func_ea)
 
-        return ida_frame.del_stkpnt(func, ea)
+        return cast(bool, ida_frame.del_stkpnt(func, ea))
 
     def get_sp_delta(self, func_ea: ea_t, ea: ea_t) -> int:
         """
@@ -933,7 +935,7 @@ class StackFrames(DatabaseEntity):
         if not func:
             raise InvalidEAError(func_ea)
 
-        return ida_frame.get_spd(func, ea)
+        return cast(int, ida_frame.get_spd(func, ea))
 
     def get_sp_change(self, func_ea: ea_t, ea: ea_t) -> int:
         """
@@ -958,7 +960,7 @@ class StackFrames(DatabaseEntity):
         if not func:
             raise InvalidEAError(func_ea)
 
-        return ida_frame.get_sp_delta(func, ea)
+        return cast(int, ida_frame.get_sp_delta(func, ea))
 
 
 # ============================================================================
@@ -1012,7 +1014,7 @@ class StackFrameInstance:
             >>> frame = db.stack_frames.get_at(0x401000)
             >>> print(f"Frame size: {frame.size} bytes")
         """
-        return ida_frame.get_frame_size(self._func)
+        return cast(int, ida_frame.get_frame_size(self._func))
 
     @property
     def local_size(self) -> int:
@@ -1046,7 +1048,7 @@ class StackFrameInstance:
         # Get arguments section range
         range_obj = ida_range.range_t()
         ida_frame.get_frame_part(range_obj, self._func, ida_frame.FPC_ARGS)
-        return range_obj.end_ea - range_obj.start_ea
+        return cast(int, range_obj.end_ea - range_obj.start_ea)
 
     @property
     def saved_registers_size(self) -> int:
@@ -1074,7 +1076,7 @@ class StackFrameInstance:
             >>> frame = db.stack_frames.get_at(0x401000)
             >>> print(f"Return address: {frame.return_address_size} bytes")
         """
-        return ida_frame.get_frame_retsize(self._func)
+        return cast(int, ida_frame.get_frame_retsize(self._func))
 
     @property
     def purged_bytes(self) -> int:

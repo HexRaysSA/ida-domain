@@ -15,7 +15,18 @@ import ida_typeinf
 import ida_xref
 from ida_funcs import func_t
 from ida_idaapi import BADADDR, ea_t
-from typing_extensions import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, Set, Tuple, Union
+from typing_extensions import (
+    TYPE_CHECKING,
+    Any,
+    Dict,
+    Iterator,
+    List,
+    Optional,
+    Set,
+    Tuple,
+    Union,
+    cast,
+)
 
 from .base import DatabaseEntity, InvalidEAError, check_db_open, decorate_all_methods
 
@@ -150,7 +161,7 @@ class XrefsFlags(IntFlag):
     def to_ida_flags(self) -> int:
         """Convert to IDA's xref flags."""
         if self == XrefsFlags.ALL:
-            return ida_xref.XREF_ALL
+            return cast(int, ida_xref.XREF_ALL)
         ida_flags = 0
         if self & XrefsFlags.NOFLOW:
             ida_flags |= ida_xref.XREF_NOFLOW
@@ -159,7 +170,7 @@ class XrefsFlags(IntFlag):
         elif self & XrefsFlags.CODE:
             ida_flags |= ida_xref.XREF_CODE
         else:
-            ida_flags = ida_xref.XREF_ALL
+            ida_flags = cast(int, ida_xref.XREF_ALL)
         return ida_flags
 
 
@@ -488,7 +499,7 @@ class Xrefs(DatabaseEntity):
 
         # Use xrefblk_t to check for any xref
         xb = ida_xref.xrefblk_t()
-        return xb.first_to(ea, ida_xref.XREF_ALL)
+        return cast(bool, xb.first_to(ea, ida_xref.XREF_ALL))
 
     def has_any_refs_from(self, ea: ea_t) -> bool:
         """
@@ -516,7 +527,7 @@ class Xrefs(DatabaseEntity):
 
         # Use xrefblk_t to check for any xref
         xb = ida_xref.xrefblk_t()
-        return xb.first_from(ea, ida_xref.XREF_ALL)
+        return cast(bool, xb.first_from(ea, ida_xref.XREF_ALL))
 
     def has_code_refs_to(self, ea: ea_t) -> bool:
         """
@@ -543,7 +554,7 @@ class Xrefs(DatabaseEntity):
 
         # Use xrefblk_t to check for code xref
         xb = ida_xref.xrefblk_t()
-        return xb.first_to(ea, ida_xref.XREF_CODE)
+        return cast(bool, xb.first_to(ea, ida_xref.XREF_CODE))
 
     def has_data_refs_to(self, ea: ea_t) -> bool:
         """
@@ -570,7 +581,7 @@ class Xrefs(DatabaseEntity):
 
         # Use xrefblk_t to check for data xref
         xb = ida_xref.xrefblk_t()
-        return xb.first_to(ea, ida_xref.XREF_DATA)
+        return cast(bool, xb.first_to(ea, ida_xref.XREF_DATA))
 
     def count_refs_to(self, ea: ea_t, flags: XrefsFlags = XrefsFlags.ALL) -> int:
         """

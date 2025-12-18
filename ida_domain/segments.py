@@ -8,7 +8,7 @@ import ida_segment
 import idautils
 from ida_idaapi import ea_t
 from ida_segment import segment_t
-from typing_extensions import TYPE_CHECKING, Iterator, Optional
+from typing_extensions import TYPE_CHECKING, Iterator, Optional, cast
 
 from .base import DatabaseEntity, InvalidEAError, check_db_open, decorate_all_methods
 
@@ -140,7 +140,7 @@ class Segments(DatabaseEntity):
         Returns:
             The segment name as a string, or an empty string if unavailable.
         """
-        return ida_segment.get_segm_name(segment)
+        return cast(str, ida_segment.get_segm_name(segment))
 
     def set_name(self, segment: segment_t, name: str) -> bool:
         """
@@ -153,7 +153,7 @@ class Segments(DatabaseEntity):
         Returns:
             True if the rename operation succeeded, False otherwise.
         """
-        return ida_segment.set_segm_name(segment, name)
+        return cast(bool, ida_segment.set_segm_name(segment, name))
 
     def __len__(self) -> int:
         """
@@ -162,7 +162,7 @@ class Segments(DatabaseEntity):
         Returns:
             The total count of segments.
         """
-        return ida_segment.get_segm_qty()
+        return cast(int, ida_segment.get_segm_qty())
 
     def get_all(self) -> Iterator[segment_t]:
         """
@@ -228,7 +228,7 @@ class Segments(DatabaseEntity):
         """
         if not segment:
             return -1
-        return ida_segment.get_segm_num(segment.start_ea)
+        return cast(int, ida_segment.get_segm_num(segment.start_ea))
 
     def get_first(self) -> Optional[segment_t]:
         """
@@ -440,11 +440,11 @@ class Segments(DatabaseEntity):
         Returns:
             True if successful, False otherwise.
         """
-        return ida_segment.set_segm_addressing(segment, int(mode))
+        return cast(bool, ida_segment.set_segm_addressing(segment, int(mode)))
 
     def get_size(self, segment: segment_t) -> int:
         """Calculate segment size in bytes."""
-        return segment.end_ea - segment.start_ea
+        return cast(int, segment.end_ea - segment.start_ea)
 
     def get_bitness(self, segment: segment_t) -> int:
         """Get segment bitness (16/32/64)."""
@@ -572,7 +572,7 @@ class Segments(DatabaseEntity):
         else:
             sclass_str = sclass or ''
 
-        return ida_segment.set_segm_class(segment, sclass_str) != 0
+        return cast(bool, ida_segment.set_segm_class(segment, sclass_str) != 0)
 
     def set_start(self, segment: segment_t, new_start: ea_t, keep_data: bool = True) -> bool:
         """
@@ -600,7 +600,7 @@ class Segments(DatabaseEntity):
             raise InvalidEAError(new_start)
 
         flags = ida_segment.SEGMOD_KEEP if keep_data else ida_segment.SEGMOD_KILL
-        return ida_segment.set_segm_start(segment.start_ea, new_start, flags)
+        return cast(bool, ida_segment.set_segm_start(segment.start_ea, new_start, flags))
 
     def set_end(self, segment: segment_t, new_end: ea_t, keep_data: bool = True) -> bool:
         """
@@ -628,7 +628,7 @@ class Segments(DatabaseEntity):
             raise InvalidEAError(new_end)
 
         flags = ida_segment.SEGMOD_KEEP if keep_data else ida_segment.SEGMOD_KILL
-        return ida_segment.set_segm_end(segment.start_ea, new_end, flags)
+        return cast(bool, ida_segment.set_segm_end(segment.start_ea, new_end, flags))
 
     def delete(self, segment: segment_t, keep_data: bool = False) -> bool:
         """
@@ -647,7 +647,7 @@ class Segments(DatabaseEntity):
             ...     print("Debug segment removed")
         """
         flags = ida_segment.SEGMOD_KEEP if keep_data else ida_segment.SEGMOD_KILL
-        return ida_segment.del_segm(segment.start_ea, flags)
+        return cast(bool, ida_segment.del_segm(segment.start_ea, flags))
 
     def update(self, segment: segment_t) -> bool:
         """
@@ -667,7 +667,7 @@ class Segments(DatabaseEntity):
             >>> seg.perm = SegmentPermissions.READ | SegmentPermissions.EXEC
             >>> db.segments.update(seg)  # Commit the changes
         """
-        return ida_segment.update_segm(segment)
+        return cast(bool, ida_segment.update_segm(segment))
 
     def move(
         self, segment: segment_t, to: ea_t, fix_relocations: bool = True
@@ -748,4 +748,4 @@ class Segments(DatabaseEntity):
             >>> if db.segments.is_visible(seg):
             ...     print("Segment is visible in disassembly")
         """
-        return ida_segment.is_visible_segm(segment)
+        return cast(bool, ida_segment.is_visible_segm(segment))

@@ -7,7 +7,7 @@ import ida_ida
 import ida_idaapi
 import idc
 from ida_idaapi import ea_t
-from typing_extensions import TYPE_CHECKING, Iterator, Optional
+from typing_extensions import TYPE_CHECKING, Iterator, Optional, cast
 
 from .base import (
     DatabaseEntity,
@@ -131,7 +131,7 @@ class Heads(DatabaseEntity):
         if not self.database.is_valid_ea(ea, strict_check=False):
             raise InvalidEAError(ea)
 
-        return idc.is_head(ida_bytes.get_flags(ea))
+        return cast(bool, idc.is_head(ida_bytes.get_flags(ea)))
 
     def is_tail(self, ea: ea_t) -> bool:
         """
@@ -149,7 +149,7 @@ class Heads(DatabaseEntity):
         if not self.database.is_valid_ea(ea, strict_check=False):
             raise InvalidEAError(ea)
 
-        return idc.is_tail(ida_bytes.get_flags(ea))
+        return cast(bool, idc.is_tail(ida_bytes.get_flags(ea)))
 
     def size(self, ea: ea_t) -> int:
         """
@@ -171,7 +171,7 @@ class Heads(DatabaseEntity):
         if not self.is_head(ea):
             raise InvalidParameterError('ea', ea, 'must be a head address')
 
-        return ida_bytes.get_item_size(ea)
+        return cast(int, ida_bytes.get_item_size(ea))
 
     def bounds(self, ea: ea_t) -> tuple[ea_t, ea_t]:
         """
@@ -214,7 +214,7 @@ class Heads(DatabaseEntity):
         if not self.database.is_valid_ea(ea, strict_check=False):
             raise InvalidEAError(ea)
 
-        return idc.is_code(ida_bytes.get_flags(ea))
+        return cast(bool, idc.is_code(ida_bytes.get_flags(ea)))
 
     def is_data(self, ea: ea_t) -> bool:
         """
@@ -232,7 +232,7 @@ class Heads(DatabaseEntity):
         if not self.database.is_valid_ea(ea, strict_check=False):
             raise InvalidEAError(ea)
 
-        return idc.is_data(ida_bytes.get_flags(ea))
+        return cast(bool, idc.is_data(ida_bytes.get_flags(ea)))
 
     def is_unknown(self, ea: ea_t) -> bool:
         """

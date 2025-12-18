@@ -8,7 +8,7 @@ import ida_bytes
 import ida_nalt
 import ida_strlist
 from ida_idaapi import ea_t
-from typing_extensions import TYPE_CHECKING, Iterator, Optional, Tuple, Union
+from typing_extensions import TYPE_CHECKING, Iterator, Optional, Tuple, Union, cast
 
 from .base import (
     DatabaseEntity,
@@ -68,14 +68,16 @@ class StringItem:
         Returns internal IDA string encoding, e.g. 'iso-8859-1'.
         Note that retrieved string contents will always be utf-8 encoded.
         """
-        return ida_nalt.encoding_from_strtype(self.internal_type)
+        return cast(str, ida_nalt.encoding_from_strtype(self.internal_type))
 
     @property
     def contents(self) -> bytes:
         """
         Returns utf-8 encoded string contents.
         """
-        return ida_bytes.get_strlit_contents(self.address, self.length, self.internal_type)
+        return cast(
+            bytes, ida_bytes.get_strlit_contents(self.address, self.length, self.internal_type)
+        )
 
     def __str__(self) -> str:
         return self.contents.decode('utf-8')
@@ -122,7 +124,7 @@ class Strings(DatabaseEntity):
         """
         Returns the total number of extracted strings.
         """
-        return ida_strlist.get_strlist_qty()
+        return cast(int, ida_strlist.get_strlist_qty())
 
     def get_at_index(self, index: int) -> StringItem:
         """
