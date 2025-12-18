@@ -835,3 +835,167 @@ class Analysis(DatabaseEntity):
             is_complete: Preferred property (inverse of this method)
         """
         return not self.is_complete
+
+    # ========================================================================
+    # ADVANCED OPERATIONS
+    # ========================================================================
+
+    def show_addr(self, ea: ea_t) -> None:
+        """
+        Show an address on the autoanalysis indicator.
+
+        This method updates the IDA UI auto-analysis indicator to display
+        a specific address. The address is displayed in the form @:12345678.
+        This is primarily for UI display purposes and is rarely needed in
+        scripts.
+
+        Args:
+            ea: Address to display on indicator
+
+        Raises:
+            InvalidEAError: If address is invalid
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Show address on UI indicator
+            >>> db.analysis.show_addr(0x401000)
+
+        Note:
+            This is a UI-only function and does not affect analysis behavior.
+            Most scripts should use show_auto() for more control.
+
+        See Also:
+            show_auto: More flexible method with queue type parameter
+            noshow_auto: To hide the indicator
+        """
+        # Validate address
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        # Show address on UI indicator
+        ida_auto.show_addr(ea)
+
+    def reanalyze_function_callers(
+        self, func_ea: ea_t, function_noreturn: bool = False
+    ) -> None:
+        """
+        Schedule reanalysis of all instructions that call the specified function.
+
+        Use this after changing a function's prototype or attributes (such as
+        marking it as noreturn) to ensure all call sites are updated with the
+        new information. This adds all caller instructions to the AU_USED queue
+        for reanalysis.
+
+        Args:
+            func_ea: Address of function whose callers should be reanalyzed
+            function_noreturn: If True, indicates the function doesn't return,
+                which affects control flow analysis at call sites
+
+        Raises:
+            InvalidEAError: If func_ea is invalid
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Change function to noreturn
+            >>> func = db.functions.get_at(0x401000)
+            >>> # ... mark function as noreturn ...
+            >>> # Reanalyze all callers to update flow analysis
+            >>> db.analysis.reanalyze_function_callers(0x401000, function_noreturn=True)
+            >>> db.analysis.wait_for_completion()
+
+        Note:
+            If function_noreturn is True, IDA will mark instructions after
+            call sites for removal since the function doesn't return.
+        """
+        # Validate address
+        if not self.database.is_valid_ea(func_ea):
+            raise InvalidEAError(func_ea)
+
+        # Reanalyze all callers
+        ida_auto.reanalyze_callers(func_ea, function_noreturn)
+
+    def recreate_instruction(self, ea: ea_t) -> bool:
+        """
+        Delete and recreate instruction at address.
+
+        Forces IDA to discard the current instruction and re-decode it from
+        scratch. This is useful when the instruction decoding is incorrect
+        or after manually modifying the bytes at the address.
+
+        Args:
+            ea: Address of instruction to recreate
+
+        Returns:
+            True if instruction was successfully recreated (length > 0),
+            False if instruction creation failed
+
+        Raises:
+            InvalidEAError: If address is invalid
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Modify bytes manually
+            >>> db.bytes.patch_byte(0x401000, 0x90)
+            >>> # Force instruction recreation
+            >>> if db.analysis.recreate_instruction(0x401000):
+            ...     print("Instruction recreated successfully")
+            >>> else:
+            ...     print("Failed to recreate instruction")
+
+        Note:
+            This function calls auto_recreate_insn() which returns the new
+            instruction length, or 0 if recreation failed.
+        """
+        # Validate address
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        # Recreate instruction - returns length (>0 on success, 0 on failure)
+        result = ida_auto.auto_recreate_insn(ea)
+
+        # Result > 0 means success
+        return bool(result > 0)
+
+    def revert_analysis(self, start: ea_t, end: ea_t) -> None:
+        """
+        Revert IDA's analysis decisions for an address range.
+
+        Eliminates all analysis information that IDA generated for the
+        specified range, effectively converting analyzed code/data back
+        to unexplored bytes. This is useful when IDA's automatic analysis
+        made incorrect decisions.
+
+        Args:
+            start: Start address of range
+            end: End address of range (exclusive)
+
+        Raises:
+            InvalidEAError: If start or end address is invalid
+            InvalidParameterError: If start >= end
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Revert incorrect analysis
+            >>> db.analysis.revert_analysis(0x401000, 0x402000)
+            >>> # Now you can re-analyze the range manually
+            >>> db.analysis.analyze_range(0x401000, 0x402000)
+
+        Warning:
+            This operation destroys all analysis information in the range,
+            including functions, names, comments, and type information.
+            Use with caution.
+
+        Note:
+            After reverting, you typically want to re-analyze the range
+            with different parameters or manual intervention.
+        """
+        # Validate inputs
+        if not self.database.is_valid_ea(start):
+            raise InvalidEAError(start)
+        if not self.database.is_valid_ea(end):
+            raise InvalidEAError(end)
+        if start >= end:
+            raise InvalidParameterError('start', start, 'must be less than end')
+
+        # Revert IDA decisions for the range
+        ida_auto.revert_ida_decisions(start, end)
