@@ -235,6 +235,30 @@ class Imports(DatabaseEntity):
 
         return None
 
+    def get_module_names(self) -> list[str]:
+        """
+        Retrieves a list of all import module names.
+
+        Returns:
+            List of module name strings in import table order
+
+        Example:
+            >>> modules = db.imports.get_module_names()
+            >>> print("Dependencies:", ", ".join(modules))
+            >>> # Check for specific modules
+            >>> if "ntdll.dll" in modules:
+            ...     print("Uses native NT APIs")
+        """
+        names = []
+        count = ida_nalt.get_import_module_qty()
+
+        for i in range(count):
+            module_name = ida_nalt.get_import_module_name(i)
+            if module_name:
+                names.append(module_name)
+
+        return names
+
     def get_entries_by_module(self, module_index: int) -> Iterator[ImportEntry]:
         """
         Retrieves all import entries from a specific module.

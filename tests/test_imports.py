@@ -512,6 +512,57 @@ def test_imports_find_by_name_case_insensitive_module(imports_db):
     )
 
 
+def test_imports_get_module_names(imports_db):
+    """
+    Test getting list of all module names.
+
+    RATIONALE: The get_module_names() method provides a convenient way to get
+    a flat list of all imported module names. This is useful for:
+    - Quick dependency checks (e.g., "if 'ws2_32.dll' in db.imports.get_module_names()")
+    - Generating dependency reports
+    - Comparing imports across multiple binaries
+
+    Unlike __iter__() which returns ImportModule objects with full metadata,
+    get_module_names() returns just the names as strings, which is lighter-weight
+    and more convenient for simple name-based operations.
+
+    This test validates:
+    - Returns a list (not iterator) of strings
+    - List length matches module count
+    - Each name is non-empty
+    - Names match those from iteration
+    - Order matches import table order
+    """
+    count = len(imports_db.imports)
+
+    if count == 0:
+        pytest.skip("Test binary has no imports")
+
+    # Get module names
+    names = imports_db.imports.get_module_names()
+
+    # Should be a list, not iterator
+    assert isinstance(names, list), "get_module_names should return a list"
+
+    # Length should match module count
+    assert len(names) == count, (
+        f"get_module_names() should return {count} names, got {len(names)}"
+    )
+
+    # Each name should be a non-empty string
+    for name in names:
+        assert isinstance(name, str), "Each module name should be a string"
+        assert len(name) > 0, "Module names should not be empty"
+
+    # Names should match iteration order
+    modules = list(imports_db.imports)
+    for i, (name, module) in enumerate(zip(names, modules)):
+        assert name == module.name, (
+            f"Module name at index {i} should match: "
+            f"got '{name}', expected '{module.name}'"
+        )
+
+
 def test_imports_empty_database():
     """
     Test Imports entity behavior with an empty/minimal database.
