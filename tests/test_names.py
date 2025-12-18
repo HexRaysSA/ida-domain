@@ -368,6 +368,64 @@ class TestNamesVisibleName:
 class TestNamesValidation:
     """Tests for name validation."""
 
+    def test_is_valid_name_accepts_valid_identifier(self, test_env):
+        """
+        Test that is_valid_name returns True for valid user-defined names.
+
+        RATIONALE: The primary purpose of is_valid_name is to validate user-defined
+        identifiers before setting them as names in the database. A standard C-style
+        identifier with underscores should be accepted. This validates the core
+        functionality and happy path of the method.
+        """
+        assert test_env.names.is_valid_name("my_function") is True, \
+            "Valid C identifier should be accepted"
+        assert test_env.names.is_valid_name("MyClass") is True, \
+            "CamelCase identifier should be accepted"
+        assert test_env.names.is_valid_name("_private_var") is True, \
+            "Identifier starting with underscore should be accepted"
+        assert test_env.names.is_valid_name("var123") is True, \
+            "Identifier with digits should be accepted"
+
+    def test_is_valid_name_rejects_empty_string(self, test_env):
+        """
+        Test that is_valid_name returns False for empty strings.
+
+        RATIONALE: Empty strings are not valid names in IDA. This edge case must
+        be handled correctly to prevent errors when users or scripts attempt to
+        validate potentially empty input.
+        """
+        assert test_env.names.is_valid_name("") is False, \
+            "Empty string should not be valid"
+
+    def test_is_valid_name_rejects_invalid_characters(self, test_env):
+        """
+        Test that is_valid_name returns False for names with invalid characters.
+
+        RATIONALE: IDA names must follow IDA's identifier rules. Spaces are clearly
+        not allowed. This test ensures the method correctly rejects invalid inputs.
+        Note that IDA is permissive with many special characters (dots, @, $, etc.)
+        to support mangled names, namespaces, and other constructs.
+        """
+        assert test_env.names.is_valid_name("my function") is False, \
+            "Name with space should be invalid"
+        assert test_env.names.is_valid_name("my\tfunction") is False, \
+            "Name with tab should be invalid"
+        assert test_env.names.is_valid_name("my\nfunction") is False, \
+            "Name with newline should be invalid"
+
+    def test_is_valid_name_rejects_names_starting_with_digit(self, test_env):
+        """
+        Test that is_valid_name returns False for names starting with digits.
+
+        RATIONALE: C identifier rules prohibit starting with a digit. This is a
+        fundamental validation rule that must be enforced. Scripts that generate
+        names programmatically might accidentally create such names.
+        """
+        assert test_env.names.is_valid_name("123function") is False, \
+            "Name starting with digit should be invalid"
+        assert test_env.names.is_valid_name("0x401000") is False, \
+            "Hex address string should be invalid as name"
+
     def test_validate_valid_name_returns_true(self, test_env):
         """
         Test that validate returns (True, name) for valid names.
