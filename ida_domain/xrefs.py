@@ -461,3 +461,177 @@ class Xrefs(DatabaseEntity):
         for xref in self.to_ea(data_ea, XrefsFlags.DATA):
             if xref.is_write:
                 yield xref.from_ea
+
+    def has_any_refs_to(self, ea: ea_t) -> bool:
+        """
+        Check if any references to this address exist.
+
+        This is more efficient than iterating all xrefs when you only need
+        to know if at least one exists.
+
+        Args:
+            ea: Address to check
+
+        Returns:
+            True if any xrefs to this address exist, False otherwise
+
+        Raises:
+            InvalidEAError: If the effective address is invalid
+
+        Example:
+            >>> db = Database.open_current()
+            >>> if not db.xrefs.has_any_refs_to(ea):
+            ...     print("Unreferenced address (dead code/data?)")
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        # Use xrefblk_t to check for any xref
+        xb = ida_xref.xrefblk_t()
+        return xb.first_to(ea, ida_xref.XREF_ALL)
+
+    def has_any_refs_from(self, ea: ea_t) -> bool:
+        """
+        Check if any references from this address exist.
+
+        This is more efficient than iterating all xrefs when you only need
+        to know if at least one exists.
+
+        Args:
+            ea: Address to check
+
+        Returns:
+            True if any xrefs from this address exist, False otherwise
+
+        Raises:
+            InvalidEAError: If the effective address is invalid
+
+        Example:
+            >>> db = Database.open_current()
+            >>> if db.xrefs.has_any_refs_from(insn_ea):
+            ...     print("Instruction references other code/data")
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        # Use xrefblk_t to check for any xref
+        xb = ida_xref.xrefblk_t()
+        return xb.first_from(ea, ida_xref.XREF_ALL)
+
+    def has_code_refs_to(self, ea: ea_t) -> bool:
+        """
+        Check if any code references to this address exist.
+
+        This is useful for identifying unreferenced functions or code blocks.
+
+        Args:
+            ea: Address to check
+
+        Returns:
+            True if any code xrefs to this address exist, False otherwise
+
+        Raises:
+            InvalidEAError: If the effective address is invalid
+
+        Example:
+            >>> db = Database.open_current()
+            >>> if not db.xrefs.has_code_refs_to(func_ea):
+            ...     print("Function is never called (potential dead code)")
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        # Use xrefblk_t to check for code xref
+        xb = ida_xref.xrefblk_t()
+        return xb.first_to(ea, ida_xref.XREF_CODE)
+
+    def has_data_refs_to(self, ea: ea_t) -> bool:
+        """
+        Check if any data references to this address exist.
+
+        This is useful for identifying unused data or global variables.
+
+        Args:
+            ea: Address to check
+
+        Returns:
+            True if any data xrefs to this address exist, False otherwise
+
+        Raises:
+            InvalidEAError: If the effective address is invalid
+
+        Example:
+            >>> db = Database.open_current()
+            >>> if not db.xrefs.has_data_refs_to(data_ea):
+            ...     print("Data is never accessed")
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        # Use xrefblk_t to check for data xref
+        xb = ida_xref.xrefblk_t()
+        return xb.first_to(ea, ida_xref.XREF_DATA)
+
+    def count_refs_to(self, ea: ea_t, flags: XrefsFlags = XrefsFlags.ALL) -> int:
+        """
+        Count cross-references to an address.
+
+        This iterates through all xrefs and counts them. For better performance
+        when you only need to check existence, use has_any_refs_to().
+
+        Args:
+            ea: Target address
+            flags: Filter flags (default: all xrefs)
+
+        Returns:
+            Number of xrefs to this address
+
+        Raises:
+            InvalidEAError: If the effective address is invalid
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Count function callers
+            >>> num_callers = db.xrefs.count_refs_to(func_ea, XrefsFlags.CODE_NOFLOW)
+            >>> print(f"Function has {num_callers} callers")
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        # Count by iterating
+        count = 0
+        for _ in self.to_ea(ea, flags):
+            count += 1
+        return count
+
+    def count_refs_from(self, ea: ea_t, flags: XrefsFlags = XrefsFlags.ALL) -> int:
+        """
+        Count cross-references from an address.
+
+        This iterates through all xrefs and counts them. For better performance
+        when you only need to check existence, use has_any_refs_from().
+
+        Args:
+            ea: Source address
+            flags: Filter flags (default: all xrefs)
+
+        Returns:
+            Number of xrefs from this address
+
+        Raises:
+            InvalidEAError: If the effective address is invalid
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Count instruction references
+            >>> num_refs = db.xrefs.count_refs_from(insn_ea)
+            >>> print(f"Instruction has {num_refs} references")
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        # Count by iterating
+        count = 0
+        for _ in self.from_ea(ea, flags):
+            count += 1
+        return count
