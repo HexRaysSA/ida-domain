@@ -28,6 +28,7 @@ from .hooks import HooksList  # type: ignore
 from .imports import Imports
 from .instructions import Instructions
 from .names import Names
+from .problems import Problems
 from .search import Search
 from .segments import Segments
 from .signature_files import SignatureFiles
@@ -967,6 +968,11 @@ class Database:
     def switches(self) -> Switches:
         """Handler that provides access to switch statement operations."""
         return Switches(self)
+
+    @property
+    def problems(self) -> Problems:
+        """Handler that provides access to problem list operations."""
+        return Problems(self)
 
     @property
     def hooks(self) -> HooksList:
