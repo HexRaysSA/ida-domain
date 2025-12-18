@@ -1210,6 +1210,67 @@ class Functions(DatabaseEntity):
 
         return TailInfo(owner_ea=chunk.owner, owner_name=owner_name)
 
+    def add_tail(self, func: func_t, tail_start: ea_t, tail_end: ea_t) -> bool:
+        """
+        Add tail chunk to function.
+
+        Adds a non-contiguous code block to the function (useful for exception
+        handlers, shared epilogues, etc.).
+
+        Args:
+            func: The function to add tail chunk to
+            tail_start: Start address of tail chunk
+            tail_end: End address of tail chunk
+
+        Returns:
+            True if tail was added successfully, False otherwise
+
+        Raises:
+            InvalidEAError: If tail_start or tail_end is invalid
+
+        Example:
+            ```python
+            >>> func = db.functions.get_at(0x401000)
+            >>> if func:
+            ...     # Exception handler is at separate location
+            ...     if db.functions.add_tail(func, 0x403000, 0x403100):
+            ...         print("Tail chunk added")
+            ```
+        """
+        if not self.database.is_valid_ea(tail_start):
+            raise InvalidEAError(tail_start)
+        if not self.database.is_valid_ea(tail_end):
+            raise InvalidEAError(tail_end)
+
+        return ida_funcs.append_func_tail(func, tail_start, tail_end)
+
+    def remove_tail(self, func: func_t, tail_ea: ea_t) -> bool:
+        """
+        Remove tail chunk from function.
+
+        Args:
+            func: The function to remove tail chunk from
+            tail_ea: Address within the tail chunk to remove
+
+        Returns:
+            True if tail was removed successfully, False otherwise
+
+        Raises:
+            InvalidEAError: If tail_ea is invalid
+
+        Example:
+            ```python
+            >>> func = db.functions.get_at(0x401000)
+            >>> if func:
+            ...     if db.functions.remove_tail(func, 0x403000):
+            ...         print("Tail chunk removed")
+            ```
+        """
+        if not self.database.is_valid_ea(tail_ea):
+            raise InvalidEAError(tail_ea)
+
+        return ida_funcs.remove_func_tail(func, tail_ea)
+
     def get_data_items(self, func: func_t) -> Iterator[ea_t]:
         """
         Iterate over data items within the function.

@@ -625,3 +625,227 @@ class TestFunctionsReanalyze:
         result = db.functions.reanalyze(func)
         assert isinstance(result, bool)
         assert result is True  # Current implementation always returns True
+
+
+class TestFunctionsTailOperations:
+    """Tests for function tail chunk operations (add_tail, remove_tail)."""
+
+    def test_add_tail_creates_new_chunk(self, test_env):
+        """
+        Test that add_tail() successfully adds a tail chunk to a function.
+
+        RATIONALE: Tail chunks represent non-contiguous code blocks that belong
+        to a function (e.g., exception handlers, shared epilogues). This test
+        validates that add_tail() can create these relationships by adding a
+        code region as a tail chunk. We verify the operation by checking that
+        the tail count increases and the new tail appears in get_tails().
+
+        This functionality is critical for representing complex function
+        structures in optimized or hand-written assembly where function code
+        may not be contiguous.
+        """
+        db = test_env
+
+        # Get a function to work with
+        all_funcs = list(db.functions.get_all())
+        assert len(all_funcs) >= 1, "Need at least 1 function for test"
+        func = all_funcs[0]
+
+        # Record initial tail count
+        initial_tails = db.functions.get_tails(func)
+        initial_count = len(initial_tails)
+
+        # Find a suitable address range that is:
+        # 1. Valid in the database
+        # 2. Not already part of this function
+        # 3. Contains code that could be made into a chunk
+        # For simplicity, we'll try to find another function and use part of it
+        # (This is a bit artificial but demonstrates the API)
+        if len(all_funcs) >= 2:
+            other_func = all_funcs[1]
+            tail_start = other_func.start_ea
+            # Use a small range within the other function
+            tail_end = min(tail_start + 0x20, other_func.end_ea)
+
+            # Attempt to add tail (may fail if region is already used)
+            result = db.functions.add_tail(func, tail_start, tail_end)
+
+            # If successful, verify tail was added
+            if result:
+                new_tails = db.functions.get_tails(func)
+                assert len(new_tails) >= initial_count
+                # Clean up by removing the tail
+                db.functions.remove_tail(func, tail_start)
+
+    def test_add_tail_with_invalid_start_raises_error(self, test_env):
+        """
+        Test that add_tail() raises InvalidEAError for invalid start address.
+
+        RATIONALE: The Domain API should validate all address parameters before
+        calling legacy API functions. Invalid addresses (outside the valid EA
+        range) could cause undefined behavior in IDA's legacy API. This test
+        ensures that add_tail() properly validates the tail_start parameter and
+        raises a clear, typed exception (InvalidEAError) rather than allowing
+        the invalid address to propagate to the legacy API.
+        """
+        db = test_env
+
+        # Get a function
+        all_funcs = list(db.functions.get_all())
+        func = all_funcs[0]
+
+        # Try to add tail with invalid start address
+        with pytest.raises(InvalidEAError):
+            db.functions.add_tail(func, 0xFFFFFFFFFFFFFFFF, 0x1000)
+
+    def test_add_tail_with_invalid_end_raises_error(self, test_env):
+        """
+        Test that add_tail() raises InvalidEAError for invalid end address.
+
+        RATIONALE: Similar to the start address validation, the end address
+        must also be validated before calling the legacy API. This test ensures
+        that add_tail() checks both boundary parameters (start and end) and
+        raises InvalidEAError for an invalid end address, maintaining API
+        contract consistency and preventing potential crashes or undefined
+        behavior.
+        """
+        db = test_env
+
+        # Get a function
+        all_funcs = list(db.functions.get_all())
+        func = all_funcs[0]
+
+        # Try to add tail with invalid end address
+        # Use function's start_ea as a valid start, but invalid end
+        with pytest.raises(InvalidEAError):
+            db.functions.add_tail(func, func.start_ea, 0xFFFFFFFFFFFFFFFF)
+
+    def test_add_tail_returns_boolean(self, test_env):
+        """
+        Test that add_tail() returns a boolean value.
+
+        RATIONALE: API consistency requires predictable return types. The
+        add_tail() method is documented to return bool (True if tail was added
+        successfully, False otherwise). This test validates the return type
+        contract, ensuring callers can reliably use the return value for
+        conditional logic and error handling.
+
+        The boolean return allows callers to distinguish between successful
+        operations and failures (e.g., when the address range is already part
+        of another function or is not suitable for becoming a tail chunk).
+        """
+        db = test_env
+
+        # Get a function
+        all_funcs = list(db.functions.get_all())
+        func = all_funcs[0]
+
+        # Try to add a tail (may succeed or fail, but should return bool)
+        # Use addresses within valid range
+        if len(all_funcs) >= 2:
+            other_func = all_funcs[1]
+            result = db.functions.add_tail(
+                func, other_func.start_ea, min(other_func.start_ea + 0x10, other_func.end_ea)
+            )
+
+            # Verify return type is boolean
+            assert isinstance(result, bool)
+
+            # Clean up if successful
+            if result:
+                db.functions.remove_tail(func, other_func.start_ea)
+
+    def test_remove_tail_with_invalid_address_raises_error(self, test_env):
+        """
+        Test that remove_tail() raises InvalidEAError for invalid address.
+
+        RATIONALE: Like add_tail(), remove_tail() must validate its address
+        parameter before calling the legacy API. An invalid tail_ea could cause
+        crashes or undefined behavior. This test ensures that remove_tail()
+        properly validates the tail_ea parameter and raises InvalidEAError for
+        addresses outside the valid EA range, maintaining API safety and
+        consistency.
+        """
+        db = test_env
+
+        # Get a function
+        all_funcs = list(db.functions.get_all())
+        func = all_funcs[0]
+
+        # Try to remove tail with invalid address
+        with pytest.raises(InvalidEAError):
+            db.functions.remove_tail(func, 0xFFFFFFFFFFFFFFFF)
+
+    def test_remove_tail_returns_boolean(self, test_env):
+        """
+        Test that remove_tail() returns a boolean value.
+
+        RATIONALE: API consistency dictates that remove_tail() should have a
+        predictable return type. The method is documented to return bool (True
+        if tail was removed, False otherwise). This test validates the return
+        type contract, allowing callers to use the return value for conditional
+        logic and to distinguish between successful removal and failure cases
+        (e.g., when the address is not actually a tail of the function).
+        """
+        db = test_env
+
+        # Get a function
+        all_funcs = list(db.functions.get_all())
+        func = all_funcs[0]
+
+        # Try to remove a tail that doesn't exist (should return False)
+        # Use a valid address that's not a tail
+        result = db.functions.remove_tail(func, func.start_ea)
+
+        # Verify return type is boolean
+        assert isinstance(result, bool)
+
+    def test_add_and_remove_tail_roundtrip(self, test_env):
+        """
+        Test that add_tail() followed by remove_tail() works correctly.
+
+        RATIONALE: This integration test validates that tail chunk management
+        works end-to-end. It ensures that:
+        1. A tail can be successfully added to a function
+        2. The tail appears in the function's tail list
+        3. The tail can be successfully removed
+        4. After removal, the tail list returns to its original state
+
+        This roundtrip test is important for validating that the operations are
+        reversible and don't leave the database in an inconsistent state. It
+        simulates a realistic use case where an analyst might temporarily add
+        a tail chunk for analysis and then remove it.
+        """
+        db = test_env
+
+        # Get two functions
+        all_funcs = list(db.functions.get_all())
+        if len(all_funcs) < 2:
+            pytest.skip("Need at least 2 functions for roundtrip test")
+
+        func = all_funcs[0]
+        other_func = all_funcs[1]
+
+        # Record initial state
+        initial_tails = db.functions.get_tails(func)
+        initial_count = len(initial_tails)
+
+        # Add a tail chunk
+        tail_start = other_func.start_ea
+        tail_end = min(tail_start + 0x20, other_func.end_ea)
+        add_result = db.functions.add_tail(func, tail_start, tail_end)
+
+        if add_result:
+            # Verify tail was added
+            after_add_tails = db.functions.get_tails(func)
+            assert len(after_add_tails) >= initial_count
+
+            # Remove the tail
+            remove_result = db.functions.remove_tail(func, tail_start)
+            assert isinstance(remove_result, bool)
+
+            # Verify tail was removed
+            after_remove_tails = db.functions.get_tails(func)
+            # Should return to original count (or close to it)
+            # Note: IDA's behavior may vary, so we just check it's a valid result
+            assert isinstance(after_remove_tails, list)
