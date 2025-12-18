@@ -521,3 +521,100 @@ class Analysis(DatabaseEntity):
 
         # Remove from specified queue
         ida_auto.auto_unmark(start, end, queue_type.value)
+
+    # ========================================================================
+    # LEGACY API COMPATIBILITY METHODS
+    # ========================================================================
+
+    def auto_wait(self) -> bool:
+        """
+        Wait until all analysis queues are empty (legacy API compatibility).
+
+        This is a legacy API compatibility method that directly maps to
+        wait_for_completion(). New code should prefer wait_for_completion()
+        for clarity.
+
+        Returns:
+            True if analysis completed successfully
+
+        Example:
+            >>> db = Database.open_current()
+            >>> db.analysis.auto_wait()  # Same as wait_for_completion()
+
+        See Also:
+            wait_for_completion: Preferred method with clearer name
+        """
+        return self.wait_for_completion()
+
+    def plan_and_wait(self, start: ea_t, end: ea_t) -> int:
+        """
+        Analyze address range and wait for completion (legacy API compatibility).
+
+        This is a legacy API compatibility method that directly maps to
+        analyze_range(start, end, wait=True). New code should prefer
+        analyze_range() for more control.
+
+        Args:
+            start: Start address of range to analyze
+            end: End address of range (exclusive)
+
+        Returns:
+            Number of addresses processed
+
+        Raises:
+            InvalidEAError: If start or end address is invalid
+            InvalidParameterError: If start >= end
+
+        Example:
+            >>> db = Database.open_current()
+            >>> count = db.analysis.plan_and_wait(0x401000, 0x402000)
+            >>> print(f"Analyzed {count} addresses")
+
+        See Also:
+            analyze_range: Preferred method with wait parameter control
+        """
+        return self.analyze_range(start, end, wait=True)
+
+    def auto_is_ok(self) -> bool:
+        """
+        Check if all analysis queues are empty (legacy API compatibility).
+
+        This is a legacy API compatibility method that directly maps to the
+        is_complete property. New code should prefer is_complete for clarity.
+
+        Returns:
+            True if analysis is complete, False if queues have pending items
+
+        Example:
+            >>> db = Database.open_current()
+            >>> if db.analysis.auto_is_ok():
+            ...     print("Analysis finished")
+
+        See Also:
+            is_complete: Preferred property with clearer name
+        """
+        return self.is_complete
+
+    def get_auto_state(self) -> AnalysisState:
+        """
+        Get current analyzer state (legacy API compatibility).
+
+        This is a legacy API compatibility method that directly maps to the
+        current_state property. New code should prefer current_state for
+        clarity.
+
+        Returns:
+            Current state of the analyzer
+
+        Example:
+            >>> db = Database.open_current()
+            >>> state = db.analysis.get_auto_state()
+            >>> if state.is_complete:
+            ...     print("Idle")
+            ... else:
+            ...     print(f"Processing {state.queue_type.name}")
+
+        See Also:
+            current_state: Preferred property with clearer name
+        """
+        return self.current_state
