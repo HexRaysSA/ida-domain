@@ -30,6 +30,7 @@ from .names import Names
 from .search import Search
 from .segments import Segments
 from .signature_files import SignatureFiles
+from .stack_frames import StackFrames
 from .strings import Strings
 from .types import Types
 from .xrefs import Xrefs
@@ -949,6 +950,11 @@ class Database:
     def search(self) -> Search:
         """Handler that provides access to search operations."""
         return Search(self)
+
+    @property
+    def stack_frames(self) -> StackFrames:
+        """Handler that provides access to stack frame operations."""
+        return StackFrames(self)
 
     @property
     def hooks(self) -> HooksList:

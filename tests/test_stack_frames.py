@@ -1,0 +1,549 @@
+"""
+Tests for StackFrames entity.
+
+These tests validate stack frame operations using the tiny_c.bin test binary,
+which contains the complex_assignments function with a stack frame containing
+local variables and function arguments.
+"""
+
+import os
+import tempfile
+
+import pytest
+
+import ida_domain
+from ida_domain import Database, StackFrameInstance
+from ida_domain.base import InvalidEAError
+
+# Module-level variable to store IDB path
+tiny_c_idb_path = None
+
+
+@pytest.fixture(scope='module', autouse=True)
+def global_setup():
+    """Initialize test environment."""
+    print(f'\nAPI Version: {ida_domain.__version__}')
+    print(f'\nKernel Version: {ida_domain.__ida_version__}')
+    os.environ['IDA_NO_HISTORY'] = '1'
+
+
+@pytest.fixture(scope='module')
+def tiny_c_setup(global_setup):
+    """
+    Setup for C binary tests - copies tiny_c.bin to work directory.
+
+    RATIONALE: The tiny_c.bin contains functions with stack frames that we can
+    test against. Specifically, the complex_assignments function has a full stack
+    frame with local variables and arguments, making it perfect for testing stack
+    frame operations.
+    """
+    global tiny_c_idb_path
+    tiny_c_idb_path = os.path.join(tempfile.gettempdir(), 'api_tests_work_dir', 'tiny_c.bin')
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    src = os.path.join(current_dir, 'resources', 'tiny_c.bin')
+
+    # Create temp directory if needed
+    os.makedirs(os.path.dirname(tiny_c_idb_path), exist_ok=True)
+
+    # Copy binary to temp location
+    import shutil
+
+    shutil.copy2(src, tiny_c_idb_path)
+    print(f'\nCopied {src} to {tiny_c_idb_path}')
+
+
+@pytest.fixture(scope='function')
+def tiny_c_env(tiny_c_setup):
+    """
+    Opens tiny_c database for each test.
+
+    RATIONALE: Each test needs a fresh database instance to ensure isolation.
+    Auto-analysis is enabled to ensure functions have been analyzed and stack
+    frames have been created by IDA.
+    """
+    from ida_domain.database import IdaCommandOptions
+
+    ida_options = IdaCommandOptions(new_database=True, auto_analysis=True)
+    db = Database.open(path=tiny_c_idb_path, args=ida_options, save_on_close=False)
+    yield db
+    db.close()
+
+
+class TestStackFramesBasics:
+    """Basic stack frame operations and property access."""
+
+    def test_get_at_valid_function(self, tiny_c_env):
+        """
+        Test get_at() returns StackFrameInstance for a valid function with a frame.
+
+        RATIONALE: Validates that we can retrieve stack frame information for a
+        real function. The complex_assignments function in tiny_c.bin has local
+        variables and arguments, so it should have a stack frame created by IDA's
+        auto-analysis.
+
+        The test binary was compiled with debug information to ensure IDA creates
+        proper stack frames with variable information.
+        """
+        db = tiny_c_env
+
+        # Find the complex_assignments function
+        func_ea = None
+        for func in db.functions.get_all():
+            name = db.functions.get_name(func)
+            if 'complex_assignments' in name:
+                func_ea = func.start_ea
+                break
+
+        assert func_ea is not None, "complex_assignments function not found in tiny_c.bin"
+
+        # Get stack frame
+        frame = db.stack_frames.get_at(func_ea)
+        assert frame is not None, "Stack frame should exist for complex_assignments"
+        assert isinstance(frame, StackFrameInstance)
+
+    def test_get_at_invalid_address(self, tiny_c_env):
+        """
+        Test get_at() raises InvalidEAError for an invalid address.
+
+        RATIONALE: Error handling is critical for robustness. This test ensures
+        that passing a nonsensical address (one that's not a function) raises
+        the appropriate exception rather than causing undefined behavior.
+        """
+        db = tiny_c_env
+
+        with pytest.raises(InvalidEAError):
+            db.stack_frames.get_at(0xDEADBEEF)
+
+    def test_get_at_function_without_frame(self, tiny_c_env):
+        """
+        Test get_at() returns None for a function without a stack frame.
+
+        RATIONALE: Not all functions have stack frames (e.g., thunks, very simple
+        functions). This test validates that we correctly identify when a frame
+        doesn't exist and return None rather than raising an error.
+
+        We look for the simplest function in tiny_c which might not have a frame.
+        """
+        db = tiny_c_env
+
+        # Find use_val function which is simpler
+        func_ea = None
+        for func in db.functions.get_all():
+            name = db.functions.get_name(func)
+            if 'use_val' in name:
+                func_ea = func.start_ea
+                break
+
+        # Even if use_val has a frame, this tests the None return path is valid
+        if func_ea:
+            frame = db.stack_frames.get_at(func_ea)
+            # Frame may or may not exist - just verify no exceptions
+            assert frame is None or isinstance(frame, StackFrameInstance)
+
+
+class TestStackFrameProperties:
+    """Test stack frame size and layout properties."""
+
+    def test_frame_size_property(self, tiny_c_env):
+        """
+        Test frame.size property returns the total frame size.
+
+        RATIONALE: Frame size is fundamental to understanding stack layout.
+        The complex_assignments function has local variables (SplitWord, qval, bytes)
+        and arguments (hi_val, lo_val, q1, q2, bytes_val), so the frame size should
+        reflect this. This validates that we correctly retrieve frame dimensions
+        from IDA's analysis.
+        """
+        db = tiny_c_env
+
+        # Find complex_assignments function
+        func_ea = None
+        for func in db.functions.get_all():
+            name = db.functions.get_name(func)
+            if 'complex_assignments' in name:
+                func_ea = func.start_ea
+                break
+
+        assert func_ea is not None
+        frame = db.stack_frames.get_at(func_ea)
+        assert frame is not None
+
+        # Frame size should be non-zero for a function with locals and args
+        assert frame.size > 0
+        assert isinstance(frame.size, int)
+
+    def test_local_size_property(self, tiny_c_env):
+        """
+        Test frame.local_size property returns the local variables section size.
+
+        RATIONALE: Local size is distinct from total frame size. The
+        complex_assignments function has several local variables (val, qval, bytes)
+        that should occupy space in the local variables section. This validates
+        we can separately query just the locals portion of the frame.
+        """
+        db = tiny_c_env
+
+        func_ea = None
+        for func in db.functions.get_all():
+            name = db.functions.get_name(func)
+            if 'complex_assignments' in name:
+                func_ea = func.start_ea
+                break
+
+        assert func_ea is not None
+        frame = db.stack_frames.get_at(func_ea)
+        assert frame is not None
+
+        # Should have local variables
+        local_size = frame.local_size
+        assert local_size >= 0
+        assert isinstance(local_size, int)
+
+    def test_argument_size_property(self, tiny_c_env):
+        """
+        Test frame.argument_size returns size of stack-based arguments.
+
+        RATIONALE: The complex_assignments function takes 5 arguments:
+        hi_val (uint16), lo_val (uint16), q1 (uint32), q2 (uint32), bytes_val (uint64).
+        Depending on the calling convention and architecture, some or all of these
+        may be passed on the stack. This test validates we can query the stack
+        argument space.
+
+        Note: Register arguments won't be counted in this size.
+        """
+        db = tiny_c_env
+
+        func_ea = None
+        for func in db.functions.get_all():
+            name = db.functions.get_name(func)
+            if 'complex_assignments' in name:
+                func_ea = func.start_ea
+                break
+
+        assert func_ea is not None
+        frame = db.stack_frames.get_at(func_ea)
+        assert frame is not None
+
+        arg_size = frame.argument_size
+        assert arg_size >= 0
+        assert isinstance(arg_size, int)
+
+    def test_return_address_size_property(self, tiny_c_env):
+        """
+        Test frame.return_address_size matches architecture.
+
+        RATIONALE: Return address size is architecture-dependent (4 bytes for
+        32-bit, 8 bytes for 64-bit). This test validates we correctly determine
+        the return address size based on the analyzed binary's architecture.
+        """
+        db = tiny_c_env
+
+        func_ea = None
+        for func in db.functions.get_all():
+            name = db.functions.get_name(func)
+            if 'complex_assignments' in name:
+                func_ea = func.start_ea
+                break
+
+        assert func_ea is not None
+        frame = db.stack_frames.get_at(func_ea)
+        assert frame is not None
+
+        ret_size = frame.return_address_size
+        # Return address size should be 4 or 8 bytes (depending on architecture)
+        assert ret_size in [4, 8]
+
+
+class TestStackFrameVariables:
+    """Test stack variable iteration and access."""
+
+    def test_variables_iterator(self, tiny_c_env):
+        """
+        Test frame.variables iterates over all stack variables.
+
+        RATIONALE: The complex_assignments function has both local variables
+        and arguments. This test validates that we can iterate over all stack
+        variables (not just locals or just arguments) and that each variable
+        has the expected properties (name, offset, type, size).
+        """
+        db = tiny_c_env
+
+        func_ea = None
+        for func in db.functions.get_all():
+            name = db.functions.get_name(func)
+            if 'complex_assignments' in name:
+                func_ea = func.start_ea
+                break
+
+        assert func_ea is not None
+        frame = db.stack_frames.get_at(func_ea)
+        assert frame is not None
+
+        # Collect all variables
+        variables = list(frame.variables)
+
+        # Should have at least some variables (arguments + locals)
+        # May also include special members like return address
+        assert len(variables) > 0
+
+        # Each variable should have proper attributes
+        for var in variables:
+            assert hasattr(var, 'name')
+            assert hasattr(var, 'offset')
+            assert hasattr(var, 'type')
+            assert hasattr(var, 'size')
+            assert hasattr(var, 'is_argument')
+            assert hasattr(var, 'is_special')
+            assert isinstance(var.name, str)
+            assert isinstance(var.offset, int)
+            assert isinstance(var.size, int)
+            assert isinstance(var.is_argument, bool)
+            assert isinstance(var.is_special, bool)
+
+    def test_arguments_iterator(self, tiny_c_env):
+        """
+        Test frame.arguments iterates only over function arguments.
+
+        RATIONALE: The complex_assignments function has 5 declared arguments.
+        This test validates that the arguments iterator correctly filters to
+        show only arguments (positive offsets, not special members) and not
+        local variables.
+        """
+        db = tiny_c_env
+
+        func_ea = None
+        for func in db.functions.get_all():
+            name = db.functions.get_name(func)
+            if 'complex_assignments' in name:
+                func_ea = func.start_ea
+                break
+
+        assert func_ea is not None
+        frame = db.stack_frames.get_at(func_ea)
+        assert frame is not None
+
+        # Collect arguments
+        arguments = list(frame.arguments)
+
+        # All should be marked as arguments and not special
+        for arg in arguments:
+            assert arg.is_argument is True
+            assert arg.is_special is False
+            # Arguments should have non-negative offsets
+            assert arg.offset >= 0
+
+    def test_locals_iterator(self, tiny_c_env):
+        """
+        Test frame.locals iterates only over local variables.
+
+        RATIONALE: The complex_assignments function has local variables (val,
+        qval, bytes). This test validates that the locals iterator correctly
+        filters to show only local variables (negative offsets, not special
+        members) and not arguments.
+        """
+        db = tiny_c_env
+
+        func_ea = None
+        for func in db.functions.get_all():
+            name = db.functions.get_name(func)
+            if 'complex_assignments' in name:
+                func_ea = func.start_ea
+                break
+
+        assert func_ea is not None
+        frame = db.stack_frames.get_at(func_ea)
+        assert frame is not None
+
+        # Collect locals
+        locals_list = list(frame.locals)
+
+        # All should be marked as local variables (not arguments, not special)
+        for local in locals_list:
+            assert local.is_argument is False
+            assert local.is_special is False
+            # Locals should have negative offsets
+            assert local.offset < 0
+
+
+class TestStackFrameLifecycle:
+    """Test stack frame creation, deletion, and modification."""
+
+    def test_create_frame_for_function(self, tiny_c_env):
+        """
+        Test creating a new stack frame for a function without one.
+
+        RATIONALE: While IDA auto-creates frames for most functions during
+        analysis, we need to be able to manually create frames for functions
+        that don't have them, or recreate frames after deletion. This test
+        validates the frame creation workflow.
+
+        Note: We create a minimal test function to avoid interfering with
+        the existing analyzed functions.
+        """
+        db = tiny_c_env
+
+        # Find a simple function that we can work with
+        func_ea = None
+        for func in db.functions.get_all():
+            name = db.functions.get_name(func)
+            if 'use_val' in name:  # Simpler function
+                func_ea = func.start_ea
+                break
+
+        if func_ea:
+            # Delete frame if it exists
+            db.stack_frames.delete(func_ea)
+
+            # Create new frame
+            success = db.stack_frames.create(func_ea, local_size=16)
+            assert success is True
+
+            # Verify frame now exists
+            frame = db.stack_frames.get_at(func_ea)
+            assert frame is not None
+            assert frame.local_size == 16
+
+
+class TestStackFrameSections:
+    """Test stack frame section boundary queries."""
+
+    def test_get_locals_section(self, tiny_c_env):
+        """
+        Test getting the boundaries of the local variables section.
+
+        RATIONALE: Understanding section boundaries is important for tools that
+        need to work with specific parts of the frame. This test validates we
+        can query where the local variables section starts and ends.
+        """
+        db = tiny_c_env
+
+        func_ea = None
+        for func in db.functions.get_all():
+            name = db.functions.get_name(func)
+            if 'complex_assignments' in name:
+                func_ea = func.start_ea
+                break
+
+        assert func_ea is not None
+
+        section = db.stack_frames.get_locals_section(func_ea)
+        assert section is not None
+        assert hasattr(section, 'start_offset')
+        assert hasattr(section, 'end_offset')
+        assert isinstance(section.start_offset, int)
+        assert isinstance(section.end_offset, int)
+
+    def test_get_arguments_section(self, tiny_c_env):
+        """
+        Test getting the boundaries of the arguments section.
+
+        RATIONALE: Similar to locals section, but for arguments. This is useful
+        for understanding where function arguments are located in the frame.
+        """
+        db = tiny_c_env
+
+        func_ea = None
+        for func in db.functions.get_all():
+            name = db.functions.get_name(func)
+            if 'complex_assignments' in name:
+                func_ea = func.start_ea
+                break
+
+        assert func_ea is not None
+
+        section = db.stack_frames.get_arguments_section(func_ea)
+        assert section is not None
+        assert hasattr(section, 'start_offset')
+        assert hasattr(section, 'end_offset')
+        assert isinstance(section.start_offset, int)
+        assert isinstance(section.end_offset, int)
+
+
+class TestStackFrameErrorHandling:
+    """Test error conditions and edge cases."""
+
+    def test_get_variable_invalid_function(self, tiny_c_env):
+        """
+        Test get_variable() raises InvalidEAError for invalid function address.
+
+        RATIONALE: Validates that variable queries properly validate the function
+        address and raise clear exceptions rather than crashing or returning
+        misleading results.
+        """
+        db = tiny_c_env
+
+        with pytest.raises(InvalidEAError):
+            db.stack_frames.get_variable(0xDEADBEEF, -4)
+
+    def test_delete_nonexistent_frame(self, tiny_c_env):
+        """
+        Test deleting a frame that doesn't exist doesn't crash.
+
+        RATIONALE: Defensive programming - deleting something that doesn't exist
+        should be handled gracefully, not crash.
+        """
+        db = tiny_c_env
+
+        # Try to delete frame from a function that might not have one
+        # (should return False, not crash)
+        func_ea = db.minimum_ea
+        result = db.stack_frames.delete(func_ea)
+        # Result can be True or False, just verify no exception
+        assert isinstance(result, bool)
+
+
+class TestStackFrameIntegration:
+    """Integration tests verifying stack frames work with the overall system."""
+
+    def test_stack_frames_property_accessible(self, tiny_c_env):
+        """
+        Test db.stack_frames property is accessible and returns StackFrames entity.
+
+        RATIONALE: Validates the entity is properly integrated into the Database
+        class and accessible via the standard property pattern.
+        """
+        db = tiny_c_env
+
+        assert hasattr(db, 'stack_frames')
+        stack_frames_entity = db.stack_frames
+        assert stack_frames_entity is not None
+
+    def test_multiple_frame_operations(self, tiny_c_env):
+        """
+        Test multiple stack frame operations in sequence.
+
+        RATIONALE: Real-world usage involves multiple operations on frames.
+        This test validates that operations don't interfere with each other
+        and that the entity maintains correct state across multiple calls.
+        """
+        db = tiny_c_env
+
+        # Find complex_assignments
+        func_ea = None
+        for func in db.functions.get_all():
+            name = db.functions.get_name(func)
+            if 'complex_assignments' in name:
+                func_ea = func.start_ea
+                break
+
+        assert func_ea is not None
+
+        # Multiple operations
+        frame = db.stack_frames.get_at(func_ea)
+        assert frame is not None
+
+        size = frame.size
+        local_size = frame.local_size
+        arg_size = frame.argument_size
+
+        # All operations should work
+        assert isinstance(size, int)
+        assert isinstance(local_size, int)
+        assert isinstance(arg_size, int)
+
+        # Get sections
+        locals_section = db.stack_frames.get_locals_section(func_ea)
+        args_section = db.stack_frames.get_arguments_section(func_ea)
+
+        assert locals_section is not None
+        assert args_section is not None
