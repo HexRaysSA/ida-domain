@@ -27,6 +27,7 @@ from .hooks import HooksList  # type: ignore
 from .imports import Imports
 from .instructions import Instructions
 from .names import Names
+from .search import Search
 from .segments import Segments
 from .signature_files import SignatureFiles
 from .strings import Strings
@@ -943,6 +944,11 @@ class Database:
     def xrefs(self) -> Xrefs:
         """Handler that provides access to cross-reference (xref) operations."""
         return Xrefs(self)
+
+    @property
+    def search(self) -> Search:
+        """Handler that provides access to search operations."""
+        return Search(self)
 
     @property
     def hooks(self) -> HooksList:
