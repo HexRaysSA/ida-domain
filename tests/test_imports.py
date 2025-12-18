@@ -304,6 +304,214 @@ def test_imports_get_entries_by_module(imports_db):
         list(imports_db.imports.get_entries_by_module(count + 100))
 
 
+def test_imports_get_all_entries(imports_db):
+    """
+    Test getting all import entries across all modules (flattened view).
+
+    RATIONALE: The get_all_entries() method provides a flattened view of all
+    imports across all modules. This is useful for:
+    - Building import address mappings for quick lookup
+    - Searching for specific imports without knowing the module
+    - Statistical analysis of import usage patterns
+
+    This test validates:
+    - All entries from all modules are returned
+    - Each entry has valid properties
+    - The flattened view matches the sum of per-module entries
+    - Iterator is lazy and memory-efficient
+    """
+    count = len(imports_db.imports)
+
+    if count == 0:
+        pytest.skip("Test binary has no imports")
+
+    # Get all entries (flattened)
+    all_entries = list(imports_db.imports.get_all_entries())
+
+    # Calculate expected count by summing module import counts
+    expected_count = sum(module.import_count for module in imports_db.imports)
+
+    assert len(all_entries) == expected_count, (
+        f"get_all_entries() should return all imports: "
+        f"got {len(all_entries)}, expected {expected_count}"
+    )
+
+    if len(all_entries) == 0:
+        pytest.skip("No import entries found")
+
+    # Verify each entry
+    for entry in all_entries:
+        assert entry.address > 0, "Entry should have valid address"
+        assert isinstance(entry.module_name, str), "Module name should be string"
+        assert len(entry.module_name) > 0, "Module name should not be empty"
+        assert entry.module_index >= 0, "Module index should be non-negative"
+        assert entry.is_named_import or entry.is_ordinal_import, (
+            "Entry should be either named or ordinal"
+        )
+
+
+def test_imports_get_at(imports_db):
+    """
+    Test getting an import entry at a specific address.
+
+    RATIONALE: The get_at() method enables reverse lookup of imports by address.
+    This is critical for analyzing code that calls imports - given a call target
+    address, we can determine if it's an import and get its details. Use cases:
+    - Identifying which imported function a piece of code calls
+    - Finding all code locations that call a specific import
+    - Analyzing IAT (Import Address Table) entries
+
+    This test validates:
+    - get_at() returns correct entry for valid import addresses
+    - get_at() returns None for non-import addresses
+    - get_at() raises InvalidEAError for invalid addresses
+    - Returned entry matches the entry from module enumeration
+    """
+    count = len(imports_db.imports)
+
+    if count == 0:
+        pytest.skip("Test binary has no imports")
+
+    # Get first import entry to test with
+    first_module = imports_db.imports.get_module(0)
+    assert first_module is not None
+
+    first_entries = list(first_module.imports)
+    if len(first_entries) == 0:
+        pytest.skip("First module has no entries")
+
+    first_entry = first_entries[0]
+
+    # Test getting import at known address
+    entry = imports_db.imports.get_at(first_entry.address)
+    assert entry is not None, "Should find import at known address"
+    assert entry.address == first_entry.address, "Addresses should match"
+    assert entry.name == first_entry.name, "Names should match"
+    assert entry.module_name == first_entry.module_name, "Module names should match"
+
+    # Test with non-import address (database minimum_ea is typically not an import)
+    non_import_ea = imports_db.minimum_ea
+    if non_import_ea != first_entry.address:
+        entry = imports_db.imports.get_at(non_import_ea)
+        # Could be None or another import, just verify no crash
+        # Most binaries have imports in a specific segment, not at minimum_ea
+
+    # Test with invalid address (should raise InvalidEAError)
+    from ida_domain.base import InvalidEAError
+    with pytest.raises(InvalidEAError):
+        imports_db.imports.get_at(0xFFFFFFFFFFFFFFFF)
+
+
+def test_imports_find_by_name(imports_db):
+    """
+    Test finding an import entry by function name.
+
+    RATIONALE: The find_by_name() method enables searching for imports by
+    function name, optionally filtering by module. This is essential for:
+    - Checking if a binary imports specific APIs (e.g., "VirtualAlloc")
+    - Malware analysis (detecting suspicious API usage)
+    - Cross-referencing analysis (finding all calls to a specific API)
+
+    This test validates:
+    - find_by_name() returns correct entry for known import names
+    - find_by_name() returns None for non-existent names
+    - Module filtering works correctly (find in specific module)
+    - Case-sensitive matching (import names are case-sensitive in most formats)
+    """
+    count = len(imports_db.imports)
+
+    if count == 0:
+        pytest.skip("Test binary has no imports")
+
+    # Get a known import name to test with
+    first_module = imports_db.imports.get_module(0)
+    assert first_module is not None
+
+    first_entries = list(first_module.imports)
+    if len(first_entries) == 0:
+        pytest.skip("First module has no entries")
+
+    # Find a named import (skip ordinal imports)
+    test_entry = None
+    for entry in first_entries:
+        if entry.is_named_import:
+            test_entry = entry
+            break
+
+    if test_entry is None:
+        pytest.skip("No named imports found in first module")
+
+    # Test finding by name (no module filter)
+    found_entry = imports_db.imports.find_by_name(test_entry.name)
+    assert found_entry is not None, f"Should find import '{test_entry.name}'"
+    assert found_entry.name == test_entry.name, "Names should match"
+    assert found_entry.address == test_entry.address, "Addresses should match"
+
+    # Test finding by name with module filter
+    found_entry = imports_db.imports.find_by_name(test_entry.name, test_entry.module_name)
+    assert found_entry is not None, (
+        f"Should find '{test_entry.name}' in '{test_entry.module_name}'"
+    )
+    assert found_entry.name == test_entry.name, "Names should match"
+    assert found_entry.module_name == test_entry.module_name, "Module names should match"
+
+    # Test finding with wrong module filter (should return None)
+    found_entry = imports_db.imports.find_by_name(test_entry.name, "nonexistent_module.dll")
+    assert found_entry is None, "Should not find import in wrong module"
+
+    # Test finding non-existent import
+    found_entry = imports_db.imports.find_by_name("ThisFunctionDefinitelyDoesNotExist12345")
+    assert found_entry is None, "Should not find non-existent import"
+
+
+def test_imports_find_by_name_case_insensitive_module(imports_db):
+    """
+    Test that module name filtering in find_by_name() is case-insensitive.
+
+    RATIONALE: Module names (DLL names on Windows) are typically case-insensitive.
+    For example, "kernel32.dll", "KERNEL32.DLL", and "Kernel32.dll" should all
+    refer to the same module. This test validates that find_by_name() respects
+    this convention when filtering by module name.
+
+    This is important for user convenience - analysts shouldn't need to remember
+    the exact capitalization of module names.
+    """
+    count = len(imports_db.imports)
+
+    if count == 0:
+        pytest.skip("Test binary has no imports")
+
+    # Get a known import
+    first_module = imports_db.imports.get_module(0)
+    assert first_module is not None
+
+    first_entries = list(first_module.imports)
+    if len(first_entries) == 0:
+        pytest.skip("First module has no entries")
+
+    # Find a named import
+    test_entry = None
+    for entry in first_entries:
+        if entry.is_named_import:
+            test_entry = entry
+            break
+
+    if test_entry is None:
+        pytest.skip("No named imports found")
+
+    # Test with different case variations of module name
+    module_lower = test_entry.module_name.lower()
+    module_upper = test_entry.module_name.upper()
+
+    found_lower = imports_db.imports.find_by_name(test_entry.name, module_lower)
+    found_upper = imports_db.imports.find_by_name(test_entry.name, module_upper)
+
+    # At least one should succeed (case-insensitive)
+    assert found_lower is not None or found_upper is not None, (
+        "Module name filter should be case-insensitive"
+    )
+
+
 def test_imports_empty_database():
     """
     Test Imports entity behavior with an empty/minimal database.

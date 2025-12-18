@@ -253,7 +253,9 @@ class Imports(DatabaseEntity):
             ...     print(entry.name)
         """
         if module_index < 0:
-            raise InvalidParameterError("module_index", module_index, "Module index cannot be negative")
+            raise InvalidParameterError(
+                "module_index", module_index, "Module index cannot be negative"
+            )
 
         count = ida_nalt.get_import_module_qty()
         if module_index >= count:
@@ -283,6 +285,157 @@ class Imports(DatabaseEntity):
         ida_nalt.enum_import_names(module_index, callback)
 
         return iter(entries)
+
+    def get_all_entries(self) -> Iterator[ImportEntry]:
+        """
+        Retrieves all import entries across all modules (flattened view).
+
+        Returns:
+            Iterator over all ImportEntry objects from all modules
+
+        Example:
+            >>> # Get all imports (flat list)
+            >>> for entry in db.imports.get_all_entries():
+            ...     print(f"{entry.full_name} @ {hex(entry.address)}")
+            >>>
+            >>> # Count total imports
+            >>> total = sum(1 for _ in db.imports.get_all_entries())
+            >>> print(f"Total imports: {total}")
+        """
+        count = ida_nalt.get_import_module_qty()
+
+        for module_idx in range(count):
+            module_name = ida_nalt.get_import_module_name(module_idx)
+            if not module_name:
+                continue
+
+            # Enumerate all imports from this module
+            for entry in self.get_entries_by_module(module_idx):
+                yield entry
+
+    def get_at(self, ea: ea_t) -> Optional[ImportEntry]:
+        """
+        Retrieves the import entry at the specified address (IAT entry).
+
+        Args:
+            ea: Effective address of the import stub or IAT entry
+
+        Returns:
+            ImportEntry object if an import exists at the address, None otherwise
+
+        Raises:
+            InvalidEAError: If the effective address is invalid
+
+        Example:
+            >>> # Get import at address
+            >>> entry = db.imports.get_at(0x401000)
+            >>> if entry:
+            ...     print(f"Import: {entry.full_name} @ {hex(entry.address)}")
+            ...     # Navigate to callers
+            ...     for xref in db.xrefs.to_ea(entry.address):
+            ...         print(f"  Called from: {hex(xref.frm)}")
+            ... else:
+            ...     print("No import at this address")
+        """
+        from .base import InvalidEAError
+
+        # Validate address
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        # Search through all modules
+        count = ida_nalt.get_import_module_qty()
+
+        for module_idx in range(count):
+            module_name = ida_nalt.get_import_module_name(module_idx)
+            if not module_name:
+                continue
+
+            # Search imports in this module
+            result = []
+
+            def callback(import_ea: ea_t, name: str | None, ordinal: int | None) -> int:
+                """Callback for enum_import_names."""
+                if import_ea == ea:
+                    # Found matching import
+                    entry = ImportEntry(
+                        address=import_ea,
+                        name=name if name else "",
+                        ordinal=ordinal if ordinal else 0,
+                        module_name=module_name,
+                        module_index=module_idx
+                    )
+                    result.append(entry)
+                    return 0  # Stop enumeration
+                return 1  # Continue enumeration
+
+            # Enumerate imports from this module
+            ida_nalt.enum_import_names(module_idx, callback)
+
+            if result:
+                return result[0]
+
+        return None
+
+    def find_by_name(self, name: str, module_name: Optional[str] = None) -> Optional[ImportEntry]:
+        """
+        Finds an import entry by name, optionally filtering by module.
+
+        Args:
+            name: Import function/symbol name to search for
+            module_name: Optional module name to restrict search (e.g., "kernel32.dll")
+
+        Returns:
+            First matching ImportEntry object, or None if no import with that name exists
+
+        Example:
+            >>> # Find import by name across all modules
+            >>> entry = db.imports.find_by_name("VirtualAlloc")
+            >>> if entry:
+            ...     print(f"Found: {entry.full_name} @ {hex(entry.address)}")
+            >>>
+            >>> # Find import in specific module
+            >>> entry = db.imports.find_by_name("CreateFileW", "kernel32.dll")
+            >>> if entry:
+            ...     print(f"Found: {entry.full_name}")
+            ... else:
+            ...     print("Import not found")
+        """
+        count = ida_nalt.get_import_module_qty()
+        module_name_lower = module_name.lower() if module_name else None
+
+        for module_idx in range(count):
+            current_module = ida_nalt.get_import_module_name(module_idx)
+            if not current_module:
+                continue
+
+            # If module_name specified, check if this is the right module
+            if module_name_lower and current_module.lower() != module_name_lower:
+                continue
+
+            # Search imports in this module
+            result = []
+
+            def callback(import_ea: ea_t, import_name: str | None, ordinal: int | None) -> int:
+                """Callback for enum_import_names."""
+                if import_name and import_name == name:
+                    entry = ImportEntry(
+                        address=import_ea,
+                        name=import_name,
+                        ordinal=ordinal if ordinal else 0,
+                        module_name=current_module,
+                        module_index=module_idx
+                    )
+                    result.append(entry)
+                    return 0  # Stop enumeration
+                return 1  # Continue enumeration
+
+            ida_nalt.enum_import_names(module_idx, callback)
+
+            if result:
+                return result[0]
+
+        return None
 
     def _count_module_imports(self, module_index: int) -> int:
         """
