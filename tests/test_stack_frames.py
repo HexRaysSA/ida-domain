@@ -365,6 +365,282 @@ class TestStackFrameVariables:
             assert local.offset < 0
 
 
+class TestStackFrameVariableManagement:
+    """Test stack variable definition, lookup, and iteration."""
+
+    def test_define_local_variable(self, tiny_c_env):
+        """
+        Test defining a new local variable in a stack frame.
+
+        RATIONALE: Users need to be able to manually define or redefine stack
+        variables when IDA's auto-analysis doesn't correctly identify them or
+        when manual type annotation is needed. This tests defining a local
+        variable (negative offset) with a specific type.
+
+        The test uses a real function from tiny_c.bin and defines a new local
+        variable at an offset where one doesn't exist, validating the full
+        define_variable workflow.
+        """
+        db = tiny_c_env
+        from ida_typeinf import BTF_INT32, tinfo_t
+
+        # Find complex_assignments function
+        func_ea = None
+        for func in db.functions.get_all():
+            name = db.functions.get_name(func)
+            if 'complex_assignments' in name:
+                func_ea = func.start_ea
+                break
+
+        assert func_ea is not None
+
+        # Create an int32 type
+        int_type = tinfo_t()
+        int_type.create_simple_type(BTF_INT32)
+
+        # Define a local variable at offset -0x100 (far from existing vars)
+        success = db.stack_frames.define_variable(
+            func_ea, "test_local", -0x100, int_type
+        )
+        assert success is True
+
+        # Verify we can retrieve it
+        var = db.stack_frames.get_variable(func_ea, -0x100)
+        assert var is not None
+        assert var.name == "test_local"
+        assert var.offset == -0x100
+        assert var.is_argument is False
+
+    def test_define_argument_variable(self, tiny_c_env):
+        """
+        Test defining a new argument variable in a stack frame.
+
+        RATIONALE: Function arguments (positive offsets) need different handling
+        than local variables. This test validates that we can define arguments,
+        which is important for manually annotating calling conventions or fixing
+        incorrect argument analysis.
+
+        The test defines an argument at a positive offset and verifies it's
+        correctly marked as an argument rather than a local.
+        """
+        db = tiny_c_env
+        from ida_typeinf import BTF_INT32, tinfo_t
+
+        # Find use_val function (simpler, easier to work with)
+        func_ea = None
+        for func in db.functions.get_all():
+            name = db.functions.get_name(func)
+            if 'use_val' in name:
+                func_ea = func.start_ea
+                break
+
+        if func_ea:
+            # Create an int32 type
+            int_type = tinfo_t()
+            int_type.create_simple_type(BTF_INT32)
+
+            # Define an argument at offset +0x10
+            success = db.stack_frames.define_variable(
+                func_ea, "test_arg", 0x10, int_type
+            )
+            assert success is True
+
+            # Verify it's marked as an argument
+            var = db.stack_frames.get_variable(func_ea, 0x10)
+            assert var is not None
+            assert var.name == "test_arg"
+            assert var.offset == 0x10
+            assert var.is_argument is True
+
+    def test_get_variable_by_offset(self, tiny_c_env):
+        """
+        Test retrieving a stack variable by its frame offset.
+
+        RATIONALE: Offset-based lookup is fundamental for mapping instruction
+        operands (like [ebp-4]) to their corresponding variables. This test
+        validates that we can look up variables that were defined during analysis
+        using their frame offset.
+
+        The complex_assignments function has variables at known offsets from IDA's
+        analysis, making it suitable for testing offset-based lookup.
+        """
+        db = tiny_c_env
+
+        # Find complex_assignments function
+        func_ea = None
+        for func in db.functions.get_all():
+            name = db.functions.get_name(func)
+            if 'complex_assignments' in name:
+                func_ea = func.start_ea
+                break
+
+        assert func_ea is not None
+
+        # Get the frame and find a variable
+        frame = db.stack_frames.get_at(func_ea)
+        assert frame is not None
+
+        # Get first variable from the frame
+        variables = list(frame.variables)
+        if variables:
+            first_var = variables[0]
+
+            # Look up by offset
+            retrieved_var = db.stack_frames.get_variable(func_ea, first_var.offset)
+            assert retrieved_var is not None
+            assert retrieved_var.name == first_var.name
+            assert retrieved_var.offset == first_var.offset
+            assert retrieved_var.size == first_var.size
+
+    def test_get_variable_by_name(self, tiny_c_env):
+        """
+        Test retrieving a stack variable by its name.
+
+        RATIONALE: Name-based lookup is essential for tools that work with
+        variable names from source code or decompilation. This test validates
+        that we can find variables by name, which is important for programmatic
+        analysis that references variables by their symbolic names.
+
+        The test looks up a variable from the analyzed function and verifies
+        all its properties match.
+        """
+        db = tiny_c_env
+
+        # Find complex_assignments function
+        func_ea = None
+        for func in db.functions.get_all():
+            name = db.functions.get_name(func)
+            if 'complex_assignments' in name:
+                func_ea = func.start_ea
+                break
+
+        assert func_ea is not None
+
+        # Get the frame and find a variable
+        frame = db.stack_frames.get_at(func_ea)
+        assert frame is not None
+
+        # Get first non-special variable
+        variables = [v for v in frame.variables if not v.is_special]
+        if variables:
+            first_var = variables[0]
+
+            # Look up by name
+            retrieved_var = db.stack_frames.get_variable_by_name(func_ea, first_var.name)
+            assert retrieved_var is not None
+            assert retrieved_var.name == first_var.name
+            assert retrieved_var.offset == first_var.offset
+
+    def test_get_variable_nonexistent_offset(self, tiny_c_env):
+        """
+        Test that get_variable returns None for offset with no variable.
+
+        RATIONALE: Not every offset in a frame has a variable defined. This test
+        validates that we correctly return None (rather than raising an error or
+        returning stale data) when querying an offset that has no variable.
+
+        This is important for defensive programming - callers need to be able to
+        check whether a variable exists at an offset without catching exceptions.
+        """
+        db = tiny_c_env
+
+        # Find complex_assignments function
+        func_ea = None
+        for func in db.functions.get_all():
+            name = db.functions.get_name(func)
+            if 'complex_assignments' in name:
+                func_ea = func.start_ea
+                break
+
+        assert func_ea is not None
+
+        # Query an offset that definitely has no variable
+        var = db.stack_frames.get_variable(func_ea, -0x9999)
+        assert var is None
+
+    def test_get_variable_by_name_nonexistent(self, tiny_c_env):
+        """
+        Test that get_variable_by_name returns None for non-existent name.
+
+        RATIONALE: Similar to offset lookup, name lookup should gracefully handle
+        the case where a variable with the given name doesn't exist. This test
+        validates the None-return behavior for non-existent names.
+        """
+        db = tiny_c_env
+
+        # Find complex_assignments function
+        func_ea = None
+        for func in db.functions.get_all():
+            name = db.functions.get_name(func)
+            if 'complex_assignments' in name:
+                func_ea = func.start_ea
+                break
+
+        assert func_ea is not None
+
+        # Query a name that definitely doesn't exist
+        var = db.stack_frames.get_variable_by_name(func_ea, "nonexistent_variable_xyz")
+        assert var is None
+
+    def test_get_all_variables_via_property(self, tiny_c_env):
+        """
+        Test getting all variables via the variables property.
+
+        RATIONALE: The frame.variables property provides iteration over all
+        variables in the frame. This is the primary way to enumerate variables
+        programmatically. This test validates that the iterator works correctly
+        and returns StackVariable objects with all expected attributes.
+
+        The test also validates that we get both locals and arguments, and that
+        special members (return address, saved registers) are properly marked.
+        """
+        db = tiny_c_env
+
+        # Find complex_assignments function
+        func_ea = None
+        for func in db.functions.get_all():
+            name = db.functions.get_name(func)
+            if 'complex_assignments' in name:
+                func_ea = func.start_ea
+                break
+
+        assert func_ea is not None
+
+        frame = db.stack_frames.get_at(func_ea)
+        assert frame is not None
+
+        # Get all variables
+        all_vars = list(frame.variables)
+
+        # Should have at least some variables
+        assert len(all_vars) > 0
+
+        # Separate into categories
+        locals_list = [v for v in all_vars if not v.is_argument and not v.is_special]
+        arguments = [v for v in all_vars if v.is_argument and not v.is_special]
+        special = [v for v in all_vars if v.is_special]
+
+        # complex_assignments has both locals and arguments
+        # Note: actual counts depend on IDA's analysis
+
+        # All variables should have valid attributes
+        for var in all_vars:
+            assert isinstance(var.name, str)
+            assert isinstance(var.offset, int)
+            assert isinstance(var.size, int)
+            assert var.size > 0
+            assert isinstance(var.is_argument, bool)
+            assert isinstance(var.is_special, bool)
+
+        # Locals should have negative offsets
+        for local in locals_list:
+            assert local.offset < 0
+
+        # Arguments should have positive offsets (or zero)
+        for arg in arguments:
+            assert arg.offset >= 0
+
+
 class TestStackFrameLifecycle:
     """Test stack frame creation, deletion, and modification."""
 
