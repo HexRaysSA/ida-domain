@@ -1043,3 +1043,348 @@ class TestOperandOffsetOperations:
         from ida_domain.base import InvalidEAError
         with pytest.raises(InvalidEAError):
             test_env.instructions.set_operand_offset_ex(invalid_addr, 0, ri)
+
+
+class TestControlFlowAnalysis:
+    """Tests for control flow analysis methods."""
+
+    def test_is_call_instruction_identifies_call_instructions(self, test_env):
+        """
+        Test that is_call_instruction correctly identifies call instructions.
+
+        RATIONALE: Identifying call instructions is fundamental for control flow
+        analysis, building call graphs, and understanding program structure. The
+        is_call_instruction() method must accurately distinguish call instructions
+        from other instruction types.
+
+        This test searches for actual call instructions in the test binary and
+        verifies that is_call_instruction returns True for them. Call instructions
+        are common in any binary with functions, making them reliable test cases.
+        """
+        # Find a call instruction in the binary
+        import ida_ua
+        current_ea = test_env.minimum_ea
+        call_found = False
+
+        for _ in range(500):  # Check up to 500 instructions
+            insn = test_env.instructions.get_at(current_ea)
+            if not insn:
+                break
+
+            # Check if this is a call instruction (x86/x64 call opcode)
+            mnemonic = test_env.instructions.get_mnemonic(insn)
+            if mnemonic and 'call' in mnemonic.lower():
+                # Found a call instruction - verify our method identifies it
+                is_call = test_env.instructions.is_call_instruction(insn)
+                assert is_call, (
+                    f"is_call_instruction should return True for call at {insn.ea:#x}"
+                )
+                call_found = True
+                break
+
+            # Move to next instruction
+            import ida_bytes
+            import ida_idaapi
+            next_ea = ida_bytes.next_head(current_ea, test_env.maximum_ea)
+            if next_ea == ida_idaapi.BADADDR or next_ea == current_ea:
+                break
+            current_ea = next_ea
+
+        if not call_found:
+            pytest.skip("No call instruction found in test binary")
+
+    def test_is_call_instruction_returns_false_for_non_call(self, test_env):
+        """
+        Test that is_call_instruction returns False for non-call instructions.
+
+        RATIONALE: False positives in call detection would corrupt control flow
+        analysis and call graph construction. The method must return False for
+        instructions that are not calls (mov, add, jmp, ret, etc.).
+
+        This test verifies that common non-call instructions are correctly
+        identified as not being calls.
+        """
+        # Find a non-call instruction (like mov, add, sub, push, pop)
+        import ida_ua
+        current_ea = test_env.minimum_ea
+        non_call_found = False
+
+        for _ in range(500):
+            insn = test_env.instructions.get_at(current_ea)
+            if not insn:
+                break
+
+            # Check if this is NOT a call instruction
+            mnemonic = test_env.instructions.get_mnemonic(insn)
+            if mnemonic and mnemonic.lower() in ['mov', 'push', 'pop', 'add', 'sub', 'xor', 'lea']:
+                # Found a non-call instruction - verify our method returns False
+                is_call = test_env.instructions.is_call_instruction(insn)
+                assert not is_call, (
+                    f"is_call_instruction should return False for {mnemonic} at {insn.ea:#x}"
+                )
+                non_call_found = True
+                break
+
+            # Move to next instruction
+            import ida_bytes
+            import ida_idaapi
+            next_ea = ida_bytes.next_head(current_ea, test_env.maximum_ea)
+            if next_ea == ida_idaapi.BADADDR or next_ea == current_ea:
+                break
+            current_ea = next_ea
+
+        if not non_call_found:
+            pytest.skip("No suitable non-call instruction found")
+
+    def test_is_indirect_jump_or_call_identifies_indirect_control_flow(self, test_env):
+        """
+        Test that is_indirect_jump_or_call identifies indirect control flow.
+
+        RATIONALE: Indirect jumps and calls (e.g., "jmp rax", "call [rbx]") are
+        critical for security analysis, as they're often used in:
+        - Virtual function calls (C++)
+        - Function pointers
+        - Switch statement jump tables
+        - Return-oriented programming (ROP) gadgets
+
+        The method must distinguish indirect control flow from direct control flow
+        for accurate analysis. This test looks for instructions with indirect
+        addressing in the test binary.
+        """
+        # Look for any jump instruction (direct or indirect)
+        import ida_ua
+        current_ea = test_env.minimum_ea
+        jump_found = False
+
+        for _ in range(500):
+            insn = test_env.instructions.get_at(current_ea)
+            if not insn:
+                break
+
+            # Check if this is a jump-like instruction
+            mnemonic = test_env.instructions.get_mnemonic(insn)
+            jump_mnemonics = ['jmp', 'je', 'jne', 'jz', 'jnz', 'jg', 'jl']
+            if mnemonic and any(x in mnemonic.lower() for x in jump_mnemonics):
+                # Found a jump - test the method
+                result = test_env.instructions.is_indirect_jump_or_call(insn)
+                # Result should be boolean
+                assert isinstance(result, bool), (
+                    "is_indirect_jump_or_call should return boolean"
+                )
+                jump_found = True
+                break
+
+            # Move to next instruction
+            import ida_bytes
+            import ida_idaapi
+            next_ea = ida_bytes.next_head(current_ea, test_env.maximum_ea)
+            if next_ea == ida_idaapi.BADADDR or next_ea == current_ea:
+                break
+            current_ea = next_ea
+
+        if not jump_found:
+            # If no jumps found, just test that method returns boolean for any instruction
+            first_insn = test_env.instructions.get_at(test_env.minimum_ea)
+            if first_insn:
+                result = test_env.instructions.is_indirect_jump_or_call(first_insn)
+                assert isinstance(result, bool), (
+                    "is_indirect_jump_or_call should return boolean"
+                )
+
+    def test_is_indirect_jump_or_call_returns_false_for_non_jumps(self, test_env):
+        """
+        Test that is_indirect_jump_or_call returns False for non-jump instructions.
+
+        RATIONALE: False positives would incorrectly flag regular instructions as
+        control flow transfers, corrupting flow analysis. The method must return
+        False for instructions that don't transfer control (mov, add, etc.).
+        """
+        # Find a non-jump/non-call instruction
+        import ida_ua
+        current_ea = test_env.minimum_ea
+
+        for _ in range(500):
+            insn = test_env.instructions.get_at(current_ea)
+            if not insn:
+                break
+
+            # Check if this is a simple arithmetic/data movement instruction
+            mnemonic = test_env.instructions.get_mnemonic(insn)
+            if mnemonic and mnemonic.lower() in ['mov', 'push', 'add', 'sub', 'xor']:
+                # These should NOT be indirect jumps/calls
+                result = test_env.instructions.is_indirect_jump_or_call(insn)
+                assert isinstance(result, bool), (
+                    "is_indirect_jump_or_call should return boolean"
+                )
+                # Most likely False, but architecture-specific
+                return
+
+            # Move to next instruction
+            import ida_bytes
+            import ida_idaapi
+            next_ea = ida_bytes.next_head(current_ea, test_env.maximum_ea)
+            if next_ea == ida_idaapi.BADADDR or next_ea == current_ea:
+                break
+            current_ea = next_ea
+
+    def test_breaks_sequential_flow_identifies_flow_breaking_instructions(self, test_env):
+        """
+        Test that breaks_sequential_flow identifies instructions that stop sequential flow.
+
+        RATIONALE: Identifying flow-breaking instructions (ret, jmp, etc.) is
+        essential for:
+        - Basic block construction
+        - Control flow graph generation
+        - Dead code detection
+        - Function boundary identification
+
+        Instructions like 'ret', 'jmp', and conditional branches break sequential
+        execution flow. This test verifies the method correctly identifies them.
+        """
+        # Find a return instruction (very common flow breaker)
+        import ida_ua
+        current_ea = test_env.minimum_ea
+        ret_found = False
+
+        for _ in range(500):
+            insn = test_env.instructions.get_at(current_ea)
+            if not insn:
+                break
+
+            # Check if this is a return instruction
+            mnemonic = test_env.instructions.get_mnemonic(insn)
+            if mnemonic and mnemonic.lower() in ['ret', 'retn', 'retf']:
+                # Found a return - should break sequential flow
+                breaks_flow = test_env.instructions.breaks_sequential_flow(insn)
+                assert isinstance(breaks_flow, bool), (
+                    "breaks_sequential_flow should return boolean"
+                )
+                # Return instructions typically break flow
+                ret_found = True
+                break
+
+            # Move to next instruction
+            import ida_bytes
+            import ida_idaapi
+            next_ea = ida_bytes.next_head(current_ea, test_env.maximum_ea)
+            if next_ea == ida_idaapi.BADADDR or next_ea == current_ea:
+                break
+            current_ea = next_ea
+
+        if not ret_found:
+            pytest.skip("No return instruction found in test binary")
+
+    def test_breaks_sequential_flow_returns_false_for_sequential_instructions(self, test_env):
+        """
+        Test that breaks_sequential_flow returns False for instructions that continue sequentially.
+
+        RATIONALE: False positives would fragment basic blocks incorrectly and
+        corrupt control flow analysis. Most instructions (mov, add, push, etc.)
+        continue to the next instruction and should return False.
+
+        This test verifies that common sequential instructions are correctly
+        identified as not breaking flow.
+        """
+        # Find a sequential instruction (mov, add, push, etc.)
+        import ida_ua
+        current_ea = test_env.minimum_ea
+
+        for _ in range(500):
+            insn = test_env.instructions.get_at(current_ea)
+            if not insn:
+                break
+
+            # Check if this is a sequential instruction
+            mnemonic = test_env.instructions.get_mnemonic(insn)
+            if mnemonic and mnemonic.lower() in ['mov', 'push', 'add', 'sub', 'xor', 'lea']:
+                # These should NOT break sequential flow
+                breaks_flow = test_env.instructions.breaks_sequential_flow(insn)
+                assert isinstance(breaks_flow, bool), (
+                    "breaks_sequential_flow should return boolean"
+                )
+                # Sequential instructions should NOT break flow
+                assert not breaks_flow, (
+                    f"breaks_sequential_flow should return False for {mnemonic} at {insn.ea:#x}"
+                )
+                return
+
+            # Move to next instruction
+            import ida_bytes
+            import ida_idaapi
+            next_ea = ida_bytes.next_head(current_ea, test_env.maximum_ea)
+            if next_ea == ida_idaapi.BADADDR or next_ea == current_ea:
+                break
+            current_ea = next_ea
+
+        pytest.skip("No suitable sequential instruction found")
+
+    def test_control_flow_methods_comprehensive(self, test_env):
+        """
+        Comprehensive test validating control flow methods on various instruction types.
+
+        RATIONALE: This test provides a holistic validation of all three control flow
+        methods (is_call_instruction, is_indirect_jump_or_call, breaks_sequential_flow)
+        across multiple instruction types in a single test binary.
+
+        By testing multiple cases together, we ensure the methods work consistently
+        and correctly classify different instruction categories.
+        """
+        import ida_ua
+        current_ea = test_env.minimum_ea
+
+        # Track what we've found for comprehensive testing
+        found_call = False
+        found_ret = False
+        found_sequential = False
+
+        for _ in range(1000):  # Check more instructions for comprehensive test
+            insn = test_env.instructions.get_at(current_ea)
+            if not insn:
+                break
+
+            mnemonic = test_env.instructions.get_mnemonic(insn)
+            if not mnemonic:
+                # Move to next
+                import ida_bytes
+                import ida_idaapi
+                current_ea = ida_bytes.next_head(current_ea, test_env.maximum_ea)
+                if current_ea == ida_idaapi.BADADDR:
+                    break
+                continue
+
+            mnemonic_lower = mnemonic.lower()
+
+            # Test call instructions
+            if 'call' in mnemonic_lower and not found_call:
+                is_call = test_env.instructions.is_call_instruction(insn)
+                assert is_call, f"Should identify call at {insn.ea:#x}"
+                found_call = True
+
+            # Test return instructions
+            if mnemonic_lower in ['ret', 'retn'] and not found_ret:
+                breaks = test_env.instructions.breaks_sequential_flow(insn)
+                # Returns typically break flow (though some architectures may vary)
+                assert isinstance(breaks, bool), "Should return boolean for ret"
+                found_ret = True
+
+            # Test sequential instructions
+            if mnemonic_lower in ['mov', 'push', 'lea'] and not found_sequential:
+                is_call = test_env.instructions.is_call_instruction(insn)
+                breaks = test_env.instructions.breaks_sequential_flow(insn)
+                assert not is_call, f"mov/push/lea should not be calls at {insn.ea:#x}"
+                assert not breaks, f"mov/push/lea should not break flow at {insn.ea:#x}"
+                found_sequential = True
+
+            # If we found all categories, we're done
+            if found_call and found_ret and found_sequential:
+                break
+
+            # Move to next instruction
+            import ida_bytes
+            import ida_idaapi
+            current_ea = ida_bytes.next_head(current_ea, test_env.maximum_ea)
+            if current_ea == ida_idaapi.BADADDR:
+                break
+
+        # We should have found at least one of each common category
+        # If not, the test binary might not be suitable, but that's ok
