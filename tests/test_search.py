@@ -438,7 +438,10 @@ def test_all_untyped_operands_iterator(search_db):
 
 
 @pytest.mark.skip(
-    reason="Register access search requires reg_access_t which is not accessible in current IDA Python version"
+    reason=(
+        "Register access search requires reg_access_t which is not "
+        "accessible in current IDA Python version"
+    )
 )
 def test_next_register_access_format(search_db):
     """
@@ -479,7 +482,10 @@ def test_next_register_access_format(search_db):
 
 
 @pytest.mark.skip(
-    reason="Register access search requires reg_access_t which is not accessible in current IDA Python version"
+    reason=(
+        "Register access search requires reg_access_t which is not "
+        "accessible in current IDA Python version"
+    )
 )
 def test_all_register_accesses_iterator(search_db):
     """

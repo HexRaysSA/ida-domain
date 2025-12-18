@@ -58,8 +58,12 @@ class TestNamesResolve:
             # Now resolve that name
             resolved_addr = test_env.names.resolve_name(first_name)
 
-            assert resolved_addr is not None, f"resolve_name should find existing name '{first_name}'"
-            assert resolved_addr == first_addr, f"Expected address {first_addr:x}, got {resolved_addr:x}"
+            assert resolved_addr is not None, (
+                f"resolve_name should find existing name '{first_name}'"
+            )
+            assert resolved_addr == first_addr, (
+                f"Expected address {first_addr:x}, got {resolved_addr:x}"
+            )
         else:
             # If no names exist, skip this test
             pytest.skip("No names in database to test")
@@ -93,8 +97,12 @@ class TestNamesResolve:
             # Resolve it
             resolved_addr = test_env.names.resolve_name(second_name)
 
-            assert resolved_addr is not None, f"resolve_name should find name '{second_name}'"
-            assert resolved_addr == second_addr, f"Expected address {second_addr:x}, got {resolved_addr:x}"
+            assert resolved_addr is not None, (
+                f"resolve_name should find name '{second_name}'"
+            )
+            assert resolved_addr == second_addr, (
+                f"Expected address {second_addr:x}, got {resolved_addr:x}"
+            )
         else:
             pytest.skip("Not enough names in database to test")
 

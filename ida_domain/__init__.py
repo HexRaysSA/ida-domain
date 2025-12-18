@@ -41,9 +41,15 @@ if __ida_version__ < 910:
 
 # If we reach this point kernel libraries were successfully loaded
 from .database import Database
-from .fixups import Fixups, FixupInfo, FixupType
-from .problems import Problems, Problem, ProblemType
-from .stack_frames import StackFrames, StackFrameInstance, StackVariable, FrameSection, StackVarXref
-from .switches import Switches, SwitchInfo, SwitchFlags
+from .fixups import FixupInfo, Fixups, FixupType
+from .problems import Problem, Problems, ProblemType
+from .stack_frames import (
+    FrameSection,
+    StackFrameInstance,
+    StackFrames,
+    StackVariable,
+    StackVarXref,
+)
+from .switches import Switches, SwitchFlags, SwitchInfo
 
 logging.getLogger(__name__).addHandler(NullHandler())
