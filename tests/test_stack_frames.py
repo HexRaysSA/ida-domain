@@ -1540,7 +1540,9 @@ class TestStackFrameAdvancedOperations:
 
         # Invalid function address - need automatic=True to trigger validation
         with pytest.raises(InvalidEAError):
-            db.stack_frames.add_sp_change_point(0xFFFFFFFF, db.minimum_ea, delta=-4, automatic=True)
+            db.stack_frames.add_sp_change_point(
+                0xFFFFFFFF, db.minimum_ea, delta=-4, automatic=True
+            )
 
     def test_delete_sp_change_point_removes_change_point(self, tiny_c_env):
         """
