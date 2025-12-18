@@ -618,3 +618,97 @@ class Analysis(DatabaseEntity):
             current_state: Preferred property with clearer name
         """
         return self.current_state
+
+    def plan_ea(self, ea: ea_t) -> None:
+        """
+        Schedule reanalysis of single address (legacy API compatibility).
+
+        This is a legacy API compatibility method that directly maps to
+        schedule_reanalysis(). New code should prefer schedule_reanalysis()
+        for clarity.
+
+        Args:
+            ea: Address to reanalyze
+
+        Raises:
+            InvalidEAError: If address is invalid
+
+        Example:
+            >>> db = Database.open_current()
+            >>> db.analysis.plan_ea(0x401000)  # Same as schedule_reanalysis()
+            >>> db.analysis.wait_for_completion()
+
+        See Also:
+            schedule_reanalysis: Preferred method with clearer name
+        """
+        self.schedule_reanalysis(ea)
+
+    def plan_range(self, start: ea_t, end: ea_t) -> None:
+        """
+        Schedule reanalysis for address range (legacy API compatibility).
+
+        This is a legacy API compatibility method that schedules reanalysis
+        for a range of addresses. It adds the range to the USED queue for
+        reanalysis.
+
+        Args:
+            start: Start address of range
+            end: End address of range (exclusive)
+
+        Raises:
+            InvalidEAError: If start or end address is invalid
+            InvalidParameterError: If start >= end
+
+        Example:
+            >>> db = Database.open_current()
+            >>> db.analysis.plan_range(0x401000, 0x402000)
+            >>> db.analysis.wait_for_completion()
+
+        See Also:
+            schedule_range_analysis: For more control over queue type
+        """
+        # Validate inputs
+        if not self.database.is_valid_ea(start):
+            raise InvalidEAError(start)
+        if not self.database.is_valid_ea(end):
+            raise InvalidEAError(end)
+        if start >= end:
+            raise InvalidParameterError('start', start, 'must be less than end')
+
+        # Schedule range for reanalysis (AU_USED queue)
+        ida_auto.plan_range(start, end)
+
+    def get_auto_display(self) -> Optional[ida_auto.auto_display_t]:
+        """
+        Get current autoanalysis display state (legacy API compatibility).
+
+        This is a legacy API compatibility method that returns the raw
+        auto_display_t structure from IDA. New code should prefer the
+        current_state property which returns a more Pythonic AnalysisState
+        object.
+
+        Returns:
+            auto_display_t structure with current analysis state, or None if
+            analysis is idle
+
+        Example:
+            >>> db = Database.open_current()
+            >>> display = db.analysis.get_auto_display()
+            >>> if display:
+            ...     print(f"Analyzing at {hex(display.ea)}")
+            ...     print(f"Queue type: {display.type}")
+            ... else:
+            ...     print("Analysis is idle")
+
+        See Also:
+            current_state: Preferred property with clearer interface
+        """
+        # Get current display state
+        display = ida_auto.auto_display_t()
+        success = ida_auto.get_auto_display(display)
+
+        # Return None if analysis is idle
+        if not success:
+            return None
+
+        return display
