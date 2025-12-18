@@ -1302,7 +1302,7 @@ class TestBytesSearchMethods:
 
             # If found, verify it's actually an instruction address
             if result is not None:
-                assert db.bytes.is_code(result)
+                assert db.bytes.is_code_at(result)
                 break  # Found at least one
 
     def test_find_immediate_between_with_invalid_value_raises_error(self, test_env):
