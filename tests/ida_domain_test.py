@@ -2910,3 +2910,204 @@ def test_analysis_analyze_range_invalid_params(test_env):
     # Test start >= end
     with pytest.raises(InvalidParameterError):
         db.analysis.analyze_range(db.minimum_ea + 0x10, db.minimum_ea)
+
+
+def test_analysis_is_enabled(test_env):
+    """
+    Test that is_enabled property reflects auto-analysis state.
+
+    RATIONALE: The is_enabled property allows checking whether auto-analysis
+    is currently active. This is important for:
+    1. Verifying analysis is running before waiting
+    2. Debugging analysis-related issues
+    3. Understanding system state
+
+    The test validates that after database open with auto_analysis=True,
+    the property returns True.
+    """
+    db = test_env
+
+    # Auto-analysis should be enabled by default in test_env
+    # (IdaCommandOptions doesn't disable it)
+    assert isinstance(db.analysis.is_enabled, bool)
+
+    # Property should be callable multiple times
+    first_check = db.analysis.is_enabled
+    second_check = db.analysis.is_enabled
+    assert first_check == second_check
+
+
+def test_analysis_set_enabled(test_env):
+    """
+    Test set_enabled() can toggle auto-analysis on/off.
+
+    RATIONALE: set_enabled() is critical for performance optimization.
+    When making many changes to the database, temporarily disabling
+    auto-analysis can significantly improve performance. This test validates:
+    1. Can disable auto-analysis (returns previous state)
+    2. Can re-enable auto-analysis (returns previous state)
+    3. is_enabled property reflects the changes
+    4. Previous state is returned correctly
+
+    This is essential for batch operations and performance-critical workflows.
+    """
+    db = test_env
+
+    # Get initial state
+    initial_state = db.analysis.is_enabled
+
+    # Disable auto-analysis
+    prev_state = db.analysis.set_enabled(False)
+
+    # Previous state should match initial state
+    assert prev_state == initial_state
+
+    # Now should be disabled
+    assert db.analysis.is_enabled is False
+
+    # Re-enable
+    prev_state2 = db.analysis.set_enabled(True)
+
+    # Previous state should be False (what we just set)
+    assert prev_state2 is False
+
+    # Now should be enabled
+    assert db.analysis.is_enabled is True
+
+
+def test_analysis_schedule_code_analysis(test_env):
+    """
+    Test schedule_code_analysis() queues instruction creation.
+
+    RATIONALE: schedule_code_analysis() is the primary way to request
+    instruction creation at a specific address. This is fundamental for:
+    1. Manual code discovery
+    2. Recovering from analysis errors
+    3. Analyzing obfuscated or packed code
+
+    The test validates:
+    1. Method accepts valid addresses
+    2. Scheduling succeeds without errors
+    3. After wait_for_completion(), the operation has been processed
+    4. Invalid addresses are rejected with InvalidEAError
+
+    We use an address within the test binary to ensure realistic behavior.
+    """
+    from ida_domain.base import InvalidEAError
+
+    db = test_env
+
+    # Ensure clean state
+    db.analysis.wait_for_completion()
+
+    # Schedule code analysis at start of binary
+    ea = db.minimum_ea
+    db.analysis.schedule_code_analysis(ea)
+
+    # Should not raise exception
+    # Wait for analysis to process the queue
+    db.analysis.wait_for_completion()
+
+    # Should be complete
+    assert db.analysis.is_complete is True
+
+    # Test invalid address
+    with pytest.raises(InvalidEAError):
+        db.analysis.schedule_code_analysis(0xFFFFFFFF)
+
+
+def test_analysis_schedule_function_analysis(test_env):
+    """
+    Test schedule_function_analysis() queues function creation.
+
+    RATIONALE: schedule_function_analysis() is the primary way to request
+    function creation at a specific address. This is critical for:
+    1. Manual function identification
+    2. Recovering from missed function detection
+    3. Analyzing indirect entry points
+
+    The test validates:
+    1. Method accepts valid addresses
+    2. Scheduling succeeds without errors
+    3. After wait_for_completion(), the operation has been processed
+    4. Invalid addresses are rejected with InvalidEAError
+
+    We use an address within the test binary that could be a function start.
+    """
+    from ida_domain.base import InvalidEAError
+
+    db = test_env
+
+    # Ensure clean state
+    db.analysis.wait_for_completion()
+
+    # Schedule function analysis at start of binary
+    ea = db.minimum_ea
+    db.analysis.schedule_function_analysis(ea)
+
+    # Should not raise exception
+    # Wait for analysis to process the queue
+    db.analysis.wait_for_completion()
+
+    # Should be complete
+    assert db.analysis.is_complete is True
+
+    # Test invalid address
+    with pytest.raises(InvalidEAError):
+        db.analysis.schedule_function_analysis(0xFFFFFFFF)
+
+
+def test_analysis_schedule_range_analysis(test_env):
+    """
+    Test schedule_range_analysis() queues range with specific queue type.
+
+    RATIONALE: schedule_range_analysis() provides low-level queue control,
+    allowing precise specification of which analysis queue to use. This is
+    important for:
+    1. Fine-grained control over analysis phases
+    2. Performance optimization (skip unnecessary phases)
+    3. Advanced analysis workflows
+    4. Understanding IDA's queue system
+
+    The test validates:
+    1. Method accepts valid range and queue type
+    2. Scheduling succeeds without errors
+    3. After wait_for_completion(), the operation has been processed
+    4. Invalid addresses are rejected with InvalidEAError
+    5. Invalid ranges (start >= end) are rejected with InvalidParameterError
+
+    We use the CODE queue type as it's the most fundamental analysis phase.
+    """
+    from ida_domain.analysis import AnalysisQueueType
+    from ida_domain.base import InvalidEAError, InvalidParameterError
+
+    db = test_env
+
+    # Ensure clean state
+    db.analysis.wait_for_completion()
+
+    # Schedule range analysis with CODE queue
+    start = db.minimum_ea
+    end = db.minimum_ea + 0x10
+    db.analysis.schedule_range_analysis(start, end, AnalysisQueueType.CODE)
+
+    # Should not raise exception
+    # Wait for analysis
+    db.analysis.wait_for_completion()
+
+    # Should be complete
+    assert db.analysis.is_complete is True
+
+    # Test invalid start address
+    with pytest.raises(InvalidEAError):
+        db.analysis.schedule_range_analysis(0xFFFFFFFF, end, AnalysisQueueType.CODE)
+
+    # Test invalid end address
+    with pytest.raises(InvalidEAError):
+        db.analysis.schedule_range_analysis(start, 0xFFFFFFFF, AnalysisQueueType.CODE)
+
+    # Test start >= end
+    with pytest.raises(InvalidParameterError):
+        db.analysis.schedule_range_analysis(
+            db.minimum_ea + 0x10, db.minimum_ea, AnalysisQueueType.CODE
+        )

@@ -90,6 +90,23 @@ class Analysis(DatabaseEntity):
         super().__init__(database)
 
     @property
+    def is_enabled(self) -> bool:
+        """
+        Check if auto-analysis is currently enabled.
+
+        Returns:
+            True if auto-analysis is enabled, False if disabled
+
+        Example:
+            >>> db = Database.open_current()
+            >>> if db.analysis.is_enabled:
+            ...     print("Auto-analysis is running")
+            ... else:
+            ...     print("Auto-analysis is disabled")
+        """
+        return cast(bool, ida_auto.is_auto_enabled())
+
+    @property
     def is_complete(self) -> bool:
         """
         Check if all analysis queues are empty (non-blocking).
@@ -211,3 +228,127 @@ class Analysis(DatabaseEntity):
             # Just schedule for reanalysis
             ida_auto.auto_mark_range(start, end, ida_auto.AU_USED)
             return 0  # Unknown until processed
+
+    def set_enabled(self, enabled: bool) -> bool:
+        """
+        Enable or disable auto-analysis at runtime.
+
+        Temporarily disables the auto-analyzer. Use with caution - disabling
+        auto-analysis can leave the database in an inconsistent state. Always
+        re-enable it when done.
+
+        Args:
+            enabled: True to enable auto-analysis, False to disable
+
+        Returns:
+            Previous enabled state
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Temporarily disable auto-analysis for performance
+            >>> prev_state = db.analysis.set_enabled(False)
+            >>> try:
+            ...     # Do many operations without auto-analysis overhead
+            ...     for ea in range(0x401000, 0x410000, 4):
+            ...         db.bytes.patch_dword(ea, 0x90909090)
+            ... finally:
+            ...     # Always re-enable
+            ...     db.analysis.set_enabled(prev_state)
+            ...     db.analysis.wait_for_completion()
+        """
+        return cast(bool, ida_auto.enable_auto(enabled))
+
+    def schedule_code_analysis(self, ea: ea_t) -> None:
+        """
+        Schedule instruction creation at address (adds to CODE queue).
+
+        Use this to request IDA to create an instruction at a specific address.
+        The instruction will be created when the CODE queue is processed.
+
+        Args:
+            ea: Address where instruction should be created
+
+        Raises:
+            InvalidEAError: If address is invalid
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Schedule instruction creation
+            >>> db.analysis.schedule_code_analysis(0x401000)
+            >>> db.analysis.wait_for_completion()
+            >>> # Now instruction exists
+            >>> insn = db.instructions.get_at(0x401000)
+        """
+        # Validate address
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        # Schedule code creation
+        ida_auto.auto_make_code(ea)
+
+    def schedule_function_analysis(self, ea: ea_t) -> None:
+        """
+        Schedule function creation at address (adds to PROC queue).
+
+        Use this to request IDA to create a function at a specific address. The
+        function will be created when the PROC queue is processed (after CODE queue).
+
+        Args:
+            ea: Address where function should be created
+
+        Raises:
+            InvalidEAError: If address is invalid
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Schedule function creation
+            >>> db.analysis.schedule_function_analysis(0x401000)
+            >>> db.analysis.wait_for_completion()
+            >>> # Now function exists
+            >>> func = db.functions.get_at(0x401000)
+        """
+        # Validate address
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        # Schedule function creation
+        ida_auto.auto_make_proc(ea)
+
+    def schedule_range_analysis(
+        self, start: ea_t, end: ea_t, queue_type: AnalysisQueueType
+    ) -> None:
+        """
+        Schedule address range for analysis in specific queue.
+
+        Low-level queue control - adds a range to a specific analysis queue.
+        Most users should use the convenience methods (schedule_code_analysis(),
+        etc.) instead.
+
+        Args:
+            start: Start address of range
+            end: End address of range (exclusive)
+            queue_type: Which queue to add the range to
+
+        Raises:
+            InvalidEAError: If start or end address is invalid
+            InvalidParameterError: If start >= end or queue_type is invalid
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Add range to CODE queue
+            >>> db.analysis.schedule_range_analysis(
+            ...     0x401000,
+            ...     0x402000,
+            ...     AnalysisQueueType.CODE
+            ... )
+        """
+        # Validate inputs
+        if not self.database.is_valid_ea(start):
+            raise InvalidEAError(start)
+        if not self.database.is_valid_ea(end):
+            raise InvalidEAError(end)
+        if start >= end:
+            raise InvalidParameterError('start', start, 'must be less than end')
+
+        # Add range to specified queue
+        ida_auto.auto_mark_range(start, end, queue_type.value)
