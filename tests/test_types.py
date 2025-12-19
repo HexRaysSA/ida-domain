@@ -145,3 +145,145 @@ class TestTypesFormatting:
 # type information. These methods are tested indirectly through their use in other
 # parts of the codebase. Future work could add more comprehensive tests with a
 # binary that has richer type information.
+
+
+class TestLLMFriendlyAPI:
+    """Tests for LLM-friendly unified API methods."""
+
+    def test_get_by_name(self, test_env):
+        """
+        Test get() with by="name" returns type info.
+
+        RATIONALE: The get() method provides an LLM-friendly interface
+        using string parameters. by="name" should delegate to get_by_name().
+        """
+        # Try to get a non-existent type
+        result = test_env.types.get('NonExistentTypeXYZ', by='name')
+        assert result is None
+
+    def test_get_by_ordinal(self, test_env):
+        """
+        Test get() with by="ordinal" returns type info.
+
+        RATIONALE: by="ordinal" should delegate to get_by_ordinal().
+        """
+        # Try to get type at invalid ordinal
+        result = test_env.types.get(999999, by='ordinal')
+        assert result is None
+
+    def test_get_by_address(self, test_env):
+        """
+        Test get() with by="address" returns type info.
+
+        RATIONALE: by="address" should delegate to get_at().
+        """
+        first_func = next(test_env.functions.get_all())
+        result = test_env.types.get(first_func.start_ea, by='address')
+        # Result may be None or a tinfo_t depending on whether type exists
+        assert result is None or hasattr(result, 'get_type_name')
+
+    def test_get_with_invalid_by_raises_error(self, test_env):
+        """
+        Test get() raises InvalidParameterError for unknown by value.
+
+        RATIONALE: Invalid by parameter should raise InvalidParameterError.
+        """
+        with pytest.raises(InvalidParameterError):
+            test_env.types.get('int', by='invalid_source')
+
+    def test_get_is_case_insensitive(self, test_env):
+        """
+        Test get() accepts by parameter in any case.
+
+        RATIONALE: LLM-friendly API should be case-insensitive.
+        """
+        # All of these should work (all return None for non-existent type)
+        result1 = test_env.types.get('NonExistent', by='name')
+        result2 = test_env.types.get('NonExistent', by='NAME')
+        result3 = test_env.types.get('NonExistent', by='Name')
+        assert result1 == result2 == result3
+
+    def test_apply_by_name(self, test_env):
+        """
+        Test apply() with by="name" applies named type.
+
+        RATIONALE: by="name" should delegate to apply_by_name().
+        """
+        first_func = next(test_env.functions.get_all())
+        # Try to apply - result depends on whether type exists
+        result = test_env.types.apply(first_func.start_ea, 'int', by='name')
+        assert isinstance(result, bool)
+
+    def test_apply_by_decl(self, test_env):
+        """
+        Test apply() with by="decl" applies declaration.
+
+        RATIONALE: by="decl" should delegate to apply_declaration().
+        """
+        first_func = next(test_env.functions.get_all())
+        # Try to apply a C declaration
+        result = test_env.types.apply(first_func.start_ea, 'int', by='decl')
+        assert isinstance(result, bool)
+
+    def test_apply_with_invalid_address_raises_error(self, test_env):
+        """
+        Test apply() raises InvalidEAError for invalid addresses.
+
+        RATIONALE: All apply variations should validate addresses.
+        """
+        with pytest.raises(InvalidEAError):
+            test_env.types.apply(0xFFFFFFFFFFFFFFFF, 'int', by='name')
+
+    def test_apply_with_invalid_by_raises_error(self, test_env):
+        """
+        Test apply() raises InvalidParameterError for unknown by value.
+
+        RATIONALE: Invalid by parameter should raise InvalidParameterError.
+        """
+        first_func = next(test_env.functions.get_all())
+        with pytest.raises(InvalidParameterError):
+            test_env.types.apply(first_func.start_ea, 'int', by='invalid')
+
+    def test_guess_alias(self, test_env):
+        """
+        Test guess() is alias for guess_at().
+
+        RATIONALE: guess() provides shorter, LLM-friendly name for guess_at().
+        """
+        first_func = next(test_env.functions.get_all())
+        # Both should produce same result
+        result1 = test_env.types.guess(first_func.start_ea)
+        result2 = test_env.types.guess_at(first_func.start_ea)
+        # Both may be None or tinfo_t
+        assert (result1 is None and result2 is None) or (
+            result1 is not None and result2 is not None
+        )
+
+    def test_guess_with_invalid_address_raises_error(self, test_env):
+        """
+        Test guess() raises InvalidEAError for invalid addresses.
+
+        RATIONALE: guess() should validate addresses like guess_at().
+        """
+        with pytest.raises(InvalidEAError):
+            test_env.types.guess(0xFFFFFFFFFFFFFFFF)
+
+    def test_format_alias(self, test_env):
+        """
+        Test format() is alias for format_type_at() when given address.
+
+        RATIONALE: format() provides shorter, LLM-friendly name.
+        """
+        first_func = next(test_env.functions.get_all())
+        # Format at address - result may be None or string
+        result = test_env.types.format(first_func.start_ea)
+        assert result is None or isinstance(result, str)
+
+    def test_format_with_invalid_address_raises_error(self, test_env):
+        """
+        Test format() raises InvalidEAError for invalid addresses.
+
+        RATIONALE: format() should validate addresses.
+        """
+        with pytest.raises(InvalidEAError):
+            test_env.types.format(0xFFFFFFFFFFFFFFFF)

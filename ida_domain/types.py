@@ -1655,3 +1655,176 @@ class Types(DatabaseEntity):
             ...     print("Type is a user-defined type")
         """
         return cast(bool, type_info.is_udt())
+
+    # ========================================================================
+    # LLM-Friendly API Methods
+    # ========================================================================
+
+    def get(
+        self,
+        source: 'ea_t | str | int',
+        by: str = 'name',
+        library: Optional[til_t] = None,
+    ) -> Optional[tinfo_t]:
+        """
+        Retrieve a type (LLM-friendly unified interface).
+
+        This method provides a simplified interface using string parameters
+        instead of multiple method names, making it more accessible to LLM agents.
+
+        Args:
+            source: The type identifier. Interpretation depends on 'by' parameter:
+                - For by="name": type name string
+                - For by="ordinal": ordinal number (int)
+                - For by="address": effective address (ea_t)
+            by: How to interpret the source. Options:
+                - "name": Look up type by name (default)
+                - "ordinal": Look up type by ordinal number
+                - "address": Get type at an address
+            library: Type library to search (default: local database library)
+
+        Returns:
+            Type information object if found, None otherwise.
+
+        Raises:
+            InvalidParameterError: If 'by' is not recognized
+            InvalidEAError: If by="address" and source is an invalid address
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Get by name
+            >>> type_info = db.types.get("size_t", by="name")
+            >>> # Get by ordinal
+            >>> type_info = db.types.get(5, by="ordinal")
+            >>> # Get by address
+            >>> type_info = db.types.get(0x401000, by="address")
+        """
+        by_lower = by.lower()
+
+        if by_lower == 'name':
+            return self.get_by_name(str(source), library)
+        elif by_lower == 'ordinal':
+            return self.get_by_ordinal(int(source), library)
+        elif by_lower == 'address':
+            return self.get_at(source)
+        else:
+            raise InvalidParameterError(
+                'by',
+                by,
+                'must be one of: "name", "ordinal", "address"',
+            )
+
+    def apply(
+        self,
+        ea: 'ea_t',
+        type_source: 'str | tinfo_t',
+        by: str = 'name',
+        flags: TypeApplyFlags = TypeApplyFlags.DEFINITE,
+    ) -> bool:
+        """
+        Apply a type to an address (LLM-friendly unified interface).
+
+        This method provides a simplified interface using string parameters
+        instead of multiple method names, making it more accessible to LLM agents.
+
+        Args:
+            ea: The effective address where the type should be applied.
+            type_source: The type to apply. Interpretation depends on 'by' parameter:
+                - For by="name": type name string
+                - For by="decl": C declaration string
+                - For by="tinfo": tinfo_t object
+            by: How to interpret type_source. Options:
+                - "name": Apply a named type (default)
+                - "decl": Parse and apply a C declaration
+                - "tinfo": Apply a tinfo_t object directly
+            flags: Type apply flags (used for by="tinfo")
+
+        Returns:
+            True if the type was applied successfully, False otherwise.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid
+            InvalidParameterError: If 'by' is not recognized
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Apply by name
+            >>> db.types.apply(0x401000, "HWND", by="name")
+            >>> # Apply by declaration
+            >>> db.types.apply(0x401000, "int *", by="decl")
+        """
+        by_lower = by.lower()
+
+        if by_lower == 'name':
+            return self.apply_by_name(ea, str(type_source), flags)
+        elif by_lower == 'decl':
+            return self.apply_declaration(ea, str(type_source))
+        elif by_lower == 'tinfo':
+            return self.apply_at(cast(tinfo_t, type_source), ea, flags)
+        else:
+            raise InvalidParameterError(
+                'by',
+                by,
+                'must be one of: "name", "decl", "tinfo"',
+            )
+
+    def guess(self, ea: 'ea_t') -> Optional[tinfo_t]:
+        """
+        Guess the type at an address (LLM-friendly alias for guess_at).
+
+        This is a shorter, more intuitive name for the guess_at method,
+        designed to be easier for LLM agents to discover and use.
+
+        Args:
+            ea: The effective address for which to infer the type.
+
+        Returns:
+            The inferred type information if successful, None if type cannot be guessed.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> guessed = db.types.guess(0x401000)
+            >>> if guessed:
+            ...     print(f"Guessed: {db.types.format(guessed)}")
+        """
+        return self.guess_at(ea)
+
+    def format(
+        self,
+        source: 'ea_t | tinfo_t',
+        flags: TypeFormattingFlags = TypeFormattingFlags(0),
+    ) -> Optional[str]:
+        """
+        Format a type as a C declaration string (LLM-friendly unified interface).
+
+        This method accepts either an address or a tinfo_t object and returns
+        the type formatted as a C declaration string.
+
+        Args:
+            source: Either an effective address (ea_t) or a type information object (tinfo_t)
+            flags: Formatting flags controlling the output style
+
+        Returns:
+            A C-style declaration string, or None if no type exists at the address.
+
+        Raises:
+            InvalidEAError: If source is an address and it's invalid
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Format type at address
+            >>> decl = db.types.format(0x401000)
+            >>> # Format a tinfo_t object
+            >>> type_info = db.types.get("size_t", by="name")
+            >>> if type_info:
+            ...     decl = db.types.format(type_info)
+        """
+        # Check if source is a tinfo_t (has get_type_name method)
+        if hasattr(source, 'get_type_name'):
+            return self.format_type(cast(tinfo_t, source), flags)
+        else:
+            # Assume it's an address
+            return self.format_type_at(source, flags)
