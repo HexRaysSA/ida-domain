@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 Database exploration example for IDA Domain API.
 

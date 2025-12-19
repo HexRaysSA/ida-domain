@@ -20,20 +20,30 @@ nav:
       - Overview: usage.md
       - llms.txt: llm.md
   - API Reference:
-      - ref/database.md
-      - ref/flowchart.md
+      - ref/analysis.md
       - ref/bytes.md
       - ref/comments.md
+      - ref/database.md
+      - ref/decompiler.md
       - ref/entries.md
-      - ref/hooks.md
+      - ref/exporter.md
+      - ref/fixups.md
+      - ref/flowchart.md
       - ref/functions.md
       - ref/heads.md
+      - ref/hooks.md
+      - ref/imports.md
       - ref/instructions.md
       - ref/names.md
       - ref/operands.md
+      - ref/problems.md
+      - ref/search.md
       - ref/segments.md
       - ref/signature_files.md
+      - ref/stack_frames.md
       - ref/strings.md
+      - ref/switches.md
+      - ref/try_blocks.md
       - ref/types.md
       - ref/xrefs.md
 
