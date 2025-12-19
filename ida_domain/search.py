@@ -136,6 +136,70 @@ class Search(DatabaseEntity):
                 '"code_outside_function"'
             )
 
+    def find_all(
+        self, start_ea: ea_t, end_ea: ea_t, what: str
+    ) -> Iterator[ea_t]:
+        """
+        Iterate over all addresses of specified type (LLM-friendly unified iterator).
+
+        This is an LLM-friendly unified interface for iterating over addresses.
+        Instead of remembering multiple method names (all_undefined, all_code, etc.),
+        LLMs can use this single method with a string parameter.
+
+        Args:
+            start_ea: Start of range
+            end_ea: End of range (exclusive)
+            what: Type of address to find. One of:
+                - "undefined": Find all undefined/unexplored bytes
+                - "defined": Find all defined items (instruction or data)
+                - "code": Find all code addresses
+                - "data": Find all data addresses
+                - "code_outside_function": Find all orphaned code
+
+        Yields:
+            Addresses of matching type in the specified range
+
+        Raises:
+            InvalidEAError: If start_ea or end_ea is invalid
+            InvalidParameterError: If start_ea >= end_ea or what is not a valid option
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Find all code addresses
+            >>> for ea in db.search.find_all(0x401000, 0x402000, "code"):
+            ...     print(hex(ea))
+
+        Note:
+            This method provides a simpler API for LLMs that don't need to
+            remember the specific method names for each search type.
+        """
+        # Validate inputs first
+        if not self.database.is_valid_ea(start_ea, strict_check=False):
+            raise InvalidEAError(start_ea)
+        if not self.database.is_valid_ea(end_ea, strict_check=False):
+            raise InvalidEAError(end_ea)
+        if start_ea >= end_ea:
+            raise InvalidParameterError('start_ea', start_ea, 'must be less than end_ea')
+
+        # Dispatch to appropriate method based on what
+        what_lower = what.lower()
+        if what_lower == "undefined":
+            yield from self.all_undefined(start_ea, end_ea)
+        elif what_lower == "defined":
+            yield from self.all_defined(start_ea, end_ea)
+        elif what_lower == "code":
+            yield from self.all_code(start_ea, end_ea)
+        elif what_lower == "data":
+            yield from self.all_data(start_ea, end_ea)
+        elif what_lower == "code_outside_function":
+            yield from self.all_code_outside_functions(start_ea, end_ea)
+        else:
+            raise InvalidParameterError(
+                'what', what,
+                'must be one of: "undefined", "defined", "code", "data", '
+                '"code_outside_function"'
+            )
+
     # ============================================================================
     # STATE-BASED SEARCHES
     # ============================================================================

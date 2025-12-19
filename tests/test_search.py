@@ -790,3 +790,137 @@ def test_find_next_validates_direction_parameter(search_db):
 
     with pytest.raises(InvalidParameterError):
         search_db.search.find_next(valid_ea, "code", direction="invalid")
+
+
+# =============================================================================
+# FIND_ALL LLM-FRIENDLY API TESTS
+# =============================================================================
+
+
+def test_find_all_method_exists_and_is_callable(search_db):
+    """
+    Test that find_all() method exists as an LLM-friendly unified iterator interface.
+
+    RATIONALE: The find_all() method provides a unified interface for LLMs to
+    iterate over addresses of different types using a string parameter instead of
+    remembering individual method names like all_undefined(), all_code(), etc.
+    """
+    assert hasattr(search_db.search, 'find_all'), 'find_all() method should exist'
+    assert callable(search_db.search.find_all), 'find_all() should be callable'
+
+
+def test_find_all_with_undefined_type(search_db):
+    """
+    Test that find_all(start, end, "undefined") works like all_undefined().
+    """
+    start_ea = search_db.minimum_ea
+    end_ea = search_db.maximum_ea
+
+    # Get results from both methods
+    find_all_results = list(search_db.search.find_all(start_ea, end_ea, "undefined"))
+    all_results = list(search_db.search.all_undefined(start_ea, end_ea))
+
+    # Compare first 10 results to avoid exhaustive comparison
+    assert find_all_results[:10] == all_results[:10], (
+        'find_all("undefined") should match all_undefined()'
+    )
+
+
+def test_find_all_with_defined_type(search_db):
+    """
+    Test that find_all(start, end, "defined") works like all_defined().
+    """
+    start_ea = search_db.minimum_ea
+    end_ea = search_db.maximum_ea
+
+    find_all_results = list(search_db.search.find_all(start_ea, end_ea, "defined"))
+    all_results = list(search_db.search.all_defined(start_ea, end_ea))
+
+    assert find_all_results[:10] == all_results[:10], (
+        'find_all("defined") should match all_defined()'
+    )
+
+
+def test_find_all_with_code_type(search_db):
+    """
+    Test that find_all(start, end, "code") works like all_code().
+    """
+    start_ea = search_db.minimum_ea
+    end_ea = search_db.maximum_ea
+
+    find_all_results = list(search_db.search.find_all(start_ea, end_ea, "code"))
+    all_results = list(search_db.search.all_code(start_ea, end_ea))
+
+    assert find_all_results[:10] == all_results[:10], (
+        'find_all("code") should match all_code()'
+    )
+
+
+def test_find_all_with_data_type(search_db):
+    """
+    Test that find_all(start, end, "data") works like all_data().
+    """
+    start_ea = search_db.minimum_ea
+    end_ea = search_db.maximum_ea
+
+    find_all_results = list(search_db.search.find_all(start_ea, end_ea, "data"))
+    all_results = list(search_db.search.all_data(start_ea, end_ea))
+
+    assert find_all_results[:10] == all_results[:10], (
+        'find_all("data") should match all_data()'
+    )
+
+
+def test_find_all_with_code_outside_function_type(search_db):
+    """
+    Test that find_all(start, end, "code_outside_function") works like all_code_outside_functions().
+    """
+    start_ea = search_db.minimum_ea
+    end_ea = search_db.maximum_ea
+
+    find_all_results = list(
+        search_db.search.find_all(start_ea, end_ea, "code_outside_function")
+    )
+    all_results = list(
+        search_db.search.all_code_outside_functions(start_ea, end_ea)
+    )
+
+    assert find_all_results[:10] == all_results[:10], (
+        'find_all("code_outside_function") should match all_code_outside_functions()'
+    )
+
+
+def test_find_all_validates_address_range(search_db):
+    """
+    Test that find_all() properly validates address range.
+    """
+    from ida_domain.base import InvalidEAError, InvalidParameterError
+
+    # Invalid start address
+    with pytest.raises(InvalidEAError):
+        list(search_db.search.find_all(0xFFFFFFFFFFFFFFFF, search_db.minimum_ea, "code"))
+
+    # Invalid end address
+    with pytest.raises(InvalidEAError):
+        list(search_db.search.find_all(search_db.minimum_ea, 0xFFFFFFFFFFFFFFFF, "code"))
+
+    # start >= end should raise InvalidParameterError
+    start_ea = search_db.minimum_ea + 0x100
+    with pytest.raises(InvalidParameterError):
+        list(search_db.search.find_all(start_ea, start_ea, "code"))
+
+
+def test_find_all_validates_what_parameter(search_db):
+    """
+    Test that find_all() validates the 'what' parameter.
+    """
+    from ida_domain.base import InvalidParameterError
+
+    start_ea = search_db.minimum_ea
+    end_ea = search_db.maximum_ea
+
+    with pytest.raises(InvalidParameterError):
+        list(search_db.search.find_all(start_ea, end_ea, "invalid_type"))
+
+    with pytest.raises(InvalidParameterError):
+        list(search_db.search.find_all(start_ea, end_ea, ""))
