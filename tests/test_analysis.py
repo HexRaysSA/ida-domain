@@ -417,3 +417,70 @@ def test_wait_method_exists_and_is_callable(analysis_db):
 
     # Verify analysis is complete
     assert analysis_db.analysis.is_complete, 'Analysis should be complete after wait()'
+
+
+def test_analyze_method_is_alias_for_analyze_range(analysis_db):
+    """
+    Test that analyze() is an LLM-friendly alias for analyze_range().
+
+    RATIONALE: The analyze() method provides a shorter, more intuitive name
+    that LLMs naturally suggest for analyzing a range. This test validates:
+    1. The method exists on the Analysis class
+    2. It is callable with the same parameters as analyze_range()
+    3. It behaves identically to analyze_range()
+    4. It supports the optional wait parameter
+
+    This follows the LLM API design pattern of providing concise aliases.
+    """
+    # analyze() should exist and be callable
+    assert hasattr(analysis_db.analysis, 'analyze'), 'analyze() method should exist'
+    assert callable(analysis_db.analysis.analyze), 'analyze() should be callable'
+
+    # Wait for initial analysis
+    analysis_db.analysis.wait()
+
+    # Get a valid range
+    start_ea = analysis_db.minimum_ea
+    end_ea = min(start_ea + 0x100, analysis_db.maximum_ea)
+
+    # Call analyze() with wait=True (default)
+    result = analysis_db.analysis.analyze(start_ea, end_ea)
+    assert isinstance(result, int), 'analyze() should return int (address count)'
+
+    # Call analyze() with wait=False
+    result2 = analysis_db.analysis.analyze(start_ea, end_ea, wait=False)
+    assert isinstance(result2, int), 'analyze() with wait=False should return int'
+    assert result2 == 0, 'analyze() with wait=False should return 0'
+
+    # Wait for completion
+    analysis_db.analysis.wait()
+    assert analysis_db.analysis.is_complete, 'Analysis should complete'
+
+
+def test_analyze_validates_address_range(analysis_db):
+    """
+    Test that analyze() properly validates address ranges.
+
+    RATIONALE: Since analyze() is an alias for analyze_range(), it should
+    inherit the same validation behavior:
+    - InvalidEAError for invalid addresses
+    - InvalidParameterError for start >= end
+    """
+    from ida_domain.base import InvalidEAError, InvalidParameterError
+
+    # Invalid start address
+    with pytest.raises(InvalidEAError):
+        analysis_db.analysis.analyze(0xFFFFFFFFFFFFFFFF, analysis_db.minimum_ea)
+
+    # Invalid end address
+    with pytest.raises(InvalidEAError):
+        analysis_db.analysis.analyze(analysis_db.minimum_ea, 0xFFFFFFFFFFFFFFFF)
+
+    # start >= end should raise InvalidParameterError
+    start_ea = analysis_db.minimum_ea + 0x100
+
+    with pytest.raises(InvalidParameterError):
+        analysis_db.analysis.analyze(start_ea, start_ea)
+
+    with pytest.raises(InvalidParameterError):
+        analysis_db.analysis.analyze(start_ea, start_ea - 1)

@@ -208,6 +208,41 @@ class Analysis(DatabaseEntity):
         """
         return self.wait_for_completion()
 
+    def analyze(self, start: ea_t, end: ea_t, wait: bool = True) -> int:
+        """
+        Analyze address range (LLM-friendly alias for analyze_range).
+
+        This is an LLM-friendly alias for analyze_range(). It provides a
+        shorter, more intuitive name that LLMs naturally suggest when
+        analyzing a range of addresses.
+
+        Args:
+            start: Start address of range to analyze
+            end: End address of range (exclusive)
+            wait: If True, blocks until analysis completes. If False, schedules
+                analysis and returns immediately.
+
+        Returns:
+            Number of addresses processed
+
+        Raises:
+            InvalidEAError: If start or end address is invalid
+            InvalidParameterError: If start >= end
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Analyze a specific range and wait
+            >>> count = db.analysis.analyze(0x401000, 0x402000)
+            >>> print(f"Analyzed {count} addresses")
+            >>> # Schedule analysis without waiting
+            >>> db.analysis.analyze(0x402000, 0x403000, wait=False)
+
+        Note:
+            This method is functionally identical to analyze_range().
+            Use whichever name feels more natural for your workflow.
+        """
+        return self.analyze_range(start, end, wait)
+
     def analyze_range(self, start: ea_t, end: ea_t, wait: bool = True) -> int:
         """
         Analyze address range and optionally wait for completion.
