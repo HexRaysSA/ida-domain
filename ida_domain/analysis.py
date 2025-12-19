@@ -562,6 +562,33 @@ class Analysis(DatabaseEntity):
         # Schedule reanalysis
         ida_auto.plan_ea(ea)
 
+    def cancel(self, start: ea_t, end: ea_t) -> None:
+        """
+        Cancel pending analysis for address range (LLM-friendly alias).
+
+        This is an LLM-friendly alias for cancel_analysis(). It provides a
+        shorter, more intuitive name that LLMs naturally suggest when
+        canceling pending analysis.
+
+        Args:
+            start: Start address of range
+            end: End address of range (exclusive)
+
+        Raises:
+            InvalidEAError: If start or end address is invalid
+            InvalidParameterError: If start >= end
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Cancel pending analysis for data section
+            >>> db.analysis.cancel(0x403000, 0x404000)
+
+        Note:
+            This method is functionally identical to cancel_analysis().
+            Use whichever name feels more natural for your workflow.
+        """
+        return self.cancel_analysis(start, end)
+
     def cancel_analysis(self, start: ea_t, end: ea_t) -> None:
         """
         Cancel pending analysis for address range.

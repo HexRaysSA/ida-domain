@@ -564,3 +564,59 @@ def test_schedule_validates_what_parameter(analysis_db):
 
     with pytest.raises(InvalidParameterError):
         analysis_db.analysis.schedule(valid_ea, "CODE_WRONG")
+
+
+def test_cancel_method_is_alias_for_cancel_analysis(analysis_db):
+    """
+    Test that cancel() is an LLM-friendly alias for cancel_analysis().
+
+    RATIONALE: The cancel() method provides a shorter name that LLMs
+    naturally suggest for canceling pending analysis. This test validates:
+    1. The method exists and is callable
+    2. It accepts the same parameters as cancel_analysis()
+    3. It completes without errors for valid address ranges
+    """
+    # cancel() should exist and be callable
+    assert hasattr(analysis_db.analysis, 'cancel'), 'cancel() method should exist'
+    assert callable(analysis_db.analysis.cancel), 'cancel() should be callable'
+
+    # Wait for initial analysis
+    analysis_db.analysis.wait()
+
+    # Get a valid range
+    start_ea = analysis_db.minimum_ea
+    end_ea = min(start_ea + 0x100, analysis_db.maximum_ea)
+
+    # Call cancel() - should not raise exception
+    analysis_db.analysis.cancel(start_ea, end_ea)
+
+    # Verify analysis is still functional after cancel
+    analysis_db.analysis.wait()
+    assert analysis_db.analysis.is_complete, 'Analysis should complete after cancel'
+
+
+def test_cancel_validates_address_range(analysis_db):
+    """
+    Test that cancel() properly validates address ranges.
+
+    RATIONALE: Since cancel() is an alias for cancel_analysis(), it should
+    inherit the same validation behavior.
+    """
+    from ida_domain.base import InvalidEAError, InvalidParameterError
+
+    # Invalid start address
+    with pytest.raises(InvalidEAError):
+        analysis_db.analysis.cancel(0xFFFFFFFFFFFFFFFF, analysis_db.minimum_ea)
+
+    # Invalid end address
+    with pytest.raises(InvalidEAError):
+        analysis_db.analysis.cancel(analysis_db.minimum_ea, 0xFFFFFFFFFFFFFFFF)
+
+    # start >= end should raise InvalidParameterError
+    start_ea = analysis_db.minimum_ea + 0x100
+
+    with pytest.raises(InvalidParameterError):
+        analysis_db.analysis.cancel(start_ea, start_ea)
+
+    with pytest.raises(InvalidParameterError):
+        analysis_db.analysis.cancel(start_ea, start_ea - 1)
