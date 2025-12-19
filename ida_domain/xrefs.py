@@ -28,7 +28,13 @@ from typing_extensions import (
     cast,
 )
 
-from .base import DatabaseEntity, InvalidEAError, check_db_open, decorate_all_methods
+from .base import (
+    DatabaseEntity,
+    InvalidEAError,
+    InvalidParameterError,
+    check_db_open,
+    decorate_all_methods,
+)
 
 if TYPE_CHECKING:
     from .database import Database
@@ -646,3 +652,195 @@ class Xrefs(DatabaseEntity):
         for _ in self.from_ea(ea, flags):
             count += 1
         return count
+
+    # ========================================================================
+    # LLM-Friendly API Methods
+    # ========================================================================
+
+    def get_refs_to(
+        self, ea: ea_t, kind: str = "all"
+    ) -> Iterator[Union[XrefInfo, ea_t]]:
+        """
+        Get cross-references to an address (LLM-friendly unified interface).
+
+        This method provides a simplified interface using string parameters
+        instead of enums, making it more accessible to LLM agents.
+
+        Args:
+            ea: Target address
+            kind: Type of references to get. Options:
+                - "all": All xrefs (returns XrefInfo objects)
+                - "code": Code xrefs only (returns addresses)
+                - "data": Data xrefs only (returns addresses)
+                - "calls": Call xrefs only (returns addresses)
+                - "jumps": Jump xrefs only (returns addresses)
+                - "reads": Read xrefs only (returns addresses)
+                - "writes": Write xrefs only (returns addresses)
+
+        Yields:
+            XrefInfo for "all", otherwise ea_t addresses
+
+        Raises:
+            InvalidEAError: If the effective address is invalid
+            InvalidParameterError: If kind is not recognized
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Get all references to a function
+            >>> for ref in db.xrefs.get_refs_to(func_ea, "all"):
+            ...     print(f"{ref.from_ea:x} -> {ref.to_ea:x}")
+            >>> # Get just call sites
+            >>> for caller_ea in db.xrefs.get_refs_to(func_ea, "calls"):
+            ...     print(f"Called from 0x{caller_ea:x}")
+        """
+        kind_lower = kind.lower()
+
+        if kind_lower == "all":
+            yield from self.to_ea(ea)
+        elif kind_lower == "code":
+            yield from self.code_refs_to_ea(ea)
+        elif kind_lower == "data":
+            yield from self.data_refs_to_ea(ea)
+        elif kind_lower == "calls":
+            yield from self.calls_to_ea(ea)
+        elif kind_lower == "jumps":
+            yield from self.jumps_to_ea(ea)
+        elif kind_lower == "reads":
+            yield from self.reads_of_ea(ea)
+        elif kind_lower == "writes":
+            yield from self.writes_to_ea(ea)
+        else:
+            raise InvalidParameterError(
+                'kind',
+                kind,
+                'must be one of: "all", "code", "data", "calls", "jumps", "reads", "writes"',
+            )
+
+    def get_refs_from(
+        self, ea: ea_t, kind: str = "all"
+    ) -> Iterator[Union[XrefInfo, ea_t]]:
+        """
+        Get cross-references from an address (LLM-friendly unified interface).
+
+        This method provides a simplified interface using string parameters
+        instead of enums, making it more accessible to LLM agents.
+
+        Args:
+            ea: Source address
+            kind: Type of references to get. Options:
+                - "all": All xrefs (returns XrefInfo objects)
+                - "code": Code xrefs only (returns addresses)
+                - "data": Data xrefs only (returns addresses)
+                - "calls": Call xrefs only (returns addresses)
+                - "jumps": Jump xrefs only (returns addresses)
+
+        Yields:
+            XrefInfo for "all", otherwise ea_t addresses
+
+        Raises:
+            InvalidEAError: If the effective address is invalid
+            InvalidParameterError: If kind is not recognized
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Get all references from an instruction
+            >>> for ref in db.xrefs.get_refs_from(insn_ea, "all"):
+            ...     print(f"{ref.from_ea:x} -> {ref.to_ea:x}")
+            >>> # Get just call targets
+            >>> for target_ea in db.xrefs.get_refs_from(insn_ea, "calls"):
+            ...     print(f"Calls 0x{target_ea:x}")
+        """
+        kind_lower = kind.lower()
+
+        if kind_lower == "all":
+            yield from self.from_ea(ea)
+        elif kind_lower == "code":
+            yield from self.code_refs_from_ea(ea)
+        elif kind_lower == "data":
+            yield from self.data_refs_from_ea(ea)
+        elif kind_lower == "calls":
+            yield from self.calls_from_ea(ea)
+        elif kind_lower == "jumps":
+            yield from self.jumps_from_ea(ea)
+        else:
+            raise InvalidParameterError(
+                'kind',
+                kind,
+                'must be one of: "all", "code", "data", "calls", "jumps"',
+            )
+
+    def has_refs_to(self, ea: ea_t, kind: str = "all") -> bool:
+        """
+        Check if references to an address exist (LLM-friendly unified interface).
+
+        This method provides a simplified interface using string parameters
+        instead of enums, making it more accessible to LLM agents.
+
+        Args:
+            ea: Target address
+            kind: Type of references to check. Options:
+                - "all": Any xrefs
+                - "code": Code xrefs only
+                - "data": Data xrefs only
+
+        Returns:
+            True if references of the specified kind exist
+
+        Raises:
+            InvalidEAError: If the effective address is invalid
+            InvalidParameterError: If kind is not recognized
+
+        Example:
+            >>> db = Database.open_current()
+            >>> if db.xrefs.has_refs_to(func_ea, "code"):
+            ...     print("Function is called")
+        """
+        kind_lower = kind.lower()
+
+        if kind_lower == "all":
+            return self.has_any_refs_to(ea)
+        elif kind_lower == "code":
+            return self.has_code_refs_to(ea)
+        elif kind_lower == "data":
+            return self.has_data_refs_to(ea)
+        else:
+            raise InvalidParameterError(
+                'kind',
+                kind,
+                'must be one of: "all", "code", "data"',
+            )
+
+    def has_refs_from(self, ea: ea_t, kind: str = "all") -> bool:
+        """
+        Check if references from an address exist (LLM-friendly unified interface).
+
+        This method provides a simplified interface using string parameters
+        instead of enums, making it more accessible to LLM agents.
+
+        Args:
+            ea: Source address
+            kind: Type of references to check. Options:
+                - "all": Any xrefs
+
+        Returns:
+            True if references of the specified kind exist
+
+        Raises:
+            InvalidEAError: If the effective address is invalid
+            InvalidParameterError: If kind is not recognized
+
+        Example:
+            >>> db = Database.open_current()
+            >>> if db.xrefs.has_refs_from(insn_ea, "all"):
+            ...     print("Instruction has outgoing references")
+        """
+        kind_lower = kind.lower()
+
+        if kind_lower == "all":
+            return self.has_any_refs_from(ea)
+        else:
+            raise InvalidParameterError(
+                'kind',
+                kind,
+                'must be one of: "all"',
+            )

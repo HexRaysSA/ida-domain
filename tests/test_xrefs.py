@@ -6,7 +6,7 @@ import tempfile
 import pytest
 
 import ida_domain
-from ida_domain.base import InvalidEAError
+from ida_domain.base import InvalidEAError, InvalidParameterError
 from ida_domain.database import IdaCommandOptions
 from ida_domain.xrefs import XrefsFlags
 
@@ -504,3 +504,261 @@ class TestXrefErrorHandling:
 
         with pytest.raises(InvalidEAError):
             test_env.xrefs.count_refs_from(invalid_ea)
+
+
+class TestLLMFriendlyAPI:
+    """Tests for LLM-friendly unified API methods."""
+
+    def test_get_refs_to_with_all_kind(self, test_env):
+        """
+        Test get_refs_to with kind="all" returns all xrefs.
+
+        RATIONALE: The get_refs_to method provides an LLM-friendly interface
+        using string parameters instead of enums. kind="all" should delegate
+        to to_ea() and return all xrefs.
+        """
+        # Find a function with callers
+        func_with_refs = None
+        for func in test_env.functions.get_all():
+            for _ in test_env.xrefs.to_ea(func.start_ea, XrefsFlags.CODE_NOFLOW):
+                func_with_refs = func
+                break
+            if func_with_refs:
+                break
+
+        if func_with_refs is None:
+            pytest.skip('No function with refs found')
+
+        func_ea = func_with_refs.start_ea
+
+        # Get refs using LLM-friendly API
+        refs = list(test_env.xrefs.get_refs_to(func_ea, "all"))
+        expected = list(test_env.xrefs.to_ea(func_ea))
+
+        assert len(refs) == len(expected)
+
+    def test_get_refs_to_with_code_kind(self, test_env):
+        """
+        Test get_refs_to with kind="code" returns code xrefs only.
+
+        RATIONALE: kind="code" should delegate to code_refs_to_ea() and
+        return only code reference addresses.
+        """
+        # Find a function with callers
+        func_with_refs = None
+        for func in test_env.functions.get_all():
+            for _ in test_env.xrefs.code_refs_to_ea(func.start_ea, flow=False):
+                func_with_refs = func
+                break
+            if func_with_refs:
+                break
+
+        if func_with_refs is None:
+            pytest.skip('No function with code refs found')
+
+        func_ea = func_with_refs.start_ea
+
+        # Get refs using LLM-friendly API
+        refs = list(test_env.xrefs.get_refs_to(func_ea, "code"))
+        expected = list(test_env.xrefs.code_refs_to_ea(func_ea))
+
+        assert len(refs) == len(expected)
+
+    def test_get_refs_to_with_invalid_kind_raises_error(self, test_env):
+        """
+        Test get_refs_to raises InvalidParameterError for unknown kind.
+
+        RATIONALE: Invalid kind parameter should raise InvalidParameterError
+        with clear error message listing valid options.
+        """
+        func_ea = next(test_env.functions.get_all()).start_ea
+
+        with pytest.raises(InvalidParameterError):
+            list(test_env.xrefs.get_refs_to(func_ea, "invalid_kind"))
+
+    def test_get_refs_to_is_case_insensitive(self, test_env):
+        """
+        Test get_refs_to accepts kind parameter in any case.
+
+        RATIONALE: LLM-friendly API should be case-insensitive for string
+        parameters to reduce friction.
+        """
+        func_ea = next(test_env.functions.get_all()).start_ea
+
+        # All of these should work
+        refs_lower = list(test_env.xrefs.get_refs_to(func_ea, "all"))
+        refs_upper = list(test_env.xrefs.get_refs_to(func_ea, "ALL"))
+        refs_mixed = list(test_env.xrefs.get_refs_to(func_ea, "All"))
+
+        assert len(refs_lower) == len(refs_upper) == len(refs_mixed)
+
+    def test_get_refs_from_with_all_kind(self, test_env):
+        """
+        Test get_refs_from with kind="all" returns all xrefs.
+
+        RATIONALE: get_refs_from should provide symmetric functionality
+        to get_refs_to, returning outgoing references.
+        """
+        # Find a call instruction
+        call_ea = None
+        for func in test_env.functions.get_all():
+            ea = func.start_ea
+            while ea < func.end_ea:
+                insn = test_env.instructions.get_at(ea)
+                if insn and test_env.instructions.is_call_instruction(insn):
+                    call_ea = ea
+                    break
+                if insn:
+                    ea = insn.ea + insn.size
+                else:
+                    break
+            if call_ea:
+                break
+
+        if call_ea is None:
+            pytest.skip('No call instruction found')
+
+        # Get refs using LLM-friendly API
+        refs = list(test_env.xrefs.get_refs_from(call_ea, "all"))
+        expected = list(test_env.xrefs.from_ea(call_ea))
+
+        assert len(refs) == len(expected)
+
+    def test_get_refs_from_with_code_kind(self, test_env):
+        """
+        Test get_refs_from with kind="code" returns code xrefs only.
+
+        RATIONALE: kind="code" should delegate to code_refs_from_ea()
+        and return only code reference addresses.
+        """
+        # Find a call instruction
+        call_ea = None
+        for func in test_env.functions.get_all():
+            ea = func.start_ea
+            while ea < func.end_ea:
+                insn = test_env.instructions.get_at(ea)
+                if insn and test_env.instructions.is_call_instruction(insn):
+                    call_ea = ea
+                    break
+                if insn:
+                    ea = insn.ea + insn.size
+                else:
+                    break
+            if call_ea:
+                break
+
+        if call_ea is None:
+            pytest.skip('No call instruction found')
+
+        # Get refs using LLM-friendly API
+        refs = list(test_env.xrefs.get_refs_from(call_ea, "code"))
+        expected = list(test_env.xrefs.code_refs_from_ea(call_ea))
+
+        assert len(refs) == len(expected)
+
+    def test_has_refs_to_with_all_kind(self, test_env):
+        """
+        Test has_refs_to with kind="all" checks for any refs.
+
+        RATIONALE: has_refs_to provides an LLM-friendly existence check
+        using string parameter. kind="all" should delegate to has_any_refs_to().
+        """
+        # Find a function with callers
+        func_with_refs = None
+        for func in test_env.functions.get_all():
+            if test_env.xrefs.has_any_refs_to(func.start_ea):
+                func_with_refs = func
+                break
+
+        if func_with_refs is None:
+            pytest.skip('No function with refs found')
+
+        func_ea = func_with_refs.start_ea
+
+        # Check using LLM-friendly API
+        result = test_env.xrefs.has_refs_to(func_ea, "all")
+        expected = test_env.xrefs.has_any_refs_to(func_ea)
+
+        assert result == expected
+
+    def test_has_refs_to_with_code_kind(self, test_env):
+        """
+        Test has_refs_to with kind="code" checks for code refs only.
+
+        RATIONALE: kind="code" should delegate to has_code_refs_to().
+        """
+        # Find a function with code refs
+        func_with_refs = None
+        for func in test_env.functions.get_all():
+            if test_env.xrefs.has_code_refs_to(func.start_ea):
+                func_with_refs = func
+                break
+
+        if func_with_refs is None:
+            pytest.skip('No function with code refs found')
+
+        func_ea = func_with_refs.start_ea
+
+        # Check using LLM-friendly API
+        result = test_env.xrefs.has_refs_to(func_ea, "code")
+        expected = test_env.xrefs.has_code_refs_to(func_ea)
+
+        assert result == expected
+
+    def test_has_refs_to_with_data_kind(self, test_env):
+        """
+        Test has_refs_to with kind="data" checks for data refs only.
+
+        RATIONALE: kind="data" should delegate to has_data_refs_to().
+        """
+        first_func = next(test_env.functions.get_all())
+        func_ea = first_func.start_ea
+
+        # Check using LLM-friendly API
+        result = test_env.xrefs.has_refs_to(func_ea, "data")
+        expected = test_env.xrefs.has_data_refs_to(func_ea)
+
+        assert result == expected
+
+    def test_has_refs_to_with_invalid_kind_raises_error(self, test_env):
+        """
+        Test has_refs_to raises InvalidParameterError for unknown kind.
+
+        RATIONALE: Invalid kind parameter should raise InvalidParameterError.
+        """
+        func_ea = next(test_env.functions.get_all()).start_ea
+
+        with pytest.raises(InvalidParameterError):
+            test_env.xrefs.has_refs_to(func_ea, "invalid_kind")
+
+    def test_has_refs_from_with_all_kind(self, test_env):
+        """
+        Test has_refs_from with kind="all" checks for any outgoing refs.
+
+        RATIONALE: has_refs_from provides symmetric functionality to has_refs_to,
+        checking for outgoing references using string parameter.
+        """
+        # Find a call instruction
+        call_ea = None
+        for func in test_env.functions.get_all():
+            ea = func.start_ea
+            while ea < func.end_ea:
+                insn = test_env.instructions.get_at(ea)
+                if insn and test_env.instructions.is_call_instruction(insn):
+                    call_ea = ea
+                    break
+                if insn:
+                    ea = insn.ea + insn.size
+                else:
+                    break
+            if call_ea:
+                break
+
+        if call_ea is None:
+            pytest.skip('No call instruction found')
+
+        # Check using LLM-friendly API
+        result = test_env.xrefs.has_refs_from(call_ea, "all")
+        expected = test_env.xrefs.has_any_refs_from(call_ea)
+
+        assert result == expected
