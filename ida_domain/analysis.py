@@ -182,6 +182,32 @@ class Analysis(DatabaseEntity):
         """
         return cast(bool, ida_auto.auto_wait())
 
+    def wait(self) -> bool:
+        """
+        Wait until all analysis queues are empty (LLM-friendly alias).
+
+        This is an LLM-friendly alias for wait_for_completion(). It provides
+        a shorter, more intuitive name that LLMs naturally suggest when waiting
+        for analysis to complete.
+
+        Returns:
+            True if analysis completed successfully
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Create a function
+            >>> db.functions.create(0x401000)
+            >>> # Wait for analysis to complete (LLM-friendly)
+            >>> db.analysis.wait()
+            >>> # Now safe to query function properties
+            >>> func = db.functions.get_at(0x401000)
+
+        Note:
+            This method is functionally identical to wait_for_completion().
+            Use whichever name feels more natural for your workflow.
+        """
+        return self.wait_for_completion()
+
     def analyze_range(self, start: ea_t, end: ea_t, wait: bool = True) -> int:
         """
         Analyze address range and optionally wait for completion.

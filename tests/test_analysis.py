@@ -382,3 +382,38 @@ def test_all_advanced_methods_work_together(analysis_db):
 
     # Verify final state
     assert analysis_db.analysis.is_complete, 'Should be complete at end'
+
+
+# =============================================================================
+# LLM-FRIENDLY API TESTS
+# =============================================================================
+
+
+def test_wait_method_exists_and_is_callable(analysis_db):
+    """
+    Test that wait() method exists and is callable as an LLM-friendly alias.
+
+    RATIONALE: The wait() method provides an LLM-friendly name for
+    wait_for_completion(). LLMs often suggest "wait()" as a natural way
+    to wait for analysis completion. This test validates:
+    1. The method exists on the Analysis class
+    2. It is callable
+    3. It returns the expected boolean type
+    4. It behaves identically to wait_for_completion()
+
+    This is part of the LLM API design pattern where we provide shorter,
+    more intuitive method names as aliases to existing functionality.
+    """
+    # Wait() should exist and be callable
+    assert hasattr(analysis_db.analysis, 'wait'), 'wait() method should exist'
+    assert callable(analysis_db.analysis.wait), 'wait() should be callable'
+
+    # Call wait() and verify it returns boolean
+    result = analysis_db.analysis.wait()
+    assert isinstance(result, bool), 'wait() should return boolean'
+
+    # Result should be True for successful completion
+    assert result is True, 'wait() should return True on successful completion'
+
+    # Verify analysis is complete
+    assert analysis_db.analysis.is_complete, 'Analysis should be complete after wait()'
