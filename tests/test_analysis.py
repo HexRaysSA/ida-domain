@@ -484,3 +484,83 @@ def test_analyze_validates_address_range(analysis_db):
 
     with pytest.raises(InvalidParameterError):
         analysis_db.analysis.analyze(start_ea, start_ea - 1)
+
+
+def test_schedule_method_exists_and_dispatches(analysis_db):
+    """
+    Test that schedule() method exists and dispatches based on 'what' parameter.
+
+    RATIONALE: The schedule() method provides a unified LLM-friendly interface
+    for scheduling different types of analysis. Instead of requiring LLMs to know
+    about schedule_code_analysis(), schedule_function_analysis(), and
+    schedule_reanalysis(), they can use schedule(ea, "code"), schedule(ea, "function"),
+    or schedule(ea, "reanalysis"). This test validates:
+    1. The method exists and is callable
+    2. It accepts "code", "function", and "reanalysis" as valid options
+    3. It completes without errors for valid addresses
+    """
+    # schedule() should exist and be callable
+    assert hasattr(analysis_db.analysis, 'schedule'), 'schedule() method should exist'
+    assert callable(analysis_db.analysis.schedule), 'schedule() should be callable'
+
+    # Wait for initial analysis
+    analysis_db.analysis.wait()
+
+    # Get a valid address
+    valid_ea = analysis_db.minimum_ea
+
+    # Test schedule with "code"
+    analysis_db.analysis.schedule(valid_ea, "code")
+
+    # Test schedule with "function"
+    analysis_db.analysis.schedule(valid_ea, "function")
+
+    # Test schedule with "reanalysis" (default)
+    analysis_db.analysis.schedule(valid_ea, "reanalysis")
+
+    # Test with default parameter
+    analysis_db.analysis.schedule(valid_ea)
+
+    # Wait for all scheduled analysis
+    analysis_db.analysis.wait()
+    assert analysis_db.analysis.is_complete, 'Analysis should complete'
+
+
+def test_schedule_validates_address(analysis_db):
+    """
+    Test that schedule() properly validates the address parameter.
+
+    RATIONALE: Like all address-taking methods, schedule() should validate
+    the input address and raise InvalidEAError for invalid addresses.
+    """
+    from ida_domain.base import InvalidEAError
+
+    with pytest.raises(InvalidEAError):
+        analysis_db.analysis.schedule(0xFFFFFFFFFFFFFFFF, "code")
+
+    with pytest.raises(InvalidEAError):
+        analysis_db.analysis.schedule(0xFFFFFFFFFFFFFFFF, "function")
+
+    with pytest.raises(InvalidEAError):
+        analysis_db.analysis.schedule(0xFFFFFFFFFFFFFFFF, "reanalysis")
+
+
+def test_schedule_validates_what_parameter(analysis_db):
+    """
+    Test that schedule() validates the 'what' parameter.
+
+    RATIONALE: Invalid analysis types should raise InvalidParameterError
+    to provide clear feedback about valid options.
+    """
+    from ida_domain.base import InvalidParameterError
+
+    valid_ea = analysis_db.minimum_ea
+
+    with pytest.raises(InvalidParameterError):
+        analysis_db.analysis.schedule(valid_ea, "invalid")
+
+    with pytest.raises(InvalidParameterError):
+        analysis_db.analysis.schedule(valid_ea, "")
+
+    with pytest.raises(InvalidParameterError):
+        analysis_db.analysis.schedule(valid_ea, "CODE_WRONG")

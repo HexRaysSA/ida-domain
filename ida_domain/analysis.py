@@ -319,6 +319,54 @@ class Analysis(DatabaseEntity):
         """
         return cast(bool, ida_auto.enable_auto(enabled))
 
+    def schedule(self, ea: ea_t, what: str = "reanalysis") -> None:
+        """
+        Schedule analysis at address (LLM-friendly unified scheduling method).
+
+        This is an LLM-friendly unified interface for scheduling different types
+        of analysis. It dispatches to the appropriate schedule_*_analysis() method
+        based on the 'what' parameter.
+
+        Args:
+            ea: Address to schedule for analysis.
+            what: Type of analysis. One of:
+                - "code": Create instruction (schedule_code_analysis)
+                - "function": Create function (schedule_function_analysis)
+                - "reanalysis": Reanalyze address (schedule_reanalysis)
+
+        Raises:
+            InvalidEAError: If address is invalid.
+            InvalidParameterError: If what is not a valid option.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Schedule code creation
+            >>> db.analysis.schedule(0x401000, "code")
+            >>> # Schedule function creation
+            >>> db.analysis.schedule(0x401000, "function")
+            >>> # Schedule reanalysis (default)
+            >>> db.analysis.schedule(0x401000)
+            >>> db.analysis.wait()
+
+        Note:
+            This method provides a simpler API for LLMs that don't need to
+            remember the specific method names for each scheduling type.
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        what_lower = what.lower()
+        if what_lower == "code":
+            self.schedule_code_analysis(ea)
+        elif what_lower == "function":
+            self.schedule_function_analysis(ea)
+        elif what_lower == "reanalysis":
+            self.schedule_reanalysis(ea)
+        else:
+            raise InvalidParameterError(
+                'what', what, 'must be one of: "code", "function", "reanalysis"'
+            )
+
     def schedule_code_analysis(self, ea: ea_t) -> None:
         """
         Schedule instruction creation at address (adds to CODE queue).
