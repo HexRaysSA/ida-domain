@@ -892,3 +892,17 @@ class TestFunctionsGetInRange:
         assert len(between_funcs) == len(range_funcs)
         for f1, f2 in zip(between_funcs, range_funcs):
             assert f1.start_ea == f2.start_ea
+
+
+class TestFunctionsDelete:
+    """Tests for delete() method."""
+
+    def test_functions_delete_exists_and_is_callable(self, test_env):
+        """Test delete() exists and is callable as alias for remove()."""
+        db = test_env
+
+        # Verify delete method exists
+        assert hasattr(db.functions, 'delete')
+
+        # Verify it's callable
+        assert callable(db.functions.delete)

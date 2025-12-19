@@ -849,6 +849,28 @@ class Functions(DatabaseEntity):
             raise InvalidEAError(ea)
         return cast(bool, ida_funcs.del_func(ea))
 
+    def delete(self, ea: ea_t) -> bool:
+        """
+        Deletes the function at the specified address.
+
+        This is an LLM-friendly alias for remove().
+
+        Args:
+            ea: The effective address of the function to delete.
+
+        Returns:
+            True if the function was successfully deleted, False otherwise.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> if db.functions.delete(0x401000):
+            ...     print("Function deleted successfully")
+        """
+        return self.remove(ea)
+
     def get_next(self, ea: int) -> Optional[func_t]:
         """
         Get the next function after the given address.
