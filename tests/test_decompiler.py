@@ -76,9 +76,9 @@ class TestDecompilerAvailability:
 
 
 class TestDecompileAt:
-    """Tests for decompile_at method."""
+    """Tests for decompile method."""
 
-    def test_decompile_at_with_valid_function(self, decompiler_db):
+    def test_decompile_with_valid_function(self, decompiler_db):
         """
         Test decompiling a valid function returns pseudocode.
 
@@ -102,7 +102,7 @@ class TestDecompileAt:
         assert func is not None, 'No functions found in test binary'
 
         # Decompile at function start
-        lines = decompiler_db.decompiler.decompile_at(func.start_ea)
+        lines = decompiler_db.decompiler.decompile(func.start_ea)
 
         # Should get pseudocode lines
         assert lines is not None, 'Decompilation returned None for valid function'
@@ -118,7 +118,7 @@ class TestDecompileAt:
         has_c_syntax = any(char in pseudocode_text for char in ['{', '}', ';', '(', ')'])
         assert has_c_syntax, f"Pseudocode doesn't look like C code: {pseudocode_text[:200]}"
 
-    def test_decompile_at_with_remove_tags(self, decompiler_db):
+    def test_decompile_with_remove_tags(self, decompiler_db):
         """
         Test that remove_tags parameter correctly strips IDA color tags.
 
@@ -137,10 +137,10 @@ class TestDecompileAt:
         func = next(decompiler_db.functions.get_all())
 
         # Get pseudocode with tags removed (default)
-        lines_clean = decompiler_db.decompiler.decompile_at(func.start_ea, remove_tags=True)
+        lines_clean = decompiler_db.decompiler.decompile(func.start_ea, remove_tags=True)
 
         # Get pseudocode with tags kept
-        lines_tagged = decompiler_db.decompiler.decompile_at(func.start_ea, remove_tags=False)
+        lines_tagged = decompiler_db.decompiler.decompile(func.start_ea, remove_tags=False)
 
         # Both should be valid
         assert lines_clean is not None
@@ -154,7 +154,7 @@ class TestDecompileAt:
         assert len(lines_clean) > 0
         assert len(lines_tagged) > 0
 
-    def test_decompile_at_with_invalid_address(self, decompiler_db):
+    def test_decompile_with_invalid_address(self, decompiler_db):
         """
         Test that decompiling an invalid address raises InvalidEAError.
 
@@ -171,9 +171,9 @@ class TestDecompileAt:
         invalid_ea = 0xFFFFFFFF
 
         with pytest.raises(InvalidEAError):
-            decompiler_db.decompiler.decompile_at(invalid_ea)
+            decompiler_db.decompiler.decompile(invalid_ea)
 
-    def test_decompile_at_with_no_function(self, decompiler_db):
+    def test_decompile_with_no_function(self, decompiler_db):
         """
         Test that decompiling an address with no function returns None.
 
@@ -202,7 +202,7 @@ class TestDecompileAt:
 
             if decompiler_db.functions.get_at(ea) is None:
                 # Found an address with no function
-                result = decompiler_db.decompiler.decompile_at(ea)
+                result = decompiler_db.decompiler.decompile(ea)
                 assert result is None, (
                     f'Expected None when decompiling address 0x{ea:x} with no function, '
                     f'got {result}'
@@ -212,7 +212,7 @@ class TestDecompileAt:
         # If we couldn't find such an address, skip the test
         pytest.skip('Could not find a valid address without a function')
 
-    def test_decompile_at_without_decompiler_available(self, decompiler_db):
+    def test_decompile_without_decompiler_available(self, decompiler_db):
         """
         Test that attempting to decompile without decompiler raises RuntimeError.
 
@@ -235,15 +235,15 @@ class TestDecompileAt:
         if not decompiler_db.decompiler.is_available:
             # If decompiler not available, should raise RuntimeError
             with pytest.raises(RuntimeError, match='Hex-Rays decompiler not available'):
-                decompiler_db.decompiler.decompile_at(func.start_ea)
+                decompiler_db.decompiler.decompile(func.start_ea)
         else:
             # If available, should work fine
-            lines = decompiler_db.decompiler.decompile_at(func.start_ea)
+            lines = decompiler_db.decompiler.decompile(func.start_ea)
             # If decompiler is available and function exists, should get pseudocode
             # (or None if decompilation fails for other reasons)
             assert lines is None or isinstance(lines, list)
 
-    def test_decompile_at_with_function_start_vs_middle(self, decompiler_db):
+    def test_decompile_with_function_start_vs_middle(self, decompiler_db):
         """
         Test that decompiling at function start and middle produces same result.
 
@@ -260,11 +260,11 @@ class TestDecompileAt:
         for func in decompiler_db.functions.get_all():
             if func.end_ea - func.start_ea > 8:  # Has some meaningful size
                 # Decompile at start
-                lines_start = decompiler_db.decompiler.decompile_at(func.start_ea)
+                lines_start = decompiler_db.decompiler.decompile(func.start_ea)
 
                 # Decompile at middle
                 mid_ea = func.start_ea + 4
-                lines_mid = decompiler_db.decompiler.decompile_at(mid_ea)
+                lines_mid = decompiler_db.decompiler.decompile(mid_ea)
 
                 # Both should produce the same pseudocode
                 # (since they're the same function)
@@ -277,11 +277,11 @@ class TestDecompileAt:
 
         pytest.skip('Could not find a suitable function for this test')
 
-    def test_decompile_at_returns_string_list(self, decompiler_db):
+    def test_decompile_returns_string_list(self, decompiler_db):
         """
-        Test that decompile_at returns a list of strings with proper format.
+        Test that decompile returns a list of strings with proper format.
 
-        RATIONALE: The API contract specifies that decompile_at returns
+        RATIONALE: The API contract specifies that decompile returns
         Optional[List[str]]. This test validates the exact return type and
         ensures that:
         1. The return value is either None or a list
@@ -296,7 +296,7 @@ class TestDecompileAt:
 
         # Get first function
         func = next(decompiler_db.functions.get_all())
-        lines = decompiler_db.decompiler.decompile_at(func.start_ea)
+        lines = decompiler_db.decompiler.decompile(func.start_ea)
 
         # If we got a result, validate its structure
         if lines is not None:

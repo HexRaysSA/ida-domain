@@ -62,7 +62,7 @@ class Decompiler(DatabaseEntity):
         """
         return bool(ida_hexrays.init_hexrays_plugin())
 
-    def decompile_at(self, address: ea_t, remove_tags: bool = True) -> Optional[List[str]]:
+    def decompile(self, ea: ea_t, remove_tags: bool = True) -> Optional[List[str]]:
         """
         Decompile binary code at the specified address and return pseudocode lines.
 
@@ -70,19 +70,19 @@ class Decompiler(DatabaseEntity):
         the resulting pseudocode as a list of text lines.
 
         Args:
-            address: Address within the function to decompile (typically function start)
+            ea: Address within the function to decompile (typically function start)
             remove_tags: If True, removes IDA color/formatting tags from output
 
         Returns:
             List of pseudocode line strings, or None if decompilation fails
 
         Raises:
-            InvalidEAError: If address is invalid
+            InvalidEAError: If ea is invalid
             RuntimeError: If decompiler is not available
 
         Example:
             >>> db = Database.open_current()
-            >>> lines = db.decompiler.decompile_at(0x401000)
+            >>> lines = db.decompiler.decompile(0x401000)
             >>> if lines:
             ...     for line in lines:
             ...         print(line)
@@ -92,11 +92,11 @@ class Decompiler(DatabaseEntity):
             raise RuntimeError('Hex-Rays decompiler not available')
 
         # Validate address
-        if not self.database.is_valid_ea(address):
-            raise InvalidEAError(address)
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
 
         # Get function at address
-        func = ida_funcs.get_func(address)
+        func = ida_funcs.get_func(ea)
         if not func:
             return None
 
