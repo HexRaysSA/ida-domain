@@ -573,13 +573,17 @@ class Functions(DatabaseEntity):
             ea: Address to check.
 
         Returns:
-            bool: True if a function exists at or contains the address.
+            bool: True if a function exists at or contains the address,
+                  False if no function exists or if the address is invalid.
 
         Example:
             >>> if db.functions.exists_at(0x401000):
             ...     func = db.functions.get_at(0x401000)
         """
-        return self.get_at(ea) is not None
+        try:
+            return self.get_at(ea) is not None
+        except InvalidEAError:
+            return False
 
     def get_between(self, start_ea: ea_t, end_ea: ea_t) -> Iterator[func_t]:
         """
