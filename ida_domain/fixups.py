@@ -245,9 +245,7 @@ class Fixups(DatabaseEntity):
             # Move to next
             ea = ida_fixup.get_next_fixup_ea(ea)
 
-    def get_between(
-        self, start_address: ea_t, end_address: ea_t
-    ) -> Iterator[FixupInfo]:
+    def get_between(self, start_address: ea_t, end_address: ea_t) -> Iterator[FixupInfo]:
         """
         Get all fixups within an address range.
 
@@ -342,11 +340,11 @@ class Fixups(DatabaseEntity):
         # Get fixup data
         fd = ida_fixup.fixup_data_t()
         if not ida_fixup.get_fixup(fd, address):
-            return ""
+            return ''
 
         # Get description
         desc = ida_fixup.get_fixup_desc(address, fd)
-        return desc if desc is not None else ""
+        return desc if desc is not None else ''
 
     # ========================================================================
     # Mutation Methods
@@ -518,9 +516,7 @@ class Fixups(DatabaseEntity):
     # Internal Helper Methods
     # ========================================================================
 
-    def _fixup_data_to_info(
-        self, address: ea_t, fd: ida_fixup.fixup_data_t
-    ) -> FixupInfo:
+    def _fixup_data_to_info(self, address: ea_t, fd: ida_fixup.fixup_data_t) -> FixupInfo:
         """
         Convert fixup_data_t to FixupInfo dataclass.
 

@@ -89,7 +89,7 @@ class Decompiler(DatabaseEntity):
         """
         # Check availability
         if not self.is_available:
-            raise RuntimeError("Hex-Rays decompiler not available")
+            raise RuntimeError('Hex-Rays decompiler not available')
 
         # Validate address
         if not self.database.is_valid_ea(address):

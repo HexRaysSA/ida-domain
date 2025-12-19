@@ -19,6 +19,7 @@ def xrefs_test_setup():
 
     # Copy tiny_c.bin from test resources
     import shutil
+
     current_dir = os.path.dirname(os.path.abspath(__file__))
     src_path = os.path.join(current_dir, 'resources', 'tiny_c.bin')
     shutil.copy2(src_path, idb_path)
@@ -32,11 +33,7 @@ def xrefs_test_setup():
 def test_env(xrefs_test_setup):
     """Opens tiny_c database for each test."""
     ida_options = IdaCommandOptions(new_database=True, auto_analysis=True)
-    db = ida_domain.Database.open(
-        path=xrefs_test_setup,
-        args=ida_options,
-        save_on_close=False
-    )
+    db = ida_domain.Database.open(path=xrefs_test_setup, args=ida_options, save_on_close=False)
     yield db
     db.close()
 
@@ -70,13 +67,13 @@ class TestXrefExistence:
 
         # Skip if no function has callers (unlikely in tiny_c.bin)
         if func_with_refs is None:
-            pytest.skip("No function with callers found in test binary")
+            pytest.skip('No function with callers found in test binary')
 
         func_ea = func_with_refs.start_ea
 
         # Verify has_any_refs_to returns True
         assert test_env.xrefs.has_any_refs_to(func_ea), (
-            f"has_any_refs_to should return True for function at 0x{func_ea:x} with callers"
+            f'has_any_refs_to should return True for function at 0x{func_ea:x} with callers'
         )
 
     def test_has_any_refs_to_for_unreferenced_address(self, test_env):
@@ -100,11 +97,11 @@ class TestXrefExistence:
             if next_insn and next_insn.size > 1:
                 mid_insn_ea = next_insn.ea + 1
             else:
-                pytest.skip("Cannot find multi-byte instruction for test")
+                pytest.skip('Cannot find multi-byte instruction for test')
 
         # Middle of instruction should not be referenced
         assert not test_env.xrefs.has_any_refs_to(mid_insn_ea), (
-            f"has_any_refs_to should return False for unreferenced address 0x{mid_insn_ea:x}"
+            f'has_any_refs_to should return False for unreferenced address 0x{mid_insn_ea:x}'
         )
 
     def test_has_any_refs_from_for_call_instruction(self, test_env):
@@ -137,11 +134,11 @@ class TestXrefExistence:
                 break
 
         if call_ea is None:
-            pytest.skip("No call instruction found in test binary")
+            pytest.skip('No call instruction found in test binary')
 
         # Verify has_any_refs_from returns True
         assert test_env.xrefs.has_any_refs_from(call_ea), (
-            f"has_any_refs_from should return True for call instruction at 0x{call_ea:x}"
+            f'has_any_refs_from should return True for call instruction at 0x{call_ea:x}'
         )
 
     def test_has_any_refs_from_for_nop_instruction(self, test_env):
@@ -168,7 +165,7 @@ class TestXrefExistence:
 
         # Just verify the method returns a boolean
         result = test_env.xrefs.has_any_refs_from(first_insn.ea)
-        assert isinstance(result, bool), "has_any_refs_from should return a boolean"
+        assert isinstance(result, bool), 'has_any_refs_from should return a boolean'
 
     def test_has_code_refs_to_for_function_entry(self, test_env):
         """
@@ -192,13 +189,13 @@ class TestXrefExistence:
                 break
 
         if func_with_callers is None:
-            pytest.skip("No function with callers found")
+            pytest.skip('No function with callers found')
 
         func_ea = func_with_callers.start_ea
 
         # Verify has_code_refs_to returns True
         assert test_env.xrefs.has_code_refs_to(func_ea), (
-            f"has_code_refs_to should return True for function at 0x{func_ea:x} with callers"
+            f'has_code_refs_to should return True for function at 0x{func_ea:x} with callers'
         )
 
     def test_has_code_refs_to_for_data_address(self, test_env):
@@ -215,14 +212,14 @@ class TestXrefExistence:
         test_addr = test_env.minimum_ea + 0x1000
 
         if not test_env.is_valid_ea(test_addr):
-            pytest.skip("Test address not available")
+            pytest.skip('Test address not available')
 
         # Ensure this is data
         test_env.bytes.create_dword_at(test_addr, count=1, force=True)
 
         # Data should not have code refs (though it might have data refs)
         result = test_env.xrefs.has_code_refs_to(test_addr)
-        assert isinstance(result, bool), "has_code_refs_to should return boolean"
+        assert isinstance(result, bool), 'has_code_refs_to should return boolean'
 
     def test_has_data_refs_to_for_data_with_references(self, test_env):
         """
@@ -263,11 +260,11 @@ class TestXrefExistence:
             ea = test_env.bytes.get_item_end_at(ea)
 
         if data_with_refs is None:
-            pytest.skip("No data with references found in test binary")
+            pytest.skip('No data with references found in test binary')
 
         # Verify has_data_refs_to returns True
         assert test_env.xrefs.has_data_refs_to(data_with_refs), (
-            f"has_data_refs_to should return True for data at 0x{data_with_refs:x} with refs"
+            f'has_data_refs_to should return True for data at 0x{data_with_refs:x} with refs'
         )
 
     def test_has_data_refs_to_for_code_address(self, test_env):
@@ -284,7 +281,7 @@ class TestXrefExistence:
 
         # Check has_data_refs_to - most code addresses won't have data refs
         result = test_env.xrefs.has_data_refs_to(first_insn.ea)
-        assert isinstance(result, bool), "has_data_refs_to should return boolean"
+        assert isinstance(result, bool), 'has_data_refs_to should return boolean'
 
 
 class TestXrefCounting:
@@ -315,7 +312,7 @@ class TestXrefCounting:
                 break
 
         if func_with_callers is None:
-            pytest.skip("No function with multiple callers found")
+            pytest.skip('No function with multiple callers found')
 
         func_ea = func_with_callers.start_ea
 
@@ -324,8 +321,8 @@ class TestXrefCounting:
 
         # Should match the count we got from iteration
         assert actual_count == expected_count, (
-            f"count_refs_to should return {expected_count} for function at 0x{func_ea:x}, "
-            f"got {actual_count}"
+            f'count_refs_to should return {expected_count} for function at 0x{func_ea:x}, '
+            f'got {actual_count}'
         )
 
     def test_count_refs_to_for_unreferenced_address(self, test_env):
@@ -351,13 +348,13 @@ class TestXrefCounting:
             if next_insn and next_insn.size > 1:
                 mid_insn_ea = next_insn.ea + 1
             else:
-                pytest.skip("Cannot find multi-byte instruction")
+                pytest.skip('Cannot find multi-byte instruction')
 
         # Count should be 0
         count = test_env.xrefs.count_refs_to(mid_insn_ea)
         assert count == 0, (
-            f"count_refs_to should return 0 for unreferenced address 0x{mid_insn_ea:x}, "
-            f"got {count}"
+            f'count_refs_to should return 0 for unreferenced address 0x{mid_insn_ea:x}, '
+            f'got {count}'
         )
 
     def test_count_refs_from_for_call_instruction(self, test_env):
@@ -388,13 +385,12 @@ class TestXrefCounting:
                 break
 
         if call_ea is None:
-            pytest.skip("No call instruction found")
+            pytest.skip('No call instruction found')
 
         # Count refs from call - should be at least 1 (the target)
         count = test_env.xrefs.count_refs_from(call_ea, XrefsFlags.CODE_NOFLOW)
         assert count >= 1, (
-            f"count_refs_from should return at least 1 for call at 0x{call_ea:x}, "
-            f"got {count}"
+            f'count_refs_from should return at least 1 for call at 0x{call_ea:x}, got {count}'
         )
 
     def test_count_refs_from_with_different_flags(self, test_env):
@@ -420,7 +416,7 @@ class TestXrefCounting:
 
         # Count with ALL should be >= count without flow
         assert count_all >= count_noflow, (
-            f"count_refs_from with ALL ({count_all}) should be >= NOFLOW ({count_noflow})"
+            f'count_refs_from with ALL ({count_all}) should be >= NOFLOW ({count_noflow})'
         )
 
     def test_count_matches_iteration(self, test_env):
@@ -444,7 +440,7 @@ class TestXrefCounting:
                 break
 
         if func_with_refs is None:
-            pytest.skip("No function with refs found")
+            pytest.skip('No function with refs found')
 
         func_ea = func_with_refs.start_ea
 
@@ -456,7 +452,7 @@ class TestXrefCounting:
 
         # Should match exactly
         assert counted == manual_count, (
-            f"count_refs_to ({counted}) should match manual iteration ({manual_count})"
+            f'count_refs_to ({counted}) should match manual iteration ({manual_count})'
         )
 
 

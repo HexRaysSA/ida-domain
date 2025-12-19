@@ -46,9 +46,7 @@ def types_test_setup():
 def test_env(types_test_setup):
     """Opens tiny_c database for each test."""
     ida_options = IdaCommandOptions(new_database=True, auto_analysis=True)
-    db = ida_domain.Database.open(
-        path=types_test_setup, args=ida_options, save_on_close=False
-    )
+    db = ida_domain.Database.open(path=types_test_setup, args=ida_options, save_on_close=False)
     yield db
     db.close()
 
@@ -63,7 +61,7 @@ class TestTypesQueries:
         RATIONALE: The API should return None for non-existent types rather than
         raising an exception, allowing callers to check type existence easily.
         """
-        ordinal = test_env.types.get_ordinal("NonExistentTypeXYZ123")
+        ordinal = test_env.types.get_ordinal('NonExistentTypeXYZ123')
         assert ordinal is None
 
     def test_get_by_ordinal_for_invalid_ordinal(self, test_env):
@@ -88,7 +86,7 @@ class TestTypesApplication:
         types, raising a clear exception for invalid addresses.
         """
         with pytest.raises(InvalidEAError):
-            test_env.types.apply_by_name(0xFFFFFFFFFFFFFFFF, "int")
+            test_env.types.apply_by_name(0xFFFFFFFFFFFFFFFF, 'int')
 
     def test_apply_declaration_with_invalid_address(self, test_env):
         """
@@ -98,7 +96,7 @@ class TestTypesApplication:
         should be caught early with a clear exception.
         """
         with pytest.raises(InvalidEAError):
-            test_env.types.apply_declaration(0xFFFFFFFFFFFFFFFF, "int")
+            test_env.types.apply_declaration(0xFFFFFFFFFFFFFFFF, 'int')
 
     def test_apply_declaration_with_empty_declaration(self, test_env):
         """
@@ -110,7 +108,7 @@ class TestTypesApplication:
         # Use address 0 (always valid in IDA)
         ea = 0
         with pytest.raises(InvalidParameterError):
-            test_env.types.apply_declaration(ea, "")
+            test_env.types.apply_declaration(ea, '')
 
 
 class TestTypesInference:

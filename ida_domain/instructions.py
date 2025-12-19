@@ -480,14 +480,9 @@ class Instructions(DatabaseEntity):
             raise InvalidEAError(ea)
 
         result = ida_ua.print_operand(ea, operand_index, flags)
-        return result if result else ""
+        return result if result else ''
 
-    def add_code_reference(
-        self,
-        from_ea: ea_t,
-        to_ea: ea_t,
-        reference_type: int
-    ) -> None:
+    def add_code_reference(self, from_ea: ea_t, to_ea: ea_t, reference_type: int) -> None:
         """
         Add a code cross-reference from one instruction to another.
 
@@ -512,12 +507,7 @@ class Instructions(DatabaseEntity):
         # Add cross-reference using ida_xref
         ida_xref.add_cref(from_ea, to_ea, reference_type)
 
-    def add_data_reference(
-        self,
-        from_ea: ea_t,
-        to_ea: ea_t,
-        reference_type: int
-    ) -> None:
+    def add_data_reference(self, from_ea: ea_t, to_ea: ea_t, reference_type: int) -> None:
         """
         Add a data cross-reference from an instruction to a data address.
 
@@ -620,12 +610,7 @@ class Instructions(DatabaseEntity):
         """
         return cast(bool, ida_ua.is_floating_dtype(dtype))
 
-    def map_operand_address(
-        self,
-        insn: insn_t,
-        operand: op_t,
-        is_code: bool
-    ) -> ea_t:
+    def map_operand_address(self, insn: insn_t, operand: op_t, is_code: bool) -> ea_t:
         """
         Map operand address to actual effective address (handle segments).
 
@@ -653,10 +638,7 @@ class Instructions(DatabaseEntity):
             return ida_ua.map_data_ea(insn, operand)
 
     def calculate_data_segment(
-        self,
-        insn: insn_t,
-        operand_index: int = -1,
-        reg_num: int = -1
+        self, insn: insn_t, operand_index: int = -1, reg_num: int = -1
     ) -> ea_t:
         """
         Calculate data segment base address for instruction operand.
@@ -683,7 +665,7 @@ class Instructions(DatabaseEntity):
         operand_n: int,
         base: ea_t,
         target: Optional[ea_t] = None,
-        ref_type: Optional[int] = None
+        ref_type: Optional[int] = None,
     ) -> bool:
         """
         Convert an operand to an offset reference.
@@ -724,7 +706,7 @@ class Instructions(DatabaseEntity):
         self,
         ea: ea_t,
         operand_n: int,
-        ref_info: ida_nalt.refinfo_t  # refinfo_t from ida_nalt
+        ref_info: ida_nalt.refinfo_t,  # refinfo_t from ida_nalt
     ) -> bool:
         """
         Convert an operand to offset using detailed reference information.
@@ -753,11 +735,7 @@ class Instructions(DatabaseEntity):
         # Call legacy API with refinfo_t
         return cast(bool, ida_offset.op_offset_ex(ea, operand_n, ref_info))
 
-    def get_operand_offset_base(
-        self,
-        ea: ea_t,
-        operand_n: int
-    ) -> Optional[ea_t]:
+    def get_operand_offset_base(self, ea: ea_t, operand_n: int) -> Optional[ea_t]:
         """
         Get the offset base address for an operand.
 
@@ -786,11 +764,7 @@ class Instructions(DatabaseEntity):
         # Convert BADADDR to None for Pythonic interface
         return base if base != ida_idaapi.BADADDR else None
 
-    def get_operand_offset_target(
-        self,
-        ea: ea_t,
-        operand_n: int
-    ) -> Optional[ea_t]:
+    def get_operand_offset_target(self, ea: ea_t, operand_n: int) -> Optional[ea_t]:
         """
         Calculate the target address for an offset operand.
 
@@ -837,10 +811,7 @@ class Instructions(DatabaseEntity):
         return target if target != ida_idaapi.BADADDR else None
 
     def format_offset_expression(
-        self,
-        ea: ea_t,
-        operand_n: int,
-        include_displacement: bool = True
+        self, ea: ea_t, operand_n: int, include_displacement: bool = True
     ) -> Optional[str]:
         """
         Get a formatted offset expression for display.
@@ -881,7 +852,11 @@ class Instructions(DatabaseEntity):
         from_ea = ea + op.offb  # offb is operand offset in instruction bytes
 
         result = ida_offset.get_offset_expression(
-            ea, operand_n, from_ea, opval, 0  # flags=0 for default formatting
+            ea,
+            operand_n,
+            from_ea,
+            opval,
+            0,  # flags=0 for default formatting
         )
 
         # Return None if empty result
@@ -893,11 +868,7 @@ class Instructions(DatabaseEntity):
         # The parameter is kept for API compatibility but currently has no effect.
         return cast(Optional[str], result)
 
-    def calculate_offset_base(
-        self,
-        ea: ea_t,
-        operand_n: int
-    ) -> Optional[ea_t]:
+    def calculate_offset_base(self, ea: ea_t, operand_n: int) -> Optional[ea_t]:
         """
         Calculate offset base considering fixup information and segment registers.
 

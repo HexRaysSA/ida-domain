@@ -400,9 +400,7 @@ class TryBlocks(DatabaseEntity):
         if end_ea > self.database.maximum_ea or end_ea < self.database.minimum_ea:
             raise InvalidEAError(end_ea)
         if start_ea >= end_ea:
-            raise InvalidParameterError(
-                'start_ea', start_ea, 'must be less than end_ea'
-            )
+            raise InvalidParameterError('start_ea', start_ea, 'must be less than end_ea')
 
         import ida_range
 
@@ -710,9 +708,7 @@ class TryBlocks(DatabaseEntity):
         if end_ea > self.database.maximum_ea or end_ea < self.database.minimum_ea:
             raise InvalidEAError(end_ea)
         if start_ea >= end_ea:
-            raise InvalidParameterError(
-                'start_ea', start_ea, 'must be less than end_ea'
-            )
+            raise InvalidParameterError('start_ea', start_ea, 'must be less than end_ea')
 
         import ida_range
 

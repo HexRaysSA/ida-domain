@@ -384,7 +384,7 @@ class Comments(DatabaseEntity):
         flags = ida_lines.GENDSM_REMOVE_TAGS if remove_tags else 0
         line = ida_lines.generate_disasm_line(ea, flags)
 
-        return line if line else ""
+        return line if line else ''
 
     def generate_disassembly(
         self, ea: int, max_lines: int, as_stack: bool = False, remove_tags: bool = False
@@ -510,9 +510,7 @@ class Comments(DatabaseEntity):
             return start_offset + result if result is not None else start_offset
         return ida_lines.tag_skipcodes(text) if ida_lines.tag_skipcodes(text) is not None else 0
 
-    def advance_in_colored_string(
-        self, text: str, count: int, start_offset: int = 0
-    ) -> int:
+    def advance_in_colored_string(self, text: str, count: int, start_offset: int = 0) -> int:
         """
         Advance a position in a colored string by a given number of visible characters.
 

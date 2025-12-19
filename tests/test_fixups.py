@@ -25,9 +25,7 @@ def fixups_test_setup():
     Fixups are created by loaders when parsing binary relocation tables, so they
     are present in virtually all dynamically linked binaries.
     """
-    idb_path = os.path.join(
-        tempfile.gettempdir(), 'api_tests_work_dir', 'fixups_test.bin'
-    )
+    idb_path = os.path.join(tempfile.gettempdir(), 'api_tests_work_dir', 'fixups_test.bin')
     os.makedirs(os.path.dirname(idb_path), exist_ok=True)
 
     # Copy test binary
@@ -35,7 +33,7 @@ def fixups_test_setup():
     src_path = os.path.join(current_dir, 'resources', 'tiny_c.bin')
 
     if not os.path.exists(src_path):
-        pytest.skip("Test binary not found")
+        pytest.skip('Test binary not found')
 
     shutil.copy(src_path, idb_path)
     return idb_path
@@ -52,9 +50,7 @@ def fixups_db(fixups_test_setup):
     """
     idb_path = fixups_test_setup
     ida_options = IdaCommandOptions(new_database=True, auto_analysis=True)
-    db = ida_domain.Database.open(
-        path=idb_path, args=ida_options, save_on_close=False
-    )
+    db = ida_domain.Database.open(path=idb_path, args=ida_options, save_on_close=False)
     yield db
     if db.is_open():
         db.close(False)
@@ -80,8 +76,8 @@ def test_count_returns_non_negative_integer(fixups_db):
     """
     count = fixups_db.fixups.count
 
-    assert isinstance(count, int), "count should return an integer"
-    assert count >= 0, "count should be non-negative"
+    assert isinstance(count, int), 'count should return an integer'
+    assert count >= 0, 'count should be non-negative'
 
 
 def test_len_matches_count(fixups_db):
@@ -94,7 +90,7 @@ def test_len_matches_count(fixups_db):
     count = fixups_db.fixups.count
     length = len(fixups_db.fixups)
 
-    assert length == count, "__len__ should match count property"
+    assert length == count, '__len__ should match count property'
 
 
 # =============================================================================
@@ -117,9 +113,9 @@ def test_get_at_returns_none_for_address_without_fixup(fixups_db):
     result = fixups_db.fixups.get_at(ea)
 
     # Most addresses don't have fixups, so None is expected or a FixupInfo
-    assert result is None or isinstance(
-        result, FixupInfo
-    ), "get_at should return None or FixupInfo"
+    assert result is None or isinstance(result, FixupInfo), (
+        'get_at should return None or FixupInfo'
+    )
 
 
 def test_get_at_raises_on_invalid_address(fixups_db):
@@ -150,7 +146,7 @@ def test_has_fixup_returns_boolean(fixups_db):
     ea = fixups_db.minimum_ea
     result = fixups_db.fixups.has_fixup(ea)
 
-    assert isinstance(result, bool), "has_fixup should return boolean"
+    assert isinstance(result, bool), 'has_fixup should return boolean'
 
 
 def test_has_fixup_raises_on_invalid_address(fixups_db):
@@ -186,7 +182,7 @@ def test_get_all_returns_iterator(fixups_db):
 
     # All elements should be FixupInfo (if any exist)
     for fixup in fixups_list:
-        assert isinstance(fixup, FixupInfo), "get_all should yield FixupInfo objects"
+        assert isinstance(fixup, FixupInfo), 'get_all should yield FixupInfo objects'
 
 
 def test_get_between_with_valid_range(fixups_db):
@@ -268,7 +264,7 @@ def test_contains_fixups_returns_boolean(fixups_db):
 
     result = fixups_db.fixups.contains_fixups(start_ea, size)
 
-    assert isinstance(result, bool), "contains_fixups should return boolean"
+    assert isinstance(result, bool), 'contains_fixups should return boolean'
 
 
 def test_contains_fixups_raises_on_invalid_address(fixups_db):
@@ -310,7 +306,7 @@ def test_get_description_returns_string(fixups_db):
     ea = fixups_db.minimum_ea
     desc = fixups_db.fixups.get_description(ea)
 
-    assert isinstance(desc, str), "get_description should return string"
+    assert isinstance(desc, str), 'get_description should return string'
     # Empty string is valid when no fixup exists
 
 
@@ -341,7 +337,7 @@ def test_iter_returns_all_fixups(fixups_db):
     iter_fixups = list(fixups_db.fixups)
     all_fixups = list(fixups_db.fixups.get_all())
 
-    assert len(iter_fixups) == len(all_fixups), "__iter__ should return same count as get_all"
+    assert len(iter_fixups) == len(all_fixups), '__iter__ should return same count as get_all'
 
     # All elements should be FixupInfo
     for fixup in iter_fixups:
@@ -371,7 +367,7 @@ def test_fixup_info_target_property(fixups_db):
         # Test with real fixup
         fixup = fixups_list[0]
         expected = fixup.target_offset + fixup.displacement
-        assert fixup.target == expected, "target property should compute correctly"
+        assert fixup.target == expected, 'target property should compute correctly'
     else:
         # Create a mock FixupInfo to test the property
         from ida_idaapi import BADADDR
@@ -386,7 +382,7 @@ def test_fixup_info_target_property(fixups_db):
             is_unused=False,
             was_created=False,
         )
-        assert mock_fixup.target == 0x2100, "target property should compute correctly"
+        assert mock_fixup.target == 0x2100, 'target property should compute correctly'
 
 
 def test_fixup_info_is_immutable(fixups_db):
@@ -436,7 +432,7 @@ def test_add_fixup_basic(fixups_db):
 
     # Ensure no fixup exists there already
     if fixups_db.fixups.has_fixup(test_ea):
-        pytest.skip("Test address already has a fixup")
+        pytest.skip('Test address already has a fixup')
 
     # Add a fixup
     target = fixups_db.minimum_ea + 0x200
@@ -444,13 +440,13 @@ def test_add_fixup_basic(fixups_db):
         address=test_ea, fixup_type=FixupType.OFF32, target_offset=target
     )
 
-    assert isinstance(success, bool), "add should return boolean"
+    assert isinstance(success, bool), 'add should return boolean'
 
     # If addition succeeded, verify we can retrieve it
     if success:
         fixup = fixups_db.fixups.get_at(test_ea)
-        assert fixup is not None, "Added fixup should be retrievable"
-        assert fixup.type == FixupType.OFF32, "Fixup type should match"
+        assert fixup is not None, 'Added fixup should be retrievable'
+        assert fixup.type == FixupType.OFF32, 'Fixup type should match'
 
 
 def test_add_fixup_raises_on_invalid_address(fixups_db):
@@ -487,7 +483,7 @@ def test_remove_returns_false_for_nonexistent_fixup(fixups_db):
 
     if not fixups_db.fixups.has_fixup(test_ea):
         result = fixups_db.fixups.remove(test_ea)
-        assert result is False, "remove should return False for non-existent fixup"
+        assert result is False, 'remove should return False for non-existent fixup'
 
 
 def test_remove_raises_on_invalid_address(fixups_db):
@@ -526,4 +522,4 @@ def test_patch_value_returns_false_for_nonexistent_fixup(fixups_db):
 
     if not fixups_db.fixups.has_fixup(test_ea):
         result = fixups_db.fixups.patch_value(test_ea)
-        assert result is False, "patch_value should return False for non-existent fixup"
+        assert result is False, 'patch_value should return False for non-existent fixup'

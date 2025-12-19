@@ -94,11 +94,11 @@ class TestStackFramesBasics:
                 func_ea = func.start_ea
                 break
 
-        assert func_ea is not None, "complex_assignments function not found in tiny_c.bin"
+        assert func_ea is not None, 'complex_assignments function not found in tiny_c.bin'
 
         # Get stack frame
         frame = db.stack_frames.get_at(func_ea)
-        assert frame is not None, "Stack frame should exist for complex_assignments"
+        assert frame is not None, 'Stack frame should exist for complex_assignments'
         assert isinstance(frame, StackFrameInstance)
 
     def test_get_at_invalid_address(self, tiny_c_env):
@@ -399,15 +399,13 @@ class TestStackFrameVariableManagement:
         int_type.create_simple_type(BTF_INT32)
 
         # Define a local variable at offset -0x100 (far from existing vars)
-        success = db.stack_frames.define_variable(
-            func_ea, "test_local", -0x100, int_type
-        )
+        success = db.stack_frames.define_variable(func_ea, 'test_local', -0x100, int_type)
         assert success is True
 
         # Verify we can retrieve it
         var = db.stack_frames.get_variable(func_ea, -0x100)
         assert var is not None
-        assert var.name == "test_local"
+        assert var.name == 'test_local'
         assert var.offset == -0x100
         assert var.is_argument is False
 
@@ -440,15 +438,13 @@ class TestStackFrameVariableManagement:
             int_type.create_simple_type(BTF_INT32)
 
             # Define an argument at offset +0x10
-            success = db.stack_frames.define_variable(
-                func_ea, "test_arg", 0x10, int_type
-            )
+            success = db.stack_frames.define_variable(func_ea, 'test_arg', 0x10, int_type)
             assert success is True
 
             # Verify it's marked as an argument
             var = db.stack_frames.get_variable(func_ea, 0x10)
             assert var is not None
-            assert var.name == "test_arg"
+            assert var.name == 'test_arg'
             assert var.offset == 0x10
             assert var.is_argument is True
 
@@ -579,7 +575,7 @@ class TestStackFrameVariableManagement:
         assert func_ea is not None
 
         # Query a name that definitely doesn't exist
-        var = db.stack_frames.get_variable_by_name(func_ea, "nonexistent_variable_xyz")
+        var = db.stack_frames.get_variable_by_name(func_ea, 'nonexistent_variable_xyz')
         assert var is None
 
     def test_get_all_variables_via_property(self, tiny_c_env):
@@ -744,7 +740,7 @@ class TestStackFrameVariableManagement:
 
     @pytest.mark.skip(
         reason="Known IDA API issue: define_stkvar doesn't rename existing "
-        "variables reliably on test binaries"
+        'variables reliably on test binaries'
     )
     def test_rename_variable_changes_variable_name(self, tiny_c_env):
         """
@@ -886,7 +882,7 @@ class TestStackFrameVariableManagement:
 
     @pytest.mark.skip(
         reason="Known IDA API issue: delete_frame_members doesn't reliably "
-        "delete dynamically created variables on test binaries"
+        'delete dynamically created variables on test binaries'
     )
     def test_delete_variable_removes_variable(self, tiny_c_env):
         """
@@ -952,7 +948,7 @@ class TestStackFrameVariableManagement:
 
     @pytest.mark.skip(
         reason="Known IDA API issue: delete_frame_members doesn't reliably "
-        "delete dynamically created variables on test binaries"
+        'delete dynamically created variables on test binaries'
     )
     def test_delete_variables_in_range_removes_multiple_variables(self, tiny_c_env):
         """
@@ -1274,11 +1270,11 @@ class TestStackFrameAdvancedOperations:
                 func_ea = func.start_ea
                 break
 
-        assert func_ea is not None, "complex_assignments function not found"
+        assert func_ea is not None, 'complex_assignments function not found'
 
         # Get stack frame
         frame = db.stack_frames.get_at(func_ea)
-        assert frame is not None, "Stack frame should exist"
+        assert frame is not None, 'Stack frame should exist'
 
         # Access purged_bytes property
         purged = frame.purged_bytes
@@ -1312,10 +1308,11 @@ class TestStackFrameAdvancedOperations:
                 func_ea = func.start_ea
                 break
 
-        assert func_ea is not None, "complex_assignments function not found"
+        assert func_ea is not None, 'complex_assignments function not found'
 
         # Get frame as struct
         from ida_typeinf import tinfo_t
+
         frame_type = db.stack_frames.get_as_struct(func_ea)
 
         # Should be a valid tinfo_t
@@ -1363,10 +1360,10 @@ class TestStackFrameAdvancedOperations:
                 break
 
         if func_without_frame is None:
-            pytest.skip("All functions in test binary have stack frames")
+            pytest.skip('All functions in test binary have stack frames')
 
         # Should raise RuntimeError
-        with pytest.raises(RuntimeError, match="No frame"):
+        with pytest.raises(RuntimeError, match='No frame'):
             db.stack_frames.get_as_struct(func_without_frame)
 
     def test_calc_frame_offset_converts_runtime_to_frame_offset(self, tiny_c_env):
@@ -1396,7 +1393,7 @@ class TestStackFrameAdvancedOperations:
                 func_ea = func.start_ea
                 break
 
-        assert func_ea is not None, "complex_assignments function not found"
+        assert func_ea is not None, 'complex_assignments function not found'
 
         # Get first instruction in function (after prologue)
         # We'll use an instruction a few bytes into the function
@@ -1466,7 +1463,7 @@ class TestStackFrameAdvancedOperations:
                 func_ea = func.start_ea
                 break
 
-        assert func_ea is not None, "complex_assignments function not found"
+        assert func_ea is not None, 'complex_assignments function not found'
 
         # Get an address within the function
         func = db.functions.get_at(func_ea)
@@ -1509,7 +1506,7 @@ class TestStackFrameAdvancedOperations:
                 func_ea = func.start_ea
                 break
 
-        assert func_ea is not None, "complex_assignments function not found"
+        assert func_ea is not None, 'complex_assignments function not found'
 
         # Get an address within the function
         func = db.functions.get_at(func_ea)
@@ -1569,7 +1566,7 @@ class TestStackFrameAdvancedOperations:
                 func_ea = func.start_ea
                 break
 
-        assert func_ea is not None, "complex_assignments function not found"
+        assert func_ea is not None, 'complex_assignments function not found'
 
         # Get an address within the function
         func = db.functions.get_at(func_ea)
@@ -1638,7 +1635,7 @@ class TestStackFrameAdvancedOperations:
                 func_ea = func.start_ea
                 break
 
-        assert func_ea is not None, "complex_assignments function not found"
+        assert func_ea is not None, 'complex_assignments function not found'
 
         # Get SP delta at function start
         delta_at_start = db.stack_frames.get_sp_delta(func_ea, func_ea)
@@ -1705,7 +1702,7 @@ class TestStackFrameAdvancedOperations:
                 func_ea = func.start_ea
                 break
 
-        assert func_ea is not None, "complex_assignments function not found"
+        assert func_ea is not None, 'complex_assignments function not found'
 
         # 1. Get frame as struct
         frame_type = db.stack_frames.get_as_struct(func_ea)

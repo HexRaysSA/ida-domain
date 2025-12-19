@@ -388,9 +388,7 @@ class Names(DatabaseEntity):
             return None
         return ea
 
-    def resolve_value(
-        self, name: str, from_ea: ea_t = BADADDR
-    ) -> tuple[Optional[int], int]:
+    def resolve_value(self, name: str, from_ea: ea_t = BADADDR) -> tuple[Optional[int], int]:
         """
         Get the numeric value and type of a name.
 
@@ -600,12 +598,7 @@ class Names(DatabaseEntity):
         return name if name else None
 
     def format_expression(
-        self,
-        from_ea: ea_t,
-        n: int,
-        ea: ea_t,
-        offset: int,
-        include_struct_fields: bool = True
+        self, from_ea: ea_t, n: int, ea: ea_t, offset: int, include_struct_fields: bool = True
     ) -> Optional[str]:
         """
         Convert address to name expression with displacement.

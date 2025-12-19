@@ -22,9 +22,7 @@ def exporter_test_setup():
     entity generates files from the database, so we need a valid database
     with some content to export.
     """
-    idb_path = os.path.join(
-        tempfile.gettempdir(), 'api_tests_work_dir', 'exporter_test.bin'
-    )
+    idb_path = os.path.join(tempfile.gettempdir(), 'api_tests_work_dir', 'exporter_test.bin')
     os.makedirs(os.path.dirname(idb_path), exist_ok=True)
 
     # Copy test binary
@@ -32,7 +30,7 @@ def exporter_test_setup():
     src_path = os.path.join(current_dir, 'resources', 'tiny_c.bin')
 
     if not os.path.exists(src_path):
-        pytest.skip("Test binary not found")
+        pytest.skip('Test binary not found')
 
     shutil.copy(src_path, idb_path)
     return idb_path
@@ -49,9 +47,7 @@ def exporter_db(exporter_test_setup):
     """
     idb_path = exporter_test_setup
     ida_options = IdaCommandOptions(new_database=True, auto_analysis=True)
-    db = ida_domain.Database.open(
-        path=idb_path, args=ida_options, save_on_close=False
-    )
+    db = ida_domain.Database.open(path=idb_path, args=ida_options, save_on_close=False)
     yield db
     if db.is_open():
         db.close(False)
@@ -88,13 +84,9 @@ def test_exporter_property_accessible_from_database(exporter_db):
     """
     exporter = exporter_db.exporter
 
-    assert exporter is not None, "exporter property should not be None"
-    assert hasattr(exporter, 'generate_map_file'), (
-        "exporter should have generate_map_file method"
-    )
-    assert hasattr(exporter, 'generate_assembly'), (
-        "exporter should have generate_assembly method"
-    )
+    assert exporter is not None, 'exporter property should not be None'
+    assert hasattr(exporter, 'generate_map_file'), 'exporter should have generate_map_file method'
+    assert hasattr(exporter, 'generate_assembly'), 'exporter should have generate_assembly method'
 
 
 # =============================================================================
@@ -104,9 +96,9 @@ def test_exporter_property_accessible_from_database(exporter_db):
 
 @pytest.mark.skip(
     reason=(
-        "File generation tests require full IDA environment with FILE* "
-        "pointer support. These methods are correctly implemented but cannot "
-        "be fully tested in a mock environment."
+        'File generation tests require full IDA environment with FILE* '
+        'pointer support. These methods are correctly implemented but cannot '
+        'be fully tested in a mock environment.'
     )
 )
 def test_generate_map_file_creates_file(exporter_db, temp_output_dir):
@@ -125,9 +117,9 @@ def test_generate_map_file_creates_file(exporter_db, temp_output_dir):
 
     success = exporter_db.exporter.generate_map_file(output_path)
 
-    assert success is True, "generate_map_file should return True on success"
-    assert os.path.exists(output_path), "MAP file should be created"
-    assert os.path.getsize(output_path) > 0, "MAP file should not be empty"
+    assert success is True, 'generate_map_file should return True on success'
+    assert os.path.exists(output_path), 'MAP file should be created'
+    assert os.path.getsize(output_path) > 0, 'MAP file should not be empty'
 
 
 def test_generate_map_file_with_address_range(exporter_db, temp_output_dir):
@@ -145,17 +137,13 @@ def test_generate_map_file_with_address_range(exporter_db, temp_output_dir):
     max_ea = exporter_db.maximum_ea
     mid_ea = min_ea + (max_ea - min_ea) // 2
 
-    success = exporter_db.exporter.generate_map_file(
-        output_path, start_ea=min_ea, end_ea=mid_ea
-    )
+    success = exporter_db.exporter.generate_map_file(output_path, start_ea=min_ea, end_ea=mid_ea)
 
-    assert success is True, "generate_map_file should succeed with range"
-    assert os.path.exists(output_path), "MAP file should be created"
+    assert success is True, 'generate_map_file should succeed with range'
+    assert os.path.exists(output_path), 'MAP file should be created'
 
 
-def test_generate_map_file_invalid_start_ea_raises_error(
-    exporter_db, temp_output_dir
-):
+def test_generate_map_file_invalid_start_ea_raises_error(exporter_db, temp_output_dir):
     """
     Test that generate_map_file raises InvalidEAError for invalid start_ea.
 
@@ -169,9 +157,7 @@ def test_generate_map_file_invalid_start_ea_raises_error(
         exporter_db.exporter.generate_map_file(output_path, start_ea=0xFFFFFFFF)
 
 
-def test_generate_map_file_start_ea_greater_than_end_ea_raises_error(
-    exporter_db, temp_output_dir
-):
+def test_generate_map_file_start_ea_greater_than_end_ea_raises_error(exporter_db, temp_output_dir):
     """
     Test that generate_map_file raises error when start_ea >= end_ea.
 
@@ -187,9 +173,7 @@ def test_generate_map_file_start_ea_greater_than_end_ea_raises_error(
     end_ea = min_ea
 
     with pytest.raises(InvalidParameterError):
-        exporter_db.exporter.generate_map_file(
-            output_path, start_ea=start_ea, end_ea=end_ea
-        )
+        exporter_db.exporter.generate_map_file(output_path, start_ea=start_ea, end_ea=end_ea)
 
 
 # =============================================================================
@@ -211,9 +195,9 @@ def test_generate_assembly_creates_file(exporter_db, temp_output_dir):
 
     success = exporter_db.exporter.generate_assembly(output_path)
 
-    assert success is True, "generate_assembly should return True on success"
-    assert os.path.exists(output_path), "Assembly file should be created"
-    assert os.path.getsize(output_path) > 0, "Assembly file should not be empty"
+    assert success is True, 'generate_assembly should return True on success'
+    assert os.path.exists(output_path), 'Assembly file should be created'
+    assert os.path.getsize(output_path) > 0, 'Assembly file should not be empty'
 
 
 def test_generate_assembly_with_flags(exporter_db, temp_output_dir):
@@ -230,8 +214,8 @@ def test_generate_assembly_with_flags(exporter_db, temp_output_dir):
     flags = ExportFlags.GEN_XREF | ExportFlags.GEN_ASSUME | ExportFlags.GEN_ORG
     success = exporter_db.exporter.generate_assembly(output_path, flags=flags)
 
-    assert success is True, "generate_assembly should succeed with flags"
-    assert os.path.exists(output_path), "Assembly file should be created"
+    assert success is True, 'generate_assembly should succeed with flags'
+    assert os.path.exists(output_path), 'Assembly file should be created'
 
 
 # =============================================================================
@@ -250,9 +234,9 @@ def test_generate_listing_creates_file(exporter_db, temp_output_dir):
 
     success = exporter_db.exporter.generate_listing(output_path)
 
-    assert success is True, "generate_listing should return True on success"
-    assert os.path.exists(output_path), "Listing file should be created"
-    assert os.path.getsize(output_path) > 0, "Listing file should not be empty"
+    assert success is True, 'generate_listing should return True on success'
+    assert os.path.exists(output_path), 'Listing file should be created'
+    assert os.path.getsize(output_path) > 0, 'Listing file should not be empty'
 
 
 # =============================================================================
@@ -272,9 +256,9 @@ def test_generate_idc_script_creates_file(exporter_db, temp_output_dir):
 
     success = exporter_db.exporter.generate_idc_script(output_path)
 
-    assert success is True, "generate_idc_script should return True on success"
-    assert os.path.exists(output_path), "IDC script should be created"
-    assert os.path.getsize(output_path) > 0, "IDC script should not be empty"
+    assert success is True, 'generate_idc_script should return True on success'
+    assert os.path.exists(output_path), 'IDC script should be created'
+    assert os.path.getsize(output_path) > 0, 'IDC script should not be empty'
 
 
 # =============================================================================
@@ -294,8 +278,8 @@ def test_generate_diff_creates_file(exporter_db, temp_output_dir):
 
     success = exporter_db.exporter.generate_diff(output_path)
 
-    assert success is True, "generate_diff should return True on success"
-    assert os.path.exists(output_path), "Diff file should be created"
+    assert success is True, 'generate_diff should return True on success'
+    assert os.path.exists(output_path), 'Diff file should be created'
 
 
 # =============================================================================
@@ -322,11 +306,9 @@ def test_export_bytes_creates_binary_file(exporter_db, temp_output_dir):
 
     num_bytes = exporter_db.exporter.export_bytes(output_path, min_ea, end_ea)
 
-    assert num_bytes == 100, "export_bytes should return number of bytes exported"
-    assert os.path.exists(output_path), "Binary file should be created"
-    assert os.path.getsize(output_path) == 100, (
-        "File size should match exported byte count"
-    )
+    assert num_bytes == 100, 'export_bytes should return number of bytes exported'
+    assert os.path.exists(output_path), 'Binary file should be created'
+    assert os.path.getsize(output_path) == 100, 'File size should match exported byte count'
 
 
 def test_export_bytes_invalid_range_raises_error(exporter_db, temp_output_dir):
@@ -366,7 +348,7 @@ def test_import_bytes_reads_binary_file(exporter_db, temp_output_dir):
 
     num_bytes = exporter_db.exporter.import_bytes(input_path, dest_ea)
 
-    assert num_bytes == 5, "import_bytes should return number of bytes imported"
+    assert num_bytes == 5, 'import_bytes should return number of bytes imported'
 
 
 def test_import_bytes_with_offset_and_size(exporter_db, temp_output_dir):
@@ -386,11 +368,9 @@ def test_import_bytes_with_offset_and_size(exporter_db, temp_output_dir):
     dest_ea = exporter_db.minimum_ea
 
     # Import 3 bytes starting from offset 2
-    num_bytes = exporter_db.exporter.import_bytes(
-        input_path, dest_ea, file_offset=2, size=3
-    )
+    num_bytes = exporter_db.exporter.import_bytes(input_path, dest_ea, file_offset=2, size=3)
 
-    assert num_bytes == 3, "Should import exactly 3 bytes"
+    assert num_bytes == 3, 'Should import exactly 3 bytes'
 
 
 def test_import_bytes_invalid_address_raises_error(exporter_db, temp_output_dir):
@@ -434,8 +414,8 @@ def test_export_range_with_asm_format(exporter_db, temp_output_dir):
         flags=ExportFlags.GEN_XREF,
     )
 
-    assert success is True, "export_range should succeed"
-    assert os.path.exists(output_path), "Export file should be created"
+    assert success is True, 'export_range should succeed'
+    assert os.path.exists(output_path), 'Export file should be created'
 
 
 def test_export_range_with_map_format(exporter_db, temp_output_dir):
@@ -454,8 +434,8 @@ def test_export_range_with_map_format(exporter_db, temp_output_dir):
         output_path, min_ea, max_ea, format=ExportFormat.MAP
     )
 
-    assert success is True, "export_range should succeed with MAP format"
-    assert os.path.exists(output_path), "MAP file should be created"
+    assert success is True, 'export_range should succeed with MAP format'
+    assert os.path.exists(output_path), 'MAP file should be created'
 
 
 # =============================================================================
@@ -471,12 +451,12 @@ def test_export_format_enum_has_correct_values():
     We verify that the expected formats (MAP, EXE, IDC, LST, ASM, DIF)
     are all defined and have valid values.
     """
-    assert hasattr(ExportFormat, 'MAP'), "ExportFormat should have MAP"
-    assert hasattr(ExportFormat, 'EXE'), "ExportFormat should have EXE"
-    assert hasattr(ExportFormat, 'IDC'), "ExportFormat should have IDC"
-    assert hasattr(ExportFormat, 'LST'), "ExportFormat should have LST"
-    assert hasattr(ExportFormat, 'ASM'), "ExportFormat should have ASM"
-    assert hasattr(ExportFormat, 'DIF'), "ExportFormat should have DIF"
+    assert hasattr(ExportFormat, 'MAP'), 'ExportFormat should have MAP'
+    assert hasattr(ExportFormat, 'EXE'), 'ExportFormat should have EXE'
+    assert hasattr(ExportFormat, 'IDC'), 'ExportFormat should have IDC'
+    assert hasattr(ExportFormat, 'LST'), 'ExportFormat should have LST'
+    assert hasattr(ExportFormat, 'ASM'), 'ExportFormat should have ASM'
+    assert hasattr(ExportFormat, 'DIF'), 'ExportFormat should have DIF'
 
 
 def test_export_flags_enum_has_correct_values():
@@ -487,14 +467,12 @@ def test_export_flags_enum_has_correct_values():
     controlling export behavior. We verify that the expected flags are
     defined and can be combined using bitwise OR.
     """
-    assert hasattr(ExportFlags, 'GEN_VOID'), "ExportFlags should have GEN_VOID"
-    assert hasattr(ExportFlags, 'GEN_EXTRA'), "ExportFlags should have GEN_EXTRA"
-    assert hasattr(ExportFlags, 'GEN_ASSUME'), "ExportFlags should have GEN_ASSUME"
-    assert hasattr(ExportFlags, 'GEN_ORG'), "ExportFlags should have GEN_ORG"
-    assert hasattr(ExportFlags, 'GEN_XREF'), "ExportFlags should have GEN_XREF"
+    assert hasattr(ExportFlags, 'GEN_VOID'), 'ExportFlags should have GEN_VOID'
+    assert hasattr(ExportFlags, 'GEN_EXTRA'), 'ExportFlags should have GEN_EXTRA'
+    assert hasattr(ExportFlags, 'GEN_ASSUME'), 'ExportFlags should have GEN_ASSUME'
+    assert hasattr(ExportFlags, 'GEN_ORG'), 'ExportFlags should have GEN_ORG'
+    assert hasattr(ExportFlags, 'GEN_XREF'), 'ExportFlags should have GEN_XREF'
 
     # Test flag combination
     combined = ExportFlags.GEN_XREF | ExportFlags.GEN_ASSUME
-    assert isinstance(combined, ExportFlags), (
-        "Combined flags should be ExportFlags type"
-    )
+    assert isinstance(combined, ExportFlags), 'Combined flags should be ExportFlags type'

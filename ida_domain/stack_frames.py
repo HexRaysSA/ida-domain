@@ -34,11 +34,11 @@ logger = logging.getLogger(__name__)
 
 
 __all__ = [
-    "StackFrames",
-    "StackFrameInstance",
-    "StackVariable",
-    "FrameSection",
-    "StackVarXref",
+    'StackFrames',
+    'StackFrameInstance',
+    'StackVariable',
+    'FrameSection',
+    'StackVarXref',
 ]
 
 
@@ -197,11 +197,14 @@ class StackFrames(DatabaseEntity):
         # Check if frame already exists
         frame_type = tinfo_t()
         if ida_frame.get_func_frame(frame_type, func):
-            raise RuntimeError(f"Frame already exists at 0x{func_ea:x}")
+            raise RuntimeError(f'Frame already exists at 0x{func_ea:x}')
 
-        return cast(bool, ida_frame.add_frame(
-            func, frsize=local_size, frregs=saved_regs_size, argsize=argument_size
-        ))
+        return cast(
+            bool,
+            ida_frame.add_frame(
+                func, frsize=local_size, frregs=saved_regs_size, argsize=argument_size
+            ),
+        )
 
     def delete(self, func_ea: ea_t) -> bool:
         """
@@ -259,7 +262,7 @@ class StackFrames(DatabaseEntity):
         # Ensure frame exists
         frame_type = tinfo_t()
         if not ida_frame.get_func_frame(frame_type, func):
-            raise RuntimeError(f"No frame exists at 0x{func_ea:x}")
+            raise RuntimeError(f'No frame exists at 0x{func_ea:x}')
 
         # Get current values if not provided
         if saved_regs_size is None:
@@ -267,9 +270,12 @@ class StackFrames(DatabaseEntity):
         if argument_size is None:
             argument_size = func.argsize
 
-        return cast(bool, ida_frame.set_frame_size(
-            func, frsize=local_size, frregs=saved_regs_size, argsize=argument_size
-        ))
+        return cast(
+            bool,
+            ida_frame.set_frame_size(
+                func, frsize=local_size, frregs=saved_regs_size, argsize=argument_size
+            ),
+        )
 
     def set_purged_bytes(self, func_ea: ea_t, nbytes: int, override: bool = True) -> bool:
         """
@@ -381,9 +387,7 @@ class StackFrames(DatabaseEntity):
     # Variable Management Methods
     # ========================================================================
 
-    def define_variable(
-        self, func_ea: ea_t, name: str, offset: int, var_type: tinfo_t
-    ) -> bool:
+    def define_variable(self, func_ea: ea_t, name: str, offset: int, var_type: tinfo_t) -> bool:
         """
         Define or redefine a stack variable at the specified offset.
 
@@ -524,7 +528,7 @@ class StackFrames(DatabaseEntity):
         # Verify variable exists and get its struct offset
         var = self.get_variable(func_ea, offset)
         if not var:
-            raise LookupError(f"No variable at offset {offset}")
+            raise LookupError(f'No variable at offset {offset}')
 
         # Find the struct offset by iterating through frame members
         frame_type = tinfo_t()
@@ -545,11 +549,14 @@ class StackFrames(DatabaseEntity):
                 break
 
         if struct_offset is None:
-            raise LookupError(f"No variable at offset {offset}")
+            raise LookupError(f'No variable at offset {offset}')
 
-        return cast(bool, ida_frame.set_frame_member_type(
-            func, offset=struct_offset, tif=var_type, repr=None, etf_flags=0
-        ))
+        return cast(
+            bool,
+            ida_frame.set_frame_member_type(
+                func, offset=struct_offset, tif=var_type, repr=None, etf_flags=0
+            ),
+        )
 
     def rename_variable(self, func_ea: ea_t, offset: int, new_name: str) -> bool:
         """
@@ -573,10 +580,10 @@ class StackFrames(DatabaseEntity):
         """
         var = self.get_variable(func_ea, offset)
         if not var:
-            raise LookupError(f"No variable at offset {offset}")
+            raise LookupError(f'No variable at offset {offset}')
 
         if not new_name or not new_name.strip():
-            raise ValueError("Variable name cannot be empty")
+            raise ValueError('Variable name cannot be empty')
 
         return self.define_variable(func_ea, new_name, offset, var.type)
 
@@ -624,13 +631,14 @@ class StackFrames(DatabaseEntity):
             return False
 
         # Delete single member (end = start + 1)
-        return cast(bool, ida_frame.delete_frame_members(
-            func, start_offset=struct_offset, end_offset=struct_offset + 1
-        ))
+        return cast(
+            bool,
+            ida_frame.delete_frame_members(
+                func, start_offset=struct_offset, end_offset=struct_offset + 1
+            ),
+        )
 
-    def delete_variables_in_range(
-        self, func_ea: ea_t, start_offset: int, end_offset: int
-    ) -> int:
+    def delete_variables_in_range(self, func_ea: ea_t, start_offset: int, end_offset: int) -> int:
         """
         Delete all stack variables within an offset range.
 
@@ -758,7 +766,7 @@ class StackFrames(DatabaseEntity):
 
         frame_type = tinfo_t()
         if not ida_frame.get_func_frame(frame_type, func):
-            raise RuntimeError(f"No frame at 0x{func_ea:x}")
+            raise RuntimeError(f'No frame at 0x{func_ea:x}')
 
         return frame_type
 
@@ -854,7 +862,7 @@ class StackFrames(DatabaseEntity):
             raise InvalidEAError(func_ea)
 
         name = ida_frame.build_stkvar_name(func, offset)
-        return name if name else ""
+        return name if name else ''
 
     # ========================================================================
     # SP Tracking Methods

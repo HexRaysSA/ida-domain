@@ -18,6 +18,7 @@ def names_test_setup():
 
     # Copy tiny_c.bin from test resources
     import shutil
+
     current_dir = os.path.dirname(os.path.abspath(__file__))
     src_path = os.path.join(current_dir, 'resources', 'tiny_c.bin')
     shutil.copy2(src_path, idb_path)
@@ -62,11 +63,11 @@ class TestNamesResolve:
                 f"resolve_name should find existing name '{first_name}'"
             )
             assert resolved_addr == first_addr, (
-                f"Expected address {first_addr:x}, got {resolved_addr:x}"
+                f'Expected address {first_addr:x}, got {resolved_addr:x}'
             )
         else:
             # If no names exist, skip this test
-            pytest.skip("No names in database to test")
+            pytest.skip('No names in database to test')
 
     def test_resolve_name_returns_none_for_nonexistent(self, test_env):
         """
@@ -77,9 +78,9 @@ class TestNamesResolve:
         that looking up a name that doesn't exist in the database returns None rather
         than raising an exception or returning an invalid value.
         """
-        addr = test_env.names.resolve_name("nonexistent_function_name_xyz123")
+        addr = test_env.names.resolve_name('nonexistent_function_name_xyz123')
 
-        assert addr is None, "resolve_name should return None for non-existent names"
+        assert addr is None, 'resolve_name should return None for non-existent names'
 
     def test_resolve_name_finds_data_symbol(self, test_env):
         """
@@ -97,14 +98,12 @@ class TestNamesResolve:
             # Resolve it
             resolved_addr = test_env.names.resolve_name(second_name)
 
-            assert resolved_addr is not None, (
-                f"resolve_name should find name '{second_name}'"
-            )
+            assert resolved_addr is not None, f"resolve_name should find name '{second_name}'"
             assert resolved_addr == second_addr, (
-                f"Expected address {second_addr:x}, got {resolved_addr:x}"
+                f'Expected address {second_addr:x}, got {resolved_addr:x}'
             )
         else:
-            pytest.skip("Not enough names in database to test")
+            pytest.skip('Not enough names in database to test')
 
     def test_resolve_value_for_function_name(self, test_env):
         """
@@ -130,15 +129,13 @@ class TestNamesResolve:
             assert value is not None, (
                 f"resolve_value should return a value for existing name '{first_name}'"
             )
-            assert value == first_addr, (
-                f"Expected value {first_addr:x}, got {value:x}"
-            )
+            assert value == first_addr, f'Expected value {first_addr:x}, got {value:x}'
             # Type should be one of the valid NT_* constants (not NT_NONE)
             assert name_type != ida_name.NT_NONE, (
-                f"Name type should not be NT_NONE for existing name"
+                f'Name type should not be NT_NONE for existing name'
             )
         else:
-            pytest.skip("No names in database to test")
+            pytest.skip('No names in database to test')
 
     def test_resolve_value_for_nonexistent_name(self, test_env):
         """
@@ -151,11 +148,11 @@ class TestNamesResolve:
         """
         import ida_name
 
-        value, name_type = test_env.names.resolve_value("nonexistent_name_xyz123")
+        value, name_type = test_env.names.resolve_value('nonexistent_name_xyz123')
 
-        assert value is None, "Value should be None for non-existent name"
+        assert value is None, 'Value should be None for non-existent name'
         assert name_type == ida_name.NT_NONE, (
-            f"Type should be NT_NONE for non-existent name, got {name_type}"
+            f'Type should be NT_NONE for non-existent name, got {name_type}'
         )
 
     def test_resolve_value_consistency_with_resolve_name(self, test_env):
@@ -181,11 +178,11 @@ class TestNamesResolve:
             assert value_from_resolve_value is not None
 
             assert addr_from_resolve_name == value_from_resolve_value, (
-                f"resolve_name returned {addr_from_resolve_name:x}, "
-                f"resolve_value returned {value_from_resolve_value:x}"
+                f'resolve_name returned {addr_from_resolve_name:x}, '
+                f'resolve_value returned {value_from_resolve_value:x}'
             )
         else:
-            pytest.skip("No names in database to test")
+            pytest.skip('No names in database to test')
 
     def test_resolve_value_with_context_address(self, test_env):
         """
@@ -207,10 +204,10 @@ class TestNamesResolve:
             value, name_type = test_env.names.resolve_value(first_name, from_ea=first_addr)
 
             # Should still resolve (global names work from any context)
-            assert value is not None, "Should resolve global name with context"
+            assert value is not None, 'Should resolve global name with context'
             assert value == first_addr
         else:
-            pytest.skip("No names in database to test")
+            pytest.skip('No names in database to test')
 
 
 class TestNamesLocalOperations:
@@ -231,7 +228,7 @@ class TestNamesLocalOperations:
         result = test_env.names.delete_local(0xC4)
 
         # Should return bool (True if deleted, False if nothing to delete)
-        assert isinstance(result, bool), "delete_local should return a boolean"
+        assert isinstance(result, bool), 'delete_local should return a boolean'
 
     def test_delete_local_with_invalid_address_raises_error(self, test_env):
         """
@@ -263,7 +260,7 @@ class TestNamesDummyCreation:
         # 0xC4 is test_all_operand_types, 0xC8 is inside that function
         result = test_env.names.create_dummy(0xC4, 0xC8)
 
-        assert isinstance(result, bool), "create_dummy should return a boolean"
+        assert isinstance(result, bool), 'create_dummy should return a boolean'
         # Note: Result may be True or False depending on whether dummy name was created
         # The important thing is that it doesn't crash
 
@@ -306,12 +303,12 @@ class TestNamesVisibleName:
             # Get the visible name
             name = test_env.names.get_visible_name(addr)
 
-            assert name is not None, f"get_visible_name should return name for address {addr:x}"
+            assert name is not None, f'get_visible_name should return name for address {addr:x}'
             # Note: visible name might include scope qualifiers, so we just check it's a string
-            assert isinstance(name, str), "get_visible_name should return a string"
-            assert len(name) > 0, "get_visible_name should return non-empty string"
+            assert isinstance(name, str), 'get_visible_name should return a string'
+            assert len(name) > 0, 'get_visible_name should return non-empty string'
         else:
-            pytest.skip("No names in database to test")
+            pytest.skip('No names in database to test')
 
     def test_get_visible_name_for_unnamed_location(self, test_env):
         """
@@ -332,9 +329,9 @@ class TestNamesVisibleName:
 
             # May return None or an auto-generated name like "sub_xxx+offset"
             # The important thing is it doesn't crash
-            assert name is None or isinstance(name, str), "Should return None or a string"
+            assert name is None or isinstance(name, str), 'Should return None or a string'
         else:
-            pytest.skip("Address space too small for test")
+            pytest.skip('Address space too small for test')
 
     def test_get_visible_name_with_invalid_address_raises_error(self, test_env):
         """
@@ -360,9 +357,9 @@ class TestNamesVisibleName:
             name = test_env.names.get_visible_name(addr, local=True)
 
             # Should return None or a string
-            assert name is None or isinstance(name, str), "Should return None or a string"
+            assert name is None or isinstance(name, str), 'Should return None or a string'
         else:
-            pytest.skip("No addresses to test")
+            pytest.skip('No addresses to test')
 
 
 class TestNamesValidation:
@@ -377,14 +374,18 @@ class TestNamesValidation:
         identifier with underscores should be accepted. This validates the core
         functionality and happy path of the method.
         """
-        assert test_env.names.is_valid_name("my_function") is True, \
-            "Valid C identifier should be accepted"
-        assert test_env.names.is_valid_name("MyClass") is True, \
-            "CamelCase identifier should be accepted"
-        assert test_env.names.is_valid_name("_private_var") is True, \
-            "Identifier starting with underscore should be accepted"
-        assert test_env.names.is_valid_name("var123") is True, \
-            "Identifier with digits should be accepted"
+        assert test_env.names.is_valid_name('my_function') is True, (
+            'Valid C identifier should be accepted'
+        )
+        assert test_env.names.is_valid_name('MyClass') is True, (
+            'CamelCase identifier should be accepted'
+        )
+        assert test_env.names.is_valid_name('_private_var') is True, (
+            'Identifier starting with underscore should be accepted'
+        )
+        assert test_env.names.is_valid_name('var123') is True, (
+            'Identifier with digits should be accepted'
+        )
 
     def test_is_valid_name_rejects_empty_string(self, test_env):
         """
@@ -394,8 +395,7 @@ class TestNamesValidation:
         be handled correctly to prevent errors when users or scripts attempt to
         validate potentially empty input.
         """
-        assert test_env.names.is_valid_name("") is False, \
-            "Empty string should not be valid"
+        assert test_env.names.is_valid_name('') is False, 'Empty string should not be valid'
 
     def test_is_valid_name_rejects_invalid_characters(self, test_env):
         """
@@ -406,12 +406,15 @@ class TestNamesValidation:
         Note that IDA is permissive with many special characters (dots, @, $, etc.)
         to support mangled names, namespaces, and other constructs.
         """
-        assert test_env.names.is_valid_name("my function") is False, \
-            "Name with space should be invalid"
-        assert test_env.names.is_valid_name("my\tfunction") is False, \
-            "Name with tab should be invalid"
-        assert test_env.names.is_valid_name("my\nfunction") is False, \
-            "Name with newline should be invalid"
+        assert test_env.names.is_valid_name('my function') is False, (
+            'Name with space should be invalid'
+        )
+        assert test_env.names.is_valid_name('my\tfunction') is False, (
+            'Name with tab should be invalid'
+        )
+        assert test_env.names.is_valid_name('my\nfunction') is False, (
+            'Name with newline should be invalid'
+        )
 
     def test_is_valid_name_rejects_names_starting_with_digit(self, test_env):
         """
@@ -421,10 +424,12 @@ class TestNamesValidation:
         fundamental validation rule that must be enforced. Scripts that generate
         names programmatically might accidentally create such names.
         """
-        assert test_env.names.is_valid_name("123function") is False, \
-            "Name starting with digit should be invalid"
-        assert test_env.names.is_valid_name("0x401000") is False, \
-            "Hex address string should be invalid as name"
+        assert test_env.names.is_valid_name('123function') is False, (
+            'Name starting with digit should be invalid'
+        )
+        assert test_env.names.is_valid_name('0x401000') is False, (
+            'Hex address string should be invalid as name'
+        )
 
     def test_validate_valid_name_returns_true(self, test_env):
         """
@@ -434,10 +439,10 @@ class TestNamesValidation:
         names programmatically. A valid C-style identifier should be accepted and
         returned unchanged. This validates the happy path of name validation.
         """
-        is_valid, cleaned = test_env.names.validate("my_function")
+        is_valid, cleaned = test_env.names.validate('my_function')
 
-        assert is_valid is True, "Valid name should be marked as valid"
-        assert cleaned == "my_function", "Valid name should be returned unchanged"
+        assert is_valid is True, 'Valid name should be marked as valid'
+        assert cleaned == 'my_function', 'Valid name should be returned unchanged'
 
     def test_validate_name_with_invalid_characters(self, test_env):
         """
@@ -450,15 +455,15 @@ class TestNamesValidation:
         without crashing.
         """
         # Name with a hyphen (invalid in IDA)
-        is_valid, cleaned = test_env.names.validate("my-function")
+        is_valid, cleaned = test_env.names.validate('my-function')
 
         # Should return a boolean and a string
-        assert isinstance(is_valid, bool), "First return value should be boolean"
-        assert isinstance(cleaned, str), "Second return value should be string"
+        assert isinstance(is_valid, bool), 'First return value should be boolean'
+        assert isinstance(cleaned, str), 'Second return value should be string'
 
         # If cleaned, it should have replaced the invalid character
         if is_valid:
-            assert "-" not in cleaned, "Cleaned name should not contain hyphens"
+            assert '-' not in cleaned, 'Cleaned name should not contain hyphens'
 
     def test_validate_empty_name(self, test_env):
         """
@@ -467,9 +472,9 @@ class TestNamesValidation:
         RATIONALE: Edge case handling. Empty strings are not valid names, and
         the method should handle this case gracefully by returning False.
         """
-        is_valid, cleaned = test_env.names.validate("")
+        is_valid, cleaned = test_env.names.validate('')
 
-        assert is_valid is False, "Empty name should not be valid"
+        assert is_valid is False, 'Empty name should not be valid'
 
     def test_validate_name_with_spaces(self, test_env):
         """
@@ -478,15 +483,15 @@ class TestNamesValidation:
         RATIONALE: Spaces are not allowed in IDA names. This test validates that
         the method handles this common invalid input case appropriately.
         """
-        is_valid, cleaned = test_env.names.validate("my function name")
+        is_valid, cleaned = test_env.names.validate('my function name')
 
         # Should return results indicating whether name is/can be valid
-        assert isinstance(is_valid, bool), "Should return boolean validity"
-        assert isinstance(cleaned, str), "Should return string cleaned name"
+        assert isinstance(is_valid, bool), 'Should return boolean validity'
+        assert isinstance(cleaned, str), 'Should return string cleaned name'
 
         if is_valid:
             # If it was made valid, spaces should be gone
-            assert " " not in cleaned, "Cleaned name should not contain spaces"
+            assert ' ' not in cleaned, 'Cleaned name should not contain spaces'
 
     def test_validate_name_starting_with_digit(self, test_env):
         """
@@ -496,15 +501,15 @@ class TestNamesValidation:
         validation rule that should be enforced. The method should either reject
         such names or clean them by prepending a valid character.
         """
-        is_valid, cleaned = test_env.names.validate("123function")
+        is_valid, cleaned = test_env.names.validate('123function')
 
         # Should return validation result
-        assert isinstance(is_valid, bool), "Should return boolean validity"
-        assert isinstance(cleaned, str), "Should return string"
+        assert isinstance(is_valid, bool), 'Should return boolean validity'
+        assert isinstance(cleaned, str), 'Should return string'
 
         if is_valid:
             # If made valid, shouldn't start with digit
-            assert not cleaned[0].isdigit(), "Cleaned name should not start with digit"
+            assert not cleaned[0].isdigit(), 'Cleaned name should not start with digit'
 
 
 class TestNamesIntegration:
@@ -525,14 +530,14 @@ class TestNamesIntegration:
             # First resolve the name
             addr = test_env.names.resolve_name(original_name)
             assert addr is not None, f"Should find the name '{original_name}'"
-            assert addr == original_addr, "Resolved address should match"
+            assert addr == original_addr, 'Resolved address should match'
 
             # Then get the visible name at that address
             name = test_env.names.get_visible_name(addr)
-            assert name is not None, "Should return a name"
-            assert isinstance(name, str), "Should return a string"
+            assert name is not None, 'Should return a name'
+            assert isinstance(name, str), 'Should return a string'
         else:
-            pytest.skip("No names in database to test")
+            pytest.skip('No names in database to test')
 
     def test_validate_then_resolve(self, test_env):
         """
@@ -552,10 +557,10 @@ class TestNamesIntegration:
 
             # Then try to resolve it
             addr = test_env.names.resolve_name(cleaned)
-            assert addr is not None, "Valid name should resolve to address"
-            assert addr == original_addr, "Should resolve to correct address"
+            assert addr is not None, 'Valid name should resolve to address'
+            assert addr == original_addr, 'Should resolve to correct address'
         else:
-            pytest.skip("No names in database to test")
+            pytest.skip('No names in database to test')
 
 
 class TestNamesFormatting:
@@ -582,7 +587,7 @@ class TestNamesFormatting:
                 break
 
         if func_with_name is None:
-            pytest.skip("No named functions found in database")
+            pytest.skip('No named functions found in database')
 
         func_ea, expected_name = func_with_name
 
@@ -590,16 +595,15 @@ class TestNamesFormatting:
         colored = test_env.names.get_colored_name(func_ea)
 
         # Should return a string
-        assert colored is not None, f"Should return colored name for address 0x{func_ea:x}"
-        assert isinstance(colored, str), "Should return a string"
-        assert len(colored) > 0, "Colored name should not be empty"
+        assert colored is not None, f'Should return colored name for address 0x{func_ea:x}'
+        assert isinstance(colored, str), 'Should return a string'
+        assert len(colored) > 0, 'Colored name should not be empty'
 
         # Colored name might contain color tags, but should contain the actual name text
         # (Color tags are typically control chars that don't affect string comparison much)
         # We just verify it's a reasonable non-empty string
         assert len(colored) >= len(expected_name), (
-            "Colored name should be at least as long as plain name "
-            "(may contain color tags)"
+            'Colored name should be at least as long as plain name (may contain color tags)'
         )
 
     def test_get_colored_name_returns_none_for_unnamed_address(self, test_env):
@@ -625,11 +629,11 @@ class TestNamesFormatting:
                     break
 
         if unnamed_ea is None:
-            pytest.skip("Could not find unnamed address")
+            pytest.skip('Could not find unnamed address')
 
         # Get colored name - should be None
         colored = test_env.names.get_colored_name(unnamed_ea)
-        assert colored is None, f"Should return None for unnamed address 0x{unnamed_ea:x}"
+        assert colored is None, f'Should return None for unnamed address 0x{unnamed_ea:x}'
 
     def test_get_colored_name_with_local_flag(self, test_env):
         """
@@ -648,17 +652,17 @@ class TestNamesFormatting:
 
             # Try with local=False (default)
             colored_global = test_env.names.get_colored_name(addr, local=False)
-            assert colored_global is not None, "Should return name with local=False"
+            assert colored_global is not None, 'Should return name with local=False'
 
             # Try with local=True
             colored_local = test_env.names.get_colored_name(addr, local=True)
             # Either should work - local might return same or different name
             # depending on whether there's a local name at this address
             assert isinstance(colored_local, (str, type(None))), (
-                "Should return string or None with local=True"
+                'Should return string or None with local=True'
             )
         else:
-            pytest.skip("No names in database")
+            pytest.skip('No names in database')
 
     def test_get_colored_name_with_invalid_address_raises_error(self, test_env):
         """
@@ -693,7 +697,7 @@ class TestNamesFormatting:
                 break
 
         if func_with_name is None:
-            pytest.skip("No named functions found")
+            pytest.skip('No named functions found')
 
         func_ea, expected_name = func_with_name
 
@@ -703,15 +707,15 @@ class TestNamesFormatting:
             n=0,  # Operand 0 (or data item)
             ea=func_ea,  # Base address
             offset=func_ea,  # Value to represent (same as ea)
-            include_struct_fields=True
+            include_struct_fields=True,
         )
 
         # Should return a string containing the name
-        assert expr is not None, "Should return expression for named address"
-        assert isinstance(expr, str), "Should return a string"
+        assert expr is not None, 'Should return expression for named address'
+        assert isinstance(expr, str), 'Should return a string'
         # The expression should contain the function name
         # (it might have prefixes/suffixes depending on IDA's formatting rules)
-        assert len(expr) > 0, "Expression should not be empty"
+        assert len(expr) > 0, 'Expression should not be empty'
 
     def test_format_expression_with_offset_includes_displacement(self, test_env):
         """
@@ -733,27 +737,23 @@ class TestNamesFormatting:
                 break
 
         if func_with_name is None:
-            pytest.skip("No suitable named function found")
+            pytest.skip('No suitable named function found')
 
         func_ea, expected_name = func_with_name
         offset_value = func_ea + 8  # Add offset of 8
 
         # Format expression with offset
         expr = test_env.names.format_expression(
-            from_ea=func_ea,
-            n=0,
-            ea=func_ea,
-            offset=offset_value,
-            include_struct_fields=True
+            from_ea=func_ea, n=0, ea=func_ea, offset=offset_value, include_struct_fields=True
         )
 
         # Should return expression with offset
-        assert expr is not None, "Should return expression"
-        assert isinstance(expr, str), "Should return a string"
+        assert expr is not None, 'Should return expression'
+        assert isinstance(expr, str), 'Should return a string'
         # Expression should contain some indication of offset
         # Typically formatted as "name+8" or similar
         # We can't check exact format, but it should be non-empty
-        assert len(expr) > 0, "Expression should not be empty"
+        assert len(expr) > 0, 'Expression should not be empty'
 
     def test_format_expression_with_struct_fields_flag(self, test_env):
         """
@@ -771,31 +771,23 @@ class TestNamesFormatting:
 
             # Try with include_struct_fields=True
             expr_with_fields = test_env.names.format_expression(
-                from_ea=addr,
-                n=0,
-                ea=addr,
-                offset=addr,
-                include_struct_fields=True
+                from_ea=addr, n=0, ea=addr, offset=addr, include_struct_fields=True
             )
 
             # Try with include_struct_fields=False
             expr_no_fields = test_env.names.format_expression(
-                from_ea=addr,
-                n=0,
-                ea=addr,
-                offset=addr,
-                include_struct_fields=False
+                from_ea=addr, n=0, ea=addr, offset=addr, include_struct_fields=False
             )
 
             # Both should work (return string or None)
             assert isinstance(expr_with_fields, (str, type(None))), (
-                "Should return string or None with include_struct_fields=True"
+                'Should return string or None with include_struct_fields=True'
             )
             assert isinstance(expr_no_fields, (str, type(None))), (
-                "Should return string or None with include_struct_fields=False"
+                'Should return string or None with include_struct_fields=False'
             )
         else:
-            pytest.skip("No names in database")
+            pytest.skip('No names in database')
 
     def test_format_expression_with_invalid_from_ea_raises_error(self, test_env):
         """
@@ -808,12 +800,7 @@ class TestNamesFormatting:
         valid_ea = test_env.minimum_ea
 
         with pytest.raises(InvalidEAError):
-            test_env.names.format_expression(
-                from_ea=invalid_ea,
-                n=0,
-                ea=valid_ea,
-                offset=valid_ea
-            )
+            test_env.names.format_expression(from_ea=invalid_ea, n=0, ea=valid_ea, offset=valid_ea)
 
     def test_format_expression_with_invalid_ea_raises_error(self, test_env):
         """
@@ -826,9 +813,4 @@ class TestNamesFormatting:
         valid_ea = test_env.minimum_ea
 
         with pytest.raises(InvalidEAError):
-            test_env.names.format_expression(
-                from_ea=valid_ea,
-                n=0,
-                ea=invalid_ea,
-                offset=valid_ea
-            )
+            test_env.names.format_expression(from_ea=valid_ea, n=0, ea=invalid_ea, offset=valid_ea)

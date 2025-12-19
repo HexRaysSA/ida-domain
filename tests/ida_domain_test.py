@@ -207,10 +207,10 @@ def test_database_save_as(test_env):
         os.remove(new_db_path)
 
     # Save to new location
-    assert db.save_as(new_db_path), "save_as should return True on success"
+    assert db.save_as(new_db_path), 'save_as should return True on success'
 
     # Verify the file was created
-    assert os.path.exists(new_db_path), "Saved database file should exist"
+    assert os.path.exists(new_db_path), 'Saved database file should exist'
 
     # Clean up
     if os.path.exists(new_db_path):
@@ -218,7 +218,7 @@ def test_database_save_as(test_env):
 
     # Test 2: Empty path should raise InvalidParameterError
     with pytest.raises(InvalidParameterError):
-        db.save_as("")
+        db.save_as('')
 
 
 def test_segment(test_env):
@@ -3403,6 +3403,4 @@ def test_analysis_cancel_queue(test_env):
 
     # Test start >= end
     with pytest.raises(InvalidParameterError):
-        db.analysis.cancel_queue(
-            db.minimum_ea + 0x10, db.minimum_ea, AnalysisQueueType.CODE
-        )
+        db.analysis.cancel_queue(db.minimum_ea + 0x10, db.minimum_ea, AnalysisQueueType.CODE)

@@ -40,20 +40,20 @@ class ImportEntry:
     @property
     def is_ordinal_import(self) -> bool:
         """True if imported by ordinal rather than name."""
-        return self.ordinal != 0 and (not self.name or self.name == "")
+        return self.ordinal != 0 and (not self.name or self.name == '')
 
     @property
     def is_named_import(self) -> bool:
         """True if imported by name rather than ordinal."""
-        return bool(self.name and self.name != "")
+        return bool(self.name and self.name != '')
 
     @property
     def full_name(self) -> str:
         """Formatted as 'module.name' or 'module.#ordinal'."""
         if self.is_named_import:
-            return f"{self.module_name}.{self.name}"
+            return f'{self.module_name}.{self.name}'
         else:
-            return f"{self.module_name}.#{self.ordinal}"
+            return f'{self.module_name}.#{self.ordinal}'
 
 
 @dataclass(frozen=True)
@@ -194,10 +194,7 @@ class Imports(DatabaseEntity):
             import_count = self._count_module_imports(i)
 
             yield ImportModule(
-                name=module_name,
-                index=i,
-                import_count=import_count,
-                _imports_entity=self
+                name=module_name, index=i, import_count=import_count, _imports_entity=self
             )
 
     def get_module(self, index: int) -> Optional[ImportModule]:
@@ -219,7 +216,7 @@ class Imports(DatabaseEntity):
             ...     print(f"First module: {module.name}")
         """
         if index < 0:
-            raise InvalidParameterError("index", index, "Module index cannot be negative")
+            raise InvalidParameterError('index', index, 'Module index cannot be negative')
 
         count = ida_nalt.get_import_module_qty()
         if index >= count:
@@ -232,10 +229,7 @@ class Imports(DatabaseEntity):
         import_count = self._count_module_imports(index)
 
         return ImportModule(
-            name=module_name,
-            index=index,
-            import_count=import_count,
-            _imports_entity=self
+            name=module_name, index=index, import_count=import_count, _imports_entity=self
         )
 
     def get_module_by_name(self, name: str) -> Optional[ImportModule]:
@@ -286,8 +280,7 @@ class Imports(DatabaseEntity):
         return names
 
     def get_entries_by_module(
-        self,
-        module: Union[str, int, ImportModule]
+        self, module: Union[str, int, ImportModule]
     ) -> Iterator[ImportEntry]:
         """
         Retrieves all import entries from a specific module.
@@ -322,25 +315,23 @@ class Imports(DatabaseEntity):
             # Find module by name
             found_module = self.get_module_by_name(module)
             if not found_module:
-                raise InvalidParameterError("module", module, f"Module '{module}' not found")
+                raise InvalidParameterError('module', module, f"Module '{module}' not found")
             module_index = found_module.index
         elif isinstance(module, int):
             module_index = module
         else:
             raise InvalidParameterError(
-                "module", module, "Must be int (index), str (name), or ImportModule"
+                'module', module, 'Must be int (index), str (name), or ImportModule'
             )
 
         # Validate index
         if module_index < 0:
-            raise InvalidParameterError(
-                "module", module_index, "Module index cannot be negative"
-            )
+            raise InvalidParameterError('module', module_index, 'Module index cannot be negative')
 
         count = ida_nalt.get_import_module_qty()
         if module_index >= count:
             raise InvalidParameterError(
-                "module", module_index, f"Module index out of range [0, {count})"
+                'module', module_index, f'Module index out of range [0, {count})'
             )
 
         module_name = ida_nalt.get_import_module_name(module_index)
@@ -354,10 +345,10 @@ class Imports(DatabaseEntity):
             """Callback for ida_nalt.enum_import_names."""
             entry = ImportEntry(
                 address=ea,
-                name=name if name else "",
+                name=name if name else '',
                 ordinal=ordinal if ordinal else 0,
                 module_name=module_name,
-                module_index=module_index
+                module_index=module_index,
             )
             entries.append(entry)
             return 1  # Continue enumeration
@@ -440,10 +431,10 @@ class Imports(DatabaseEntity):
                     # Found matching import
                     entry = ImportEntry(
                         address=import_ea,
-                        name=name if name else "",
+                        name=name if name else '',
                         ordinal=ordinal if ordinal else 0,
                         module_name=module_name,
-                        module_index=module_idx
+                        module_index=module_idx,
                     )
                     result.append(entry)
                     return 0  # Stop enumeration
@@ -504,7 +495,7 @@ class Imports(DatabaseEntity):
                         name=import_name,
                         ordinal=ordinal if ordinal else 0,
                         module_name=current_module,
-                        module_index=module_idx
+                        module_index=module_idx,
                     )
                     result.append(entry)
                     return 0  # Stop enumeration
@@ -518,9 +509,7 @@ class Imports(DatabaseEntity):
         return None
 
     def find_all_by_name(
-        self,
-        name: str,
-        module_name: Optional[str] = None
+        self, name: str, module_name: Optional[str] = None
     ) -> Iterator[ImportEntry]:
         """
         Finds all import entries matching the given name (handles duplicate imports).
@@ -568,7 +557,7 @@ class Imports(DatabaseEntity):
                         name=import_name,
                         ordinal=ordinal if ordinal else 0,
                         module_name=current_module,
-                        module_index=module_idx
+                        module_index=module_idx,
                     )
                     entries.append(entry)
                 return 1  # Continue enumeration (don't stop at first match)
@@ -579,10 +568,7 @@ class Imports(DatabaseEntity):
             for entry in entries:
                 yield entry
 
-    def filter_entries(
-        self,
-        predicate: Callable[[ImportEntry], bool]
-    ) -> Iterator[ImportEntry]:
+    def filter_entries(self, predicate: Callable[[ImportEntry], bool]) -> Iterator[ImportEntry]:
         """
         Filters import entries using a custom predicate function.
 
@@ -618,9 +604,7 @@ class Imports(DatabaseEntity):
                 yield entry
 
     def search_by_pattern(
-        self,
-        pattern: str,
-        case_sensitive: bool = False
+        self, pattern: str, case_sensitive: bool = False
     ) -> Iterator[ImportEntry]:
         """
         Searches import names using a regular expression pattern.
@@ -748,7 +732,7 @@ class Imports(DatabaseEntity):
         total_imports = 0
         named_imports = 0
         ordinal_imports = 0
-        most_imported_module = ""
+        most_imported_module = ''
         most_imported_count = 0
 
         for module in self.get_all():
@@ -774,7 +758,7 @@ class Imports(DatabaseEntity):
             named_imports=named_imports,
             ordinal_imports=ordinal_imports,
             most_imported_module=most_imported_module,
-            most_imported_count=most_imported_count
+            most_imported_count=most_imported_count,
         )
 
     def _count_module_imports(self, module_index: int) -> int:

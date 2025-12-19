@@ -34,7 +34,7 @@ def switches_test_setup():
     src_path = os.path.join(current_dir, 'resources', 'tiny_c.bin')
 
     if not os.path.exists(src_path):
-        pytest.skip("Test binary not found")
+        pytest.skip('Test binary not found')
 
     shutil.copy(src_path, idb_path)
     return idb_path
@@ -75,8 +75,9 @@ def test_get_at_returns_none_for_nonexistent_switch(switches_db):
     result = switches_db.switches.get_at(ea)
 
     # Most addresses don't have switches, so None is expected
-    assert result is None or isinstance(result, SwitchInfo), \
-        "get_at should return None or SwitchInfo"
+    assert result is None or isinstance(result, SwitchInfo), (
+        'get_at should return None or SwitchInfo'
+    )
 
 
 def test_get_at_raises_on_invalid_address(switches_db):
@@ -110,7 +111,7 @@ def test_exists_at_returns_false_for_nonexistent_switch(switches_db):
     ea = switches_db.minimum_ea
     result = switches_db.switches.exists_at(ea)
 
-    assert isinstance(result, bool), "exists_at should return boolean"
+    assert isinstance(result, bool), 'exists_at should return boolean'
     # Most addresses don't have switches
     assert result is False or result is True
 
@@ -153,7 +154,7 @@ def test_create_switch_with_valid_data(switches_db):
 
     # Ensure address is valid
     if not switches_db.is_valid_ea(test_ea):
-        pytest.skip("Cannot find valid test address")
+        pytest.skip('Cannot find valid test address')
 
     # Create a simple dense switch (no value table)
     switch_info = SwitchInfo(
@@ -172,14 +173,14 @@ def test_create_switch_with_valid_data(switches_db):
 
     # Create the switch
     result = switches_db.switches.create(test_ea, switch_info)
-    assert result is True, "create should return True for valid data"
+    assert result is True, 'create should return True for valid data'
 
     # Verify it was created
     retrieved = switches_db.switches.get_at(test_ea)
-    assert retrieved is not None, "Should be able to retrieve created switch"
-    assert retrieved.ncases == 5, "Case count should match"
-    assert retrieved.lowcase == 0, "Lowcase should match"
-    assert retrieved.defjump == test_ea + 0x200, "Default jump should match"
+    assert retrieved is not None, 'Should be able to retrieve created switch'
+    assert retrieved.ncases == 5, 'Case count should match'
+    assert retrieved.lowcase == 0, 'Lowcase should match'
+    assert retrieved.defjump == test_ea + 0x200, 'Default jump should match'
 
 
 def test_create_switch_with_invalid_address_raises_error(switches_db):
@@ -288,13 +289,13 @@ def test_update_switch_modifies_existing(switches_db):
     )
 
     result = switches_db.switches.update(test_ea, updated_info)
-    assert result is True, "update should return True"
+    assert result is True, 'update should return True'
 
     # Verify the update
     retrieved = switches_db.switches.get_at(test_ea)
     assert retrieved is not None
-    assert retrieved.ncases == 7, "Case count should be updated"
-    assert retrieved.defjump == test_ea + 0x300, "Default jump should be updated"
+    assert retrieved.ncases == 7, 'Case count should be updated'
+    assert retrieved.defjump == test_ea + 0x300, 'Default jump should be updated'
 
 
 def test_remove_deletes_existing_switch(switches_db):
@@ -329,15 +330,15 @@ def test_remove_deletes_existing_switch(switches_db):
 
     # Remove it
     result = switches_db.switches.remove(test_ea)
-    assert result is True, "remove should return True for existing switch"
+    assert result is True, 'remove should return True for existing switch'
 
     # Verify it's gone
     retrieved = switches_db.switches.get_at(test_ea)
-    assert retrieved is None, "Switch should be deleted"
+    assert retrieved is None, 'Switch should be deleted'
 
     # Second remove should return False
     result2 = switches_db.switches.remove(test_ea)
-    assert result2 is False, "remove should return False when no switch exists"
+    assert result2 is False, 'remove should return False when no switch exists'
 
 
 def test_remove_nonexistent_returns_false(switches_db):
@@ -353,7 +354,7 @@ def test_remove_nonexistent_returns_false(switches_db):
 
     # Try to remove non-existent switch
     result = switches_db.switches.remove(test_ea)
-    assert result is False, "remove should return False when no switch exists"
+    assert result is False, 'remove should return False when no switch exists'
 
 
 # =============================================================================
@@ -373,8 +374,7 @@ def test_get_parent_returns_none_for_no_relationship(switches_db):
     ea = switches_db.minimum_ea
     result = switches_db.switches.get_parent(ea)
 
-    assert result is None or isinstance(result, int), \
-        "get_parent should return None or an address"
+    assert result is None or isinstance(result, int), 'get_parent should return None or an address'
 
 
 def test_set_parent_creates_relationship(switches_db):
@@ -393,7 +393,7 @@ def test_set_parent_creates_relationship(switches_db):
 
     # Ensure both addresses are valid
     if not switches_db.is_valid_ea(switch_ea) or not switches_db.is_valid_ea(case_ea):
-        pytest.skip("Cannot find valid addresses for parent test")
+        pytest.skip('Cannot find valid addresses for parent test')
 
     # Create a switch at switch_ea
     switch_info = SwitchInfo(
@@ -414,11 +414,11 @@ def test_set_parent_creates_relationship(switches_db):
 
     # Set parent relationship
     result = switches_db.switches.set_parent(case_ea, switch_ea)
-    assert result is True, "set_parent should return True"
+    assert result is True, 'set_parent should return True'
 
     # Verify the relationship
     parent = switches_db.switches.get_parent(case_ea)
-    assert parent == switch_ea, "get_parent should return the parent address"
+    assert parent == switch_ea, 'get_parent should return the parent address'
 
 
 def test_remove_parent_deletes_relationship(switches_db):
@@ -434,7 +434,7 @@ def test_remove_parent_deletes_relationship(switches_db):
 
     # Ensure both addresses are valid
     if not switches_db.is_valid_ea(switch_ea) or not switches_db.is_valid_ea(case_ea):
-        pytest.skip("Cannot find valid addresses for parent test")
+        pytest.skip('Cannot find valid addresses for parent test')
 
     # Create switch and set parent
     switch_info = SwitchInfo(
@@ -456,11 +456,11 @@ def test_remove_parent_deletes_relationship(switches_db):
 
     # Remove the relationship
     result = switches_db.switches.remove_parent(case_ea)
-    assert result is True, "remove_parent should return True for existing relationship"
+    assert result is True, 'remove_parent should return True for existing relationship'
 
     # Verify it's removed
     parent = switches_db.switches.get_parent(case_ea)
-    assert parent is None, "Parent relationship should be deleted"
+    assert parent is None, 'Parent relationship should be deleted'
 
 
 def test_remove_parent_nonexistent_returns_false(switches_db):
@@ -473,7 +473,7 @@ def test_remove_parent_nonexistent_returns_false(switches_db):
     ea = switches_db.minimum_ea + 0x100
 
     result = switches_db.switches.remove_parent(ea)
-    assert result is False, "remove_parent should return False when no relationship exists"
+    assert result is False, 'remove_parent should return False when no relationship exists'
 
 
 # =============================================================================
@@ -492,7 +492,7 @@ def test_get_case_count_returns_zero_for_nonexistent(switches_db):
     ea = switches_db.minimum_ea
     count = switches_db.switches.get_case_count(ea)
 
-    assert count == 0, "get_case_count should return 0 for non-existent switch"
+    assert count == 0, 'get_case_count should return 0 for non-existent switch'
 
 
 def test_get_case_count_returns_correct_count(switches_db):
@@ -521,7 +521,7 @@ def test_get_case_count_returns_correct_count(switches_db):
     switches_db.switches.create(test_ea, switch_info)
 
     count = switches_db.switches.get_case_count(test_ea)
-    assert count == 8, "get_case_count should return the correct case count"
+    assert count == 8, 'get_case_count should return the correct case count'
 
 
 def test_get_case_values_dense_switch(switches_db):
@@ -553,8 +553,8 @@ def test_get_case_values_dense_switch(switches_db):
     values = switches_db.switches.get_case_values(switch_info)
 
     # Should be [10, 11, 12, 13, 14]
-    assert len(values) == 5, "Should have 5 case values"
-    assert values == [10, 11, 12, 13, 14], "Values should be sequential from lowcase"
+    assert len(values) == 5, 'Should have 5 case values'
+    assert values == [10, 11, 12, 13, 14], 'Values should be sequential from lowcase'
 
 
 # =============================================================================
@@ -585,7 +585,7 @@ def test_switchinfo_is_sparse_property():
         regnum=-1,
     )
 
-    assert dense.is_sparse is False, "Dense switch should not be sparse"
+    assert dense.is_sparse is False, 'Dense switch should not be sparse'
 
     # Sparse switch (with SPARSE flag)
     sparse = SwitchInfo(
@@ -602,7 +602,7 @@ def test_switchinfo_is_sparse_property():
         regnum=-1,
     )
 
-    assert sparse.is_sparse is True, "Sparse switch should be detected"
+    assert sparse.is_sparse is True, 'Sparse switch should be detected'
 
 
 def test_switchinfo_has_default_property():
@@ -631,7 +631,7 @@ def test_switchinfo_has_default_property():
         regnum=-1,
     )
 
-    assert with_default.has_default is True, "Switch with valid defjump should have default"
+    assert with_default.has_default is True, 'Switch with valid defjump should have default'
 
     # Switch without default
     without_default = SwitchInfo(
@@ -648,7 +648,7 @@ def test_switchinfo_has_default_property():
         regnum=-1,
     )
 
-    assert without_default.has_default is False, "Switch with BADADDR should not have default"
+    assert without_default.has_default is False, 'Switch with BADADDR should not have default'
 
 
 def test_switchinfo_jtable_element_size():

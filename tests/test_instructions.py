@@ -18,6 +18,7 @@ def instructions_test_setup():
 
     # Copy tiny_c.bin from test resources
     import shutil
+
     current_dir = os.path.dirname(os.path.abspath(__file__))
     src_path = os.path.join(current_dir, 'resources', 'tiny_c.bin')
     shutil.copy2(src_path, idb_path)
@@ -32,9 +33,7 @@ def test_env(instructions_test_setup):
     """Opens tiny_c database for each test."""
     ida_options = IdaCommandOptions(new_database=True, auto_analysis=True)
     db = ida_domain.Database.open(
-        path=instructions_test_setup,
-        args=ida_options,
-        save_on_close=False
+        path=instructions_test_setup, args=ida_options, save_on_close=False
     )
     yield db
     db.close()
@@ -57,11 +56,11 @@ class TestInstructionValidation:
         """
         # Get the first instruction in the database
         first_insn = test_env.instructions.get_at(test_env.minimum_ea)
-        assert first_insn is not None, "Database should have at least one instruction"
+        assert first_insn is not None, 'Database should have at least one instruction'
 
         # Verify can_decode returns True for this known-good instruction
         assert test_env.instructions.can_decode(first_insn.ea), (
-            f"can_decode should return True for valid instruction at 0x{first_insn.ea:x}"
+            f'can_decode should return True for valid instruction at 0x{first_insn.ea:x}'
         )
 
     def test_can_decode_with_data_address_returns_false(self, test_env):
@@ -81,14 +80,14 @@ class TestInstructionValidation:
 
         # Skip if address is not valid in database
         if not test_env.is_valid_ea(test_addr):
-            pytest.skip("Test address not available in this database")
+            pytest.skip('Test address not available in this database')
 
         # Ensure this is data, not code (create dword, which undefines any instruction)
         test_env.bytes.create_dword_at(test_addr, count=1, force=True)
 
         # can_decode should return False for data
         assert not test_env.instructions.can_decode(test_addr), (
-            f"can_decode should return False for data address at 0x{test_addr:x}"
+            f'can_decode should return False for data address at 0x{test_addr:x}'
         )
 
     def test_can_decode_with_undefined_bytes_returns_false(self, test_env):
@@ -106,17 +105,16 @@ class TestInstructionValidation:
         test_addr = test_env.minimum_ea + 0x3000
 
         if not test_env.is_valid_ea(test_addr):
-            pytest.skip("Test address not available in database")
+            pytest.skip('Test address not available in database')
 
         # Undefine the bytes to ensure they're truly undefined
         import ida_bytes
+
         ida_bytes.del_items(test_addr, ida_bytes.DELIT_SIMPLE, 1)
 
         # can_decode should return False for undefined bytes
         result = test_env.instructions.can_decode(test_addr)
-        assert not result, (
-            f"can_decode should return False for undefined bytes at 0x{test_addr:x}"
-        )
+        assert not result, f'can_decode should return False for undefined bytes at 0x{test_addr:x}'
 
     def test_can_decode_with_invalid_address_raises_error(self, test_env):
         """
@@ -152,7 +150,7 @@ class TestInstructionValidation:
         assert first_insn is not None
 
         assert test_env.instructions.can_decode(first_insn.ea), (
-            f"can_decode should return True for valid instruction at 0x{first_insn.ea:x}"
+            f'can_decode should return True for valid instruction at 0x{first_insn.ea:x}'
         )
 
         # Test 2: Data address should return False
@@ -160,7 +158,7 @@ class TestInstructionValidation:
         if test_env.is_valid_ea(data_addr):
             test_env.bytes.create_dword_at(data_addr, count=1, force=True)
             assert not test_env.instructions.can_decode(data_addr), (
-                f"can_decode should return False for data at 0x{data_addr:x}"
+                f'can_decode should return False for data at 0x{data_addr:x}'
             )
 
 
@@ -186,10 +184,11 @@ class TestInstructionCreation:
         test_addr = test_env.minimum_ea + 0x4000
 
         if not test_env.is_valid_ea(test_addr):
-            pytest.skip("Test address not available")
+            pytest.skip('Test address not available')
 
         # Ensure bytes are undefined
         import ida_bytes
+
         ida_bytes.del_items(test_addr, ida_bytes.DELIT_SIMPLE, 8)
 
         # Write some valid instruction bytes (e.g., x86_64 nop = 0x90)
@@ -200,17 +199,17 @@ class TestInstructionCreation:
         success = test_env.instructions.create_at(test_addr)
 
         # Verify creation succeeded
-        assert success, f"create_at should succeed at 0x{test_addr:x}"
+        assert success, f'create_at should succeed at 0x{test_addr:x}'
 
         # Verify we can now decode an instruction there
         insn = test_env.instructions.get_at(test_addr)
         assert insn is not None, (
-            f"After create_at, should be able to decode instruction at 0x{test_addr:x}"
+            f'After create_at, should be able to decode instruction at 0x{test_addr:x}'
         )
 
         # Verify can_decode now returns True
         assert test_env.instructions.can_decode(test_addr), (
-            f"After create_at, can_decode should return True at 0x{test_addr:x}"
+            f'After create_at, can_decode should return True at 0x{test_addr:x}'
         )
 
     def test_create_at_with_existing_instruction_succeeds(self, test_env):
@@ -233,13 +232,11 @@ class TestInstructionCreation:
         success = test_env.instructions.create_at(first_insn.ea)
 
         # Should succeed (idempotent)
-        assert success, (
-            f"create_at should succeed on existing instruction at 0x{first_insn.ea:x}"
-        )
+        assert success, f'create_at should succeed on existing instruction at 0x{first_insn.ea:x}'
 
         # Instruction should still be decodable
         assert test_env.instructions.can_decode(first_insn.ea), (
-            f"Instruction should still be decodable at 0x{first_insn.ea:x}"
+            f'Instruction should still be decodable at 0x{first_insn.ea:x}'
         )
 
     def test_create_at_with_data_creates_instruction_if_valid(self, test_env):
@@ -257,10 +254,11 @@ class TestInstructionCreation:
         test_addr = test_env.minimum_ea + 0x5000
 
         if not test_env.is_valid_ea(test_addr):
-            pytest.skip("Test address not available")
+            pytest.skip('Test address not available')
 
         # Create a data item
         import ida_bytes
+
         ida_bytes.del_items(test_addr, ida_bytes.DELIT_SIMPLE, 8)
 
         # Write valid instruction bytes
@@ -277,13 +275,11 @@ class TestInstructionCreation:
         success = test_env.instructions.create_at(test_addr)
 
         # Should succeed
-        assert success, f"create_at should convert data to code at 0x{test_addr:x}"
+        assert success, f'create_at should convert data to code at 0x{test_addr:x}'
 
         # Verify it's now an instruction
         insn = test_env.instructions.get_at(test_addr)
-        assert insn is not None, (
-            f"Should be able to decode instruction at 0x{test_addr:x}"
-        )
+        assert insn is not None, f'Should be able to decode instruction at 0x{test_addr:x}'
 
     def test_create_at_with_invalid_opcodes_returns_false(self, test_env):
         """
@@ -299,9 +295,10 @@ class TestInstructionCreation:
         test_addr = test_env.minimum_ea + 0x6000
 
         if not test_env.is_valid_ea(test_addr):
-            pytest.skip("Test address not available")
+            pytest.skip('Test address not available')
 
         import ida_bytes
+
         # Ensure undefined
         ida_bytes.del_items(test_addr, ida_bytes.DELIT_SIMPLE, 8)
 
@@ -315,9 +312,7 @@ class TestInstructionCreation:
         # Should fail or succeed based on architecture
         # (On x86, 0xFF 0xFF might decode as some instruction)
         # The important thing is create_at returns a boolean, not an exception
-        assert isinstance(success, bool), (
-            "create_at should return boolean, not raise exception"
-        )
+        assert isinstance(success, bool), 'create_at should return boolean, not raise exception'
 
     def test_create_at_with_invalid_address_raises_error(self, test_env):
         """
@@ -352,7 +347,7 @@ class TestInstructionCreation:
         test_addr = test_env.minimum_ea + 0x7000
 
         if not test_env.is_valid_ea(test_addr):
-            pytest.skip("Test address not available")
+            pytest.skip('Test address not available')
 
         import ida_bytes
 
@@ -364,23 +359,21 @@ class TestInstructionCreation:
 
         # Step 3: Create instruction
         success = test_env.instructions.create_at(test_addr)
-        assert success, "create_at should succeed"
+        assert success, 'create_at should succeed'
 
         # Step 4: Validate the created instruction
         assert test_env.instructions.can_decode(test_addr), (
-            "After create_at, can_decode should return True"
+            'After create_at, can_decode should return True'
         )
 
         # Step 5: Verify we can decode and analyze
         insn = test_env.instructions.get_at(test_addr)
-        assert insn is not None, "Should be able to decode instruction"
-        assert insn.ea == test_addr, "Decoded instruction should be at correct address"
+        assert insn is not None, 'Should be able to decode instruction'
+        assert insn.ea == test_addr, 'Decoded instruction should be at correct address'
 
         # Verify we can get mnemonic
         mnem = test_env.instructions.get_mnemonic(insn)
-        assert mnem is not None and len(mnem) > 0, (
-            "Should be able to get instruction mnemonic"
-        )
+        assert mnem is not None and len(mnem) > 0, 'Should be able to get instruction mnemonic'
 
 
 class TestOperandOffsetOperations:
@@ -401,7 +394,7 @@ class TestOperandOffsetOperations:
         # Find an instruction with an immediate operand that could be an address
         # We'll use tiny_c which has data references
         first_insn = test_env.instructions.get_at(test_env.minimum_ea)
-        assert first_insn is not None, "Database should have instructions"
+        assert first_insn is not None, 'Database should have instructions'
 
         # Try to find an instruction with immediate operand in first few instructions
         current_ea = first_insn.ea
@@ -415,6 +408,7 @@ class TestOperandOffsetOperations:
 
             # Check if any operand is an immediate
             import ida_ua
+
             for op_idx in range(6):  # Check first 6 operands
                 if op_idx >= len(insn.ops):
                     break
@@ -431,23 +425,24 @@ class TestOperandOffsetOperations:
             # Move to next instruction
             import ida_bytes
             import ida_idaapi
+
             next_ea = ida_bytes.next_head(current_ea, test_env.maximum_ea)
             if next_ea == ida_idaapi.BADADDR or next_ea == current_ea:
                 break
             current_ea = next_ea
 
         if test_insn is None:
-            pytest.skip("No suitable immediate operand found for testing")
+            pytest.skip('No suitable immediate operand found for testing')
 
         # Try to set it as offset with base 0 (auto-detect base)
         result = test_env.instructions.set_operand_offset(
             test_insn.ea,
             test_operand_n,
-            base=0  # Auto-detect base
+            base=0,  # Auto-detect base
         )
 
         # Verify the method returns a boolean (success or failure)
-        assert isinstance(result, bool), "set_operand_offset should return boolean"
+        assert isinstance(result, bool), 'set_operand_offset should return boolean'
 
     def test_set_operand_offset_with_explicit_base_and_target(self, test_env):
         """
@@ -467,6 +462,7 @@ class TestOperandOffsetOperations:
 
         # Find an instruction with immediate operand
         import ida_ua
+
         current_ea = first_insn.ea
         test_insn = None
         test_operand_n = -1
@@ -490,30 +486,29 @@ class TestOperandOffsetOperations:
 
             import ida_bytes
             import ida_idaapi
+
             next_ea = ida_bytes.next_head(current_ea, test_env.maximum_ea)
             if next_ea == ida_idaapi.BADADDR or next_ea == current_ea:
                 break
             current_ea = next_ea
 
         if test_insn is None:
-            pytest.skip("No suitable immediate operand found")
+            pytest.skip('No suitable immediate operand found')
 
         # Set offset with explicit base and target
         # Use segment base as base address
         import ida_segment
+
         seg = ida_segment.getseg(test_insn.ea)
         if seg:
             base_addr = seg.start_ea
             target_addr = base_addr + 0x100  # Arbitrary target within segment
 
             result = test_env.instructions.set_operand_offset(
-                test_insn.ea,
-                test_operand_n,
-                base=base_addr,
-                target=target_addr
+                test_insn.ea, test_operand_n, base=base_addr, target=target_addr
             )
 
-            assert isinstance(result, bool), "set_operand_offset should return boolean"
+            assert isinstance(result, bool), 'set_operand_offset should return boolean'
 
     def test_set_operand_offset_with_invalid_address_raises_error(self, test_env):
         """
@@ -528,12 +523,9 @@ class TestOperandOffsetOperations:
         invalid_addr = test_env.maximum_ea + 0x10000
 
         from ida_domain.base import InvalidEAError
+
         with pytest.raises(InvalidEAError):
-            test_env.instructions.set_operand_offset(
-                invalid_addr,
-                0,
-                base=0x400000
-            )
+            test_env.instructions.set_operand_offset(invalid_addr, 0, base=0x400000)
 
     def test_get_operand_offset_base_returns_base_for_offset_operand(self, test_env):
         """
@@ -554,6 +546,7 @@ class TestOperandOffsetOperations:
 
         # Find an instruction with immediate operand
         import ida_ua
+
         current_ea = first_insn.ea
         test_insn = None
         test_operand_n = -1
@@ -577,41 +570,40 @@ class TestOperandOffsetOperations:
 
             import ida_bytes
             import ida_idaapi
+
             next_ea = ida_bytes.next_head(current_ea, test_env.maximum_ea)
             if next_ea == ida_idaapi.BADADDR or next_ea == current_ea:
                 break
             current_ea = next_ea
 
         if test_insn is None:
-            pytest.skip("No suitable immediate operand found")
+            pytest.skip('No suitable immediate operand found')
 
         # Get segment base for this instruction
         import ida_segment
+
         seg = ida_segment.getseg(test_insn.ea)
         if not seg:
-            pytest.skip("No segment found for instruction")
+            pytest.skip('No segment found for instruction')
 
         base_addr = seg.start_ea
 
         # Set operand as offset
         set_result = test_env.instructions.set_operand_offset(
-            test_insn.ea,
-            test_operand_n,
-            base=base_addr
+            test_insn.ea, test_operand_n, base=base_addr
         )
 
         if not set_result:
-            pytest.skip("Could not set operand as offset")
+            pytest.skip('Could not set operand as offset')
 
         # Now get the offset base
         retrieved_base = test_env.instructions.get_operand_offset_base(
-            test_insn.ea,
-            test_operand_n
+            test_insn.ea, test_operand_n
         )
 
         # Verify we got a base address back (should match what we set)
         assert retrieved_base is not None or retrieved_base is None, (
-            "get_operand_offset_base should return address or None"
+            'get_operand_offset_base should return address or None'
         )
 
     def test_get_operand_offset_base_returns_none_for_non_offset(self, test_env):
@@ -631,6 +623,7 @@ class TestOperandOffsetOperations:
 
         # Find instruction with a register operand (very common, not an offset)
         import ida_ua
+
         current_ea = first_insn.ea
 
         for _ in range(50):
@@ -645,26 +638,24 @@ class TestOperandOffsetOperations:
                 op = insn.ops[op_idx]
                 if op.type == ida_ua.o_reg:
                     # Found a register operand - should not have offset base
-                    base = test_env.instructions.get_operand_offset_base(
-                        insn.ea,
-                        op_idx
-                    )
+                    base = test_env.instructions.get_operand_offset_base(insn.ea, op_idx)
 
                     # Register operands should not have offset base
                     # (could be None or could return value, but should not crash)
                     assert base is None or isinstance(base, int), (
-                        "get_operand_offset_base should return None or int"
+                        'get_operand_offset_base should return None or int'
                     )
                     return  # Test passed
 
             import ida_bytes
             import ida_idaapi
+
             next_ea = ida_bytes.next_head(current_ea, test_env.maximum_ea)
             if next_ea == ida_idaapi.BADADDR or next_ea == current_ea:
                 break
             current_ea = next_ea
 
-        pytest.skip("Could not find register operand for testing")
+        pytest.skip('Could not find register operand for testing')
 
     def test_get_operand_offset_base_with_invalid_address_raises_error(self, test_env):
         """
@@ -679,6 +670,7 @@ class TestOperandOffsetOperations:
         invalid_addr = test_env.maximum_ea + 0x10000
 
         from ida_domain.base import InvalidEAError
+
         with pytest.raises(InvalidEAError):
             test_env.instructions.get_operand_offset_base(invalid_addr, 0)
 
@@ -702,6 +694,7 @@ class TestOperandOffsetOperations:
 
         # Find instruction with immediate operand
         import ida_ua
+
         current_ea = first_insn.ea
         test_insn = None
         test_operand_n = -1
@@ -725,39 +718,36 @@ class TestOperandOffsetOperations:
 
             import ida_bytes
             import ida_idaapi
+
             next_ea = ida_bytes.next_head(current_ea, test_env.maximum_ea)
             if next_ea == ida_idaapi.BADADDR or next_ea == current_ea:
                 break
             current_ea = next_ea
 
         if test_insn is None:
-            pytest.skip("No suitable immediate operand found")
+            pytest.skip('No suitable immediate operand found')
 
         # Set as offset
         import ida_segment
+
         seg = ida_segment.getseg(test_insn.ea)
         if not seg:
-            pytest.skip("No segment found")
+            pytest.skip('No segment found')
 
         base_addr = seg.start_ea
         set_result = test_env.instructions.set_operand_offset(
-            test_insn.ea,
-            test_operand_n,
-            base=base_addr
+            test_insn.ea, test_operand_n, base=base_addr
         )
 
         if not set_result:
-            pytest.skip("Could not set operand as offset")
+            pytest.skip('Could not set operand as offset')
 
         # Get the target address
-        target = test_env.instructions.get_operand_offset_target(
-            test_insn.ea,
-            test_operand_n
-        )
+        target = test_env.instructions.get_operand_offset_target(test_insn.ea, test_operand_n)
 
         # Verify result is either None or a valid address
         assert target is None or isinstance(target, int), (
-            "get_operand_offset_target should return None or int"
+            'get_operand_offset_target should return None or int'
         )
 
     def test_get_operand_offset_target_with_invalid_address_raises_error(self, test_env):
@@ -771,6 +761,7 @@ class TestOperandOffsetOperations:
         invalid_addr = test_env.maximum_ea + 0x10000
 
         from ida_domain.base import InvalidEAError
+
         with pytest.raises(InvalidEAError):
             test_env.instructions.get_operand_offset_target(invalid_addr, 0)
 
@@ -792,6 +783,7 @@ class TestOperandOffsetOperations:
 
         # Find instruction with immediate operand
         import ida_ua
+
         current_ea = first_insn.ea
         test_insn = None
         test_operand_n = -1
@@ -815,40 +807,38 @@ class TestOperandOffsetOperations:
 
             import ida_bytes
             import ida_idaapi
+
             next_ea = ida_bytes.next_head(current_ea, test_env.maximum_ea)
             if next_ea == ida_idaapi.BADADDR or next_ea == current_ea:
                 break
             current_ea = next_ea
 
         if test_insn is None:
-            pytest.skip("No suitable immediate operand found")
+            pytest.skip('No suitable immediate operand found')
 
         # Set as offset
         import ida_segment
+
         seg = ida_segment.getseg(test_insn.ea)
         if not seg:
-            pytest.skip("No segment found")
+            pytest.skip('No segment found')
 
         base_addr = seg.start_ea
         set_result = test_env.instructions.set_operand_offset(
-            test_insn.ea,
-            test_operand_n,
-            base=base_addr
+            test_insn.ea, test_operand_n, base=base_addr
         )
 
         if not set_result:
-            pytest.skip("Could not set operand as offset")
+            pytest.skip('Could not set operand as offset')
 
         # Get formatted expression
         expr = test_env.instructions.format_offset_expression(
-            test_insn.ea,
-            test_operand_n,
-            include_displacement=True
+            test_insn.ea, test_operand_n, include_displacement=True
         )
 
         # Verify result is either None or a string
         assert expr is None or isinstance(expr, str), (
-            "format_offset_expression should return None or str"
+            'format_offset_expression should return None or str'
         )
 
     def test_format_offset_expression_with_and_without_displacement(self, test_env):
@@ -866,6 +856,7 @@ class TestOperandOffsetOperations:
 
         # Find instruction with immediate
         import ida_ua
+
         current_ea = first_insn.ea
         test_insn = None
         test_operand_n = -1
@@ -889,50 +880,46 @@ class TestOperandOffsetOperations:
 
             import ida_bytes
             import ida_idaapi
+
             next_ea = ida_bytes.next_head(current_ea, test_env.maximum_ea)
             if next_ea == ida_idaapi.BADADDR or next_ea == current_ea:
                 break
             current_ea = next_ea
 
         if test_insn is None:
-            pytest.skip("No suitable immediate operand found")
+            pytest.skip('No suitable immediate operand found')
 
         # Set as offset
         import ida_segment
+
         seg = ida_segment.getseg(test_insn.ea)
         if not seg:
-            pytest.skip("No segment found")
+            pytest.skip('No segment found')
 
         base_addr = seg.start_ea
         set_result = test_env.instructions.set_operand_offset(
-            test_insn.ea,
-            test_operand_n,
-            base=base_addr
+            test_insn.ea, test_operand_n, base=base_addr
         )
 
         if not set_result:
-            pytest.skip("Could not set operand as offset")
+            pytest.skip('Could not set operand as offset')
 
         # Get expression with displacement
         expr_with_disp = test_env.instructions.format_offset_expression(
-            test_insn.ea,
-            test_operand_n,
-            include_displacement=True
+            test_insn.ea, test_operand_n, include_displacement=True
         )
 
         # Get expression without displacement
         expr_without_disp = test_env.instructions.format_offset_expression(
-            test_insn.ea,
-            test_operand_n,
-            include_displacement=False
+            test_insn.ea, test_operand_n, include_displacement=False
         )
 
         # Both should return None or str
         assert expr_with_disp is None or isinstance(expr_with_disp, str), (
-            "format_offset_expression should return None or str"
+            'format_offset_expression should return None or str'
         )
         assert expr_without_disp is None or isinstance(expr_without_disp, str), (
-            "format_offset_expression should return None or str"
+            'format_offset_expression should return None or str'
         )
 
     def test_format_offset_expression_with_invalid_address_raises_error(self, test_env):
@@ -946,6 +933,7 @@ class TestOperandOffsetOperations:
         invalid_addr = test_env.maximum_ea + 0x10000
 
         from ida_domain.base import InvalidEAError
+
         with pytest.raises(InvalidEAError):
             test_env.instructions.format_offset_expression(invalid_addr, 0)
 
@@ -970,6 +958,7 @@ class TestOperandOffsetOperations:
         # Find instruction with immediate operand
         import ida_nalt
         import ida_ua
+
         current_ea = first_insn.ea
         test_insn = None
         test_operand_n = -1
@@ -993,19 +982,21 @@ class TestOperandOffsetOperations:
 
             import ida_bytes
             import ida_idaapi
+
             next_ea = ida_bytes.next_head(current_ea, test_env.maximum_ea)
             if next_ea == ida_idaapi.BADADDR or next_ea == current_ea:
                 break
             current_ea = next_ea
 
         if test_insn is None:
-            pytest.skip("No suitable immediate operand found")
+            pytest.skip('No suitable immediate operand found')
 
         # Create refinfo_t structure
         import ida_segment
+
         seg = ida_segment.getseg(test_insn.ea)
         if not seg:
-            pytest.skip("No segment found")
+            pytest.skip('No segment found')
 
         ri = ida_nalt.refinfo_t()
         ri.base = seg.start_ea
@@ -1013,19 +1004,14 @@ class TestOperandOffsetOperations:
         ri.tdelta = 0
         # Use REF_OFF32 for 32/64 bit architectures
         import ida_ida
+
         ri.flags = ida_nalt.REF_OFF32 if ida_ida.inf_is_64bit() else ida_nalt.REF_OFF16
 
         # Call set_operand_offset_ex
-        result = test_env.instructions.set_operand_offset_ex(
-            test_insn.ea,
-            test_operand_n,
-            ri
-        )
+        result = test_env.instructions.set_operand_offset_ex(test_insn.ea, test_operand_n, ri)
 
         # Verify returns boolean
-        assert isinstance(result, bool), (
-            "set_operand_offset_ex should return boolean"
-        )
+        assert isinstance(result, bool), 'set_operand_offset_ex should return boolean'
 
     def test_set_operand_offset_ex_with_invalid_address_raises_error(self, test_env):
         """
@@ -1037,10 +1023,12 @@ class TestOperandOffsetOperations:
         invalid_addr = test_env.maximum_ea + 0x10000
 
         import ida_nalt
+
         ri = ida_nalt.refinfo_t()
         ri.base = 0
 
         from ida_domain.base import InvalidEAError
+
         with pytest.raises(InvalidEAError):
             test_env.instructions.set_operand_offset_ex(invalid_addr, 0, ri)
 
@@ -1063,6 +1051,7 @@ class TestControlFlowAnalysis:
         """
         # Find a call instruction in the binary
         import ida_ua
+
         current_ea = test_env.minimum_ea
         call_found = False
 
@@ -1076,22 +1065,21 @@ class TestControlFlowAnalysis:
             if mnemonic and 'call' in mnemonic.lower():
                 # Found a call instruction - verify our method identifies it
                 is_call = test_env.instructions.is_call_instruction(insn)
-                assert is_call, (
-                    f"is_call_instruction should return True for call at {insn.ea:#x}"
-                )
+                assert is_call, f'is_call_instruction should return True for call at {insn.ea:#x}'
                 call_found = True
                 break
 
             # Move to next instruction
             import ida_bytes
             import ida_idaapi
+
             next_ea = ida_bytes.next_head(current_ea, test_env.maximum_ea)
             if next_ea == ida_idaapi.BADADDR or next_ea == current_ea:
                 break
             current_ea = next_ea
 
         if not call_found:
-            pytest.skip("No call instruction found in test binary")
+            pytest.skip('No call instruction found in test binary')
 
     def test_is_call_instruction_returns_false_for_non_call(self, test_env):
         """
@@ -1106,6 +1094,7 @@ class TestControlFlowAnalysis:
         """
         # Find a non-call instruction (like mov, add, sub, push, pop)
         import ida_ua
+
         current_ea = test_env.minimum_ea
         non_call_found = False
 
@@ -1120,7 +1109,7 @@ class TestControlFlowAnalysis:
                 # Found a non-call instruction - verify our method returns False
                 is_call = test_env.instructions.is_call_instruction(insn)
                 assert not is_call, (
-                    f"is_call_instruction should return False for {mnemonic} at {insn.ea:#x}"
+                    f'is_call_instruction should return False for {mnemonic} at {insn.ea:#x}'
                 )
                 non_call_found = True
                 break
@@ -1128,13 +1117,14 @@ class TestControlFlowAnalysis:
             # Move to next instruction
             import ida_bytes
             import ida_idaapi
+
             next_ea = ida_bytes.next_head(current_ea, test_env.maximum_ea)
             if next_ea == ida_idaapi.BADADDR or next_ea == current_ea:
                 break
             current_ea = next_ea
 
         if not non_call_found:
-            pytest.skip("No suitable non-call instruction found")
+            pytest.skip('No suitable non-call instruction found')
 
     def test_is_indirect_jump_or_call_identifies_indirect_control_flow(self, test_env):
         """
@@ -1153,6 +1143,7 @@ class TestControlFlowAnalysis:
         """
         # Look for any jump instruction (direct or indirect)
         import ida_ua
+
         current_ea = test_env.minimum_ea
         jump_found = False
 
@@ -1168,15 +1159,14 @@ class TestControlFlowAnalysis:
                 # Found a jump - test the method
                 result = test_env.instructions.is_indirect_jump_or_call(insn)
                 # Result should be boolean
-                assert isinstance(result, bool), (
-                    "is_indirect_jump_or_call should return boolean"
-                )
+                assert isinstance(result, bool), 'is_indirect_jump_or_call should return boolean'
                 jump_found = True
                 break
 
             # Move to next instruction
             import ida_bytes
             import ida_idaapi
+
             next_ea = ida_bytes.next_head(current_ea, test_env.maximum_ea)
             if next_ea == ida_idaapi.BADADDR or next_ea == current_ea:
                 break
@@ -1187,9 +1177,7 @@ class TestControlFlowAnalysis:
             first_insn = test_env.instructions.get_at(test_env.minimum_ea)
             if first_insn:
                 result = test_env.instructions.is_indirect_jump_or_call(first_insn)
-                assert isinstance(result, bool), (
-                    "is_indirect_jump_or_call should return boolean"
-                )
+                assert isinstance(result, bool), 'is_indirect_jump_or_call should return boolean'
 
     def test_is_indirect_jump_or_call_returns_false_for_non_jumps(self, test_env):
         """
@@ -1201,6 +1189,7 @@ class TestControlFlowAnalysis:
         """
         # Find a non-jump/non-call instruction
         import ida_ua
+
         current_ea = test_env.minimum_ea
 
         for _ in range(500):
@@ -1213,15 +1202,14 @@ class TestControlFlowAnalysis:
             if mnemonic and mnemonic.lower() in ['mov', 'push', 'add', 'sub', 'xor']:
                 # These should NOT be indirect jumps/calls
                 result = test_env.instructions.is_indirect_jump_or_call(insn)
-                assert isinstance(result, bool), (
-                    "is_indirect_jump_or_call should return boolean"
-                )
+                assert isinstance(result, bool), 'is_indirect_jump_or_call should return boolean'
                 # Most likely False, but architecture-specific
                 return
 
             # Move to next instruction
             import ida_bytes
             import ida_idaapi
+
             next_ea = ida_bytes.next_head(current_ea, test_env.maximum_ea)
             if next_ea == ida_idaapi.BADADDR or next_ea == current_ea:
                 break
@@ -1243,6 +1231,7 @@ class TestControlFlowAnalysis:
         """
         # Find a return instruction (very common flow breaker)
         import ida_ua
+
         current_ea = test_env.minimum_ea
         ret_found = False
 
@@ -1257,7 +1246,7 @@ class TestControlFlowAnalysis:
                 # Found a return - should break sequential flow
                 breaks_flow = test_env.instructions.breaks_sequential_flow(insn)
                 assert isinstance(breaks_flow, bool), (
-                    "breaks_sequential_flow should return boolean"
+                    'breaks_sequential_flow should return boolean'
                 )
                 # Return instructions typically break flow
                 ret_found = True
@@ -1266,13 +1255,14 @@ class TestControlFlowAnalysis:
             # Move to next instruction
             import ida_bytes
             import ida_idaapi
+
             next_ea = ida_bytes.next_head(current_ea, test_env.maximum_ea)
             if next_ea == ida_idaapi.BADADDR or next_ea == current_ea:
                 break
             current_ea = next_ea
 
         if not ret_found:
-            pytest.skip("No return instruction found in test binary")
+            pytest.skip('No return instruction found in test binary')
 
     def test_breaks_sequential_flow_returns_false_for_sequential_instructions(self, test_env):
         """
@@ -1287,6 +1277,7 @@ class TestControlFlowAnalysis:
         """
         # Find a sequential instruction (mov, add, push, etc.)
         import ida_ua
+
         current_ea = test_env.minimum_ea
 
         for _ in range(500):
@@ -1300,23 +1291,24 @@ class TestControlFlowAnalysis:
                 # These should NOT break sequential flow
                 breaks_flow = test_env.instructions.breaks_sequential_flow(insn)
                 assert isinstance(breaks_flow, bool), (
-                    "breaks_sequential_flow should return boolean"
+                    'breaks_sequential_flow should return boolean'
                 )
                 # Sequential instructions should NOT break flow
                 assert not breaks_flow, (
-                    f"breaks_sequential_flow should return False for {mnemonic} at {insn.ea:#x}"
+                    f'breaks_sequential_flow should return False for {mnemonic} at {insn.ea:#x}'
                 )
                 return
 
             # Move to next instruction
             import ida_bytes
             import ida_idaapi
+
             next_ea = ida_bytes.next_head(current_ea, test_env.maximum_ea)
             if next_ea == ida_idaapi.BADADDR or next_ea == current_ea:
                 break
             current_ea = next_ea
 
-        pytest.skip("No suitable sequential instruction found")
+        pytest.skip('No suitable sequential instruction found')
 
     def test_control_flow_methods_comprehensive(self, test_env):
         """
@@ -1330,6 +1322,7 @@ class TestControlFlowAnalysis:
         and correctly classify different instruction categories.
         """
         import ida_ua
+
         current_ea = test_env.minimum_ea
 
         # Track what we've found for comprehensive testing
@@ -1347,6 +1340,7 @@ class TestControlFlowAnalysis:
                 # Move to next
                 import ida_bytes
                 import ida_idaapi
+
                 current_ea = ida_bytes.next_head(current_ea, test_env.maximum_ea)
                 if current_ea == ida_idaapi.BADADDR:
                     break
@@ -1357,22 +1351,22 @@ class TestControlFlowAnalysis:
             # Test call instructions
             if 'call' in mnemonic_lower and not found_call:
                 is_call = test_env.instructions.is_call_instruction(insn)
-                assert is_call, f"Should identify call at {insn.ea:#x}"
+                assert is_call, f'Should identify call at {insn.ea:#x}'
                 found_call = True
 
             # Test return instructions
             if mnemonic_lower in ['ret', 'retn'] and not found_ret:
                 breaks = test_env.instructions.breaks_sequential_flow(insn)
                 # Returns typically break flow (though some architectures may vary)
-                assert isinstance(breaks, bool), "Should return boolean for ret"
+                assert isinstance(breaks, bool), 'Should return boolean for ret'
                 found_ret = True
 
             # Test sequential instructions
             if mnemonic_lower in ['mov', 'push', 'lea'] and not found_sequential:
                 is_call = test_env.instructions.is_call_instruction(insn)
                 breaks = test_env.instructions.breaks_sequential_flow(insn)
-                assert not is_call, f"mov/push/lea should not be calls at {insn.ea:#x}"
-                assert not breaks, f"mov/push/lea should not break flow at {insn.ea:#x}"
+                assert not is_call, f'mov/push/lea should not be calls at {insn.ea:#x}'
+                assert not breaks, f'mov/push/lea should not break flow at {insn.ea:#x}'
                 found_sequential = True
 
             # If we found all categories, we're done
@@ -1382,6 +1376,7 @@ class TestControlFlowAnalysis:
             # Move to next instruction
             import ida_bytes
             import ida_idaapi
+
             current_ea = ida_bytes.next_head(current_ea, test_env.maximum_ea)
             if current_ea == ida_idaapi.BADADDR:
                 break
@@ -1413,15 +1408,17 @@ class TestCrossReferenceManagement:
         # Find a second instruction
         import ida_bytes
         import ida_idaapi
+
         second_ea = ida_bytes.next_head(first_insn.ea, test_env.maximum_ea)
         assert second_ea != ida_idaapi.BADADDR
 
         # Add a code reference from first to second
         import ida_xref
+
         test_env.instructions.add_code_reference(
             from_ea=first_insn.ea,
             to_ea=second_ea,
-            reference_type=ida_xref.fl_CN  # Near call
+            reference_type=ida_xref.fl_CN,  # Near call
         )
 
         # Verify the xref was created by checking if it shows up in xrefs_to
@@ -1430,7 +1427,7 @@ class TestCrossReferenceManagement:
         # Should have at least one xref (we just added it)
         # Note: There might be other xrefs too from normal analysis
         assert len(xrefs_to_second) > 0, (
-            f"Should have at least one xref to {second_ea:#x} after adding"
+            f'Should have at least one xref to {second_ea:#x} after adding'
         )
 
     def test_add_code_reference_with_invalid_from_address_raises_error(self, test_env):
@@ -1449,11 +1446,10 @@ class TestCrossReferenceManagement:
         import ida_xref
 
         from ida_domain.base import InvalidEAError
+
         with pytest.raises(InvalidEAError):
             test_env.instructions.add_code_reference(
-                from_ea=invalid_addr,
-                to_ea=valid_addr,
-                reference_type=ida_xref.fl_CN
+                from_ea=invalid_addr, to_ea=valid_addr, reference_type=ida_xref.fl_CN
             )
 
     def test_add_code_reference_with_invalid_to_address_raises_error(self, test_env):
@@ -1469,11 +1465,10 @@ class TestCrossReferenceManagement:
         import ida_xref
 
         from ida_domain.base import InvalidEAError
+
         with pytest.raises(InvalidEAError):
             test_env.instructions.add_code_reference(
-                from_ea=valid_addr,
-                to_ea=invalid_addr,
-                reference_type=ida_xref.fl_CN
+                from_ea=valid_addr, to_ea=invalid_addr, reference_type=ida_xref.fl_CN
             )
 
     def test_add_data_reference_creates_data_xref(self, test_env):
@@ -1496,6 +1491,7 @@ class TestCrossReferenceManagement:
         # Find a data address (could be anywhere in the valid address space)
         # We'll use an address in a different area
         import ida_segment
+
         seg = ida_segment.get_first_seg()
         if seg:
             # Use an address in the first segment as data target
@@ -1505,10 +1501,11 @@ class TestCrossReferenceManagement:
             if test_env.is_valid_ea(data_ea):
                 # Add a data reference from instruction to data
                 import ida_xref
+
                 test_env.instructions.add_data_reference(
                     from_ea=first_insn.ea,
                     to_ea=data_ea,
-                    reference_type=ida_xref.dr_R  # Read reference
+                    reference_type=ida_xref.dr_R,  # Read reference
                 )
 
                 # Verify the xref was created
@@ -1516,12 +1513,12 @@ class TestCrossReferenceManagement:
 
                 # Should have at least one xref
                 assert len(xrefs_to_data) > 0, (
-                    f"Should have at least one xref to {data_ea:#x} after adding"
+                    f'Should have at least one xref to {data_ea:#x} after adding'
                 )
             else:
-                pytest.skip("Could not find suitable data address")
+                pytest.skip('Could not find suitable data address')
         else:
-            pytest.skip("No segments found in test binary")
+            pytest.skip('No segments found in test binary')
 
     def test_add_data_reference_with_invalid_from_address_raises_error(self, test_env):
         """
@@ -1536,11 +1533,10 @@ class TestCrossReferenceManagement:
         import ida_xref
 
         from ida_domain.base import InvalidEAError
+
         with pytest.raises(InvalidEAError):
             test_env.instructions.add_data_reference(
-                from_ea=invalid_addr,
-                to_ea=valid_addr,
-                reference_type=ida_xref.dr_R
+                from_ea=invalid_addr, to_ea=valid_addr, reference_type=ida_xref.dr_R
             )
 
     def test_add_data_reference_with_invalid_to_address_raises_error(self, test_env):
@@ -1556,11 +1552,10 @@ class TestCrossReferenceManagement:
         import ida_xref
 
         from ida_domain.base import InvalidEAError
+
         with pytest.raises(InvalidEAError):
             test_env.instructions.add_data_reference(
-                from_ea=valid_addr,
-                to_ea=invalid_addr,
-                reference_type=ida_xref.dr_R
+                from_ea=valid_addr, to_ea=invalid_addr, reference_type=ida_xref.dr_R
             )
 
     def test_add_code_reference_with_different_reference_types(self, test_env):
@@ -1582,35 +1577,30 @@ class TestCrossReferenceManagement:
 
         import ida_bytes
         import ida_idaapi
+
         second_ea = ida_bytes.next_head(first_insn.ea, test_env.maximum_ea)
         assert second_ea != ida_idaapi.BADADDR
 
         third_ea = ida_bytes.next_head(second_ea, test_env.maximum_ea)
         if third_ea == ida_idaapi.BADADDR:
-            pytest.skip("Need at least 3 instructions for this test")
+            pytest.skip('Need at least 3 instructions for this test')
 
         # Test different reference types
         import ida_xref
 
         # Test near call reference
         test_env.instructions.add_code_reference(
-            from_ea=first_insn.ea,
-            to_ea=second_ea,
-            reference_type=ida_xref.fl_CN
+            from_ea=first_insn.ea, to_ea=second_ea, reference_type=ida_xref.fl_CN
         )
 
         # Test near jump reference
         test_env.instructions.add_code_reference(
-            from_ea=first_insn.ea,
-            to_ea=third_ea,
-            reference_type=ida_xref.fl_JN
+            from_ea=first_insn.ea, to_ea=third_ea, reference_type=ida_xref.fl_JN
         )
 
         # Test ordinary flow
         test_env.instructions.add_code_reference(
-            from_ea=second_ea,
-            to_ea=third_ea,
-            reference_type=ida_xref.fl_F
+            from_ea=second_ea, to_ea=third_ea, reference_type=ida_xref.fl_F
         )
 
         # All operations should complete without error
@@ -1635,39 +1625,34 @@ class TestCrossReferenceManagement:
 
         # Get a data address
         import ida_segment
+
         seg = ida_segment.get_first_seg()
         if not seg:
-            pytest.skip("No segments in test binary")
+            pytest.skip('No segments in test binary')
 
         data_ea1 = seg.start_ea + 0x100
         data_ea2 = seg.start_ea + 0x200
         data_ea3 = seg.start_ea + 0x300
 
         if not all(test_env.is_valid_ea(ea) for ea in [data_ea1, data_ea2, data_ea3]):
-            pytest.skip("Could not find suitable data addresses")
+            pytest.skip('Could not find suitable data addresses')
 
         # Test different data reference types
         import ida_xref
 
         # Test read reference
         test_env.instructions.add_data_reference(
-            from_ea=first_insn.ea,
-            to_ea=data_ea1,
-            reference_type=ida_xref.dr_R
+            from_ea=first_insn.ea, to_ea=data_ea1, reference_type=ida_xref.dr_R
         )
 
         # Test write reference
         test_env.instructions.add_data_reference(
-            from_ea=first_insn.ea,
-            to_ea=data_ea2,
-            reference_type=ida_xref.dr_W
+            from_ea=first_insn.ea, to_ea=data_ea2, reference_type=ida_xref.dr_W
         )
 
         # Test offset reference
         test_env.instructions.add_data_reference(
-            from_ea=first_insn.ea,
-            to_ea=data_ea3,
-            reference_type=ida_xref.dr_O
+            from_ea=first_insn.ea, to_ea=data_ea3, reference_type=ida_xref.dr_O
         )
 
         # All operations should complete without error

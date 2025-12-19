@@ -1299,10 +1299,7 @@ class Types(DatabaseEntity):
         return cast(Optional[int], ordinal)
 
     def apply_by_name(
-        self,
-        ea: ea_t,
-        name: str,
-        flags: TypeApplyFlags = TypeApplyFlags.DEFINITE
+        self, ea: ea_t, name: str, flags: TypeApplyFlags = TypeApplyFlags.DEFINITE
     ) -> bool:
         """
         Apply a named type to the given address.
@@ -1334,10 +1331,7 @@ class Types(DatabaseEntity):
         return cast(bool, ida_typeinf.apply_named_type(ea, name))
 
     def apply_declaration(
-        self,
-        ea: ea_t,
-        decl: str,
-        flags: TypeFormattingFlags = TypeFormattingFlags.HTI_DCL
+        self, ea: ea_t, decl: str, flags: TypeFormattingFlags = TypeFormattingFlags.HTI_DCL
     ) -> bool:
         """
         Parse a C declaration and apply it directly to an address.
@@ -1414,9 +1408,7 @@ class Types(DatabaseEntity):
         return None
 
     def format_type(
-        self,
-        type_info: tinfo_t,
-        flags: TypeFormattingFlags = TypeFormattingFlags(0)
+        self, type_info: tinfo_t, flags: TypeFormattingFlags = TypeFormattingFlags(0)
     ) -> str:
         """
         Format a type as a C declaration string.
@@ -1442,9 +1434,7 @@ class Types(DatabaseEntity):
         return cast(str, type_info.dstr())
 
     def format_type_at(
-        self,
-        ea: ea_t,
-        flags: TypeFormattingFlags = TypeFormattingFlags(0)
+        self, ea: ea_t, flags: TypeFormattingFlags = TypeFormattingFlags(0)
     ) -> Optional[str]:
         """
         Format the type at an address as a C declaration string.

@@ -23,9 +23,7 @@ def problems_test_setup():
     specific binary contents - it's a metadata system that works with any
     IDA database.
     """
-    idb_path = os.path.join(
-        tempfile.gettempdir(), 'api_tests_work_dir', 'problems_test.bin'
-    )
+    idb_path = os.path.join(tempfile.gettempdir(), 'api_tests_work_dir', 'problems_test.bin')
     os.makedirs(os.path.dirname(idb_path), exist_ok=True)
 
     # Copy test binary
@@ -33,7 +31,7 @@ def problems_test_setup():
     src_path = os.path.join(current_dir, 'resources', 'tiny_c.bin')
 
     if not os.path.exists(src_path):
-        pytest.skip("Test binary not found")
+        pytest.skip('Test binary not found')
 
     shutil.copy(src_path, idb_path)
     return idb_path
@@ -51,9 +49,7 @@ def problems_db(problems_test_setup):
     """
     idb_path = problems_test_setup
     ida_options = IdaCommandOptions(new_database=True, auto_analysis=True)
-    db = ida_domain.Database.open(
-        path=idb_path, args=ida_options, save_on_close=False
-    )
+    db = ida_domain.Database.open(path=idb_path, args=ida_options, save_on_close=False)
     yield db
     if db.is_open():
         db.close(False)
@@ -76,8 +72,8 @@ def test_count_property_returns_non_negative_integer(problems_db):
     """
     count = problems_db.problems.count
 
-    assert isinstance(count, int), "count should return an integer"
-    assert count >= 0, "count should be non-negative"
+    assert isinstance(count, int), 'count should return an integer'
+    assert count >= 0, 'count should be non-negative'
 
 
 def test_len_matches_count_property(problems_db):
@@ -91,7 +87,7 @@ def test_len_matches_count_property(problems_db):
     count = problems_db.problems.count
     length = len(problems_db.problems)
 
-    assert length == count, "__len__ should match count property"
+    assert length == count, '__len__ should match count property'
 
 
 # =============================================================================
@@ -116,19 +112,17 @@ def test_add_creates_problem_at_address(problems_db):
     test_ea = problems_db.minimum_ea
 
     # Add a problem
-    problems_db.problems.add(
-        test_ea, ProblemType.DISASM, "Test disassembly problem"
-    )
+    problems_db.problems.add(test_ea, ProblemType.DISASM, 'Test disassembly problem')
 
     # Verify problem was added
-    assert problems_db.problems.has_problem(test_ea), "Problem should exist after add()"
-    assert problems_db.problems.has_problem(
-        test_ea, ProblemType.DISASM
-    ), "Specific problem type should exist"
+    assert problems_db.problems.has_problem(test_ea), 'Problem should exist after add()'
+    assert problems_db.problems.has_problem(test_ea, ProblemType.DISASM), (
+        'Specific problem type should exist'
+    )
 
     # Retrieve and verify problem details
     problems_at_addr = list(problems_db.problems.get_at(test_ea))
-    assert len(problems_at_addr) > 0, "Should have at least one problem at address"
+    assert len(problems_at_addr) > 0, 'Should have at least one problem at address'
 
     # Find our test problem
     test_problem = None
@@ -137,11 +131,11 @@ def test_add_creates_problem_at_address(problems_db):
             test_problem = p
             break
 
-    assert test_problem is not None, "Should find DISASM problem"
-    assert test_problem.address == test_ea, "Problem should have correct address"
-    assert (
-        test_problem.description == "Test disassembly problem"
-    ), "Problem should have correct description"
+    assert test_problem is not None, 'Should find DISASM problem'
+    assert test_problem.address == test_ea, 'Problem should have correct address'
+    assert test_problem.description == 'Test disassembly problem', (
+        'Problem should have correct description'
+    )
 
 
 def test_add_multiple_problem_types_at_same_address(problems_db):
@@ -158,9 +152,9 @@ def test_add_multiple_problem_types_at_same_address(problems_db):
     test_ea = problems_db.minimum_ea
 
     # Add multiple problem types
-    problems_db.problems.add(test_ea, ProblemType.DISASM, "Disasm issue")
-    problems_db.problems.add(test_ea, ProblemType.BADSTACK, "Stack issue")
-    problems_db.problems.add(test_ea, ProblemType.NOXREFS, "Missing xrefs")
+    problems_db.problems.add(test_ea, ProblemType.DISASM, 'Disasm issue')
+    problems_db.problems.add(test_ea, ProblemType.BADSTACK, 'Stack issue')
+    problems_db.problems.add(test_ea, ProblemType.NOXREFS, 'Missing xrefs')
 
     # Verify all three problem types exist
     assert problems_db.problems.has_problem(test_ea, ProblemType.DISASM)
@@ -171,9 +165,9 @@ def test_add_multiple_problem_types_at_same_address(problems_db):
     problems_at_addr = list(problems_db.problems.get_at(test_ea))
     problem_types = {p.type for p in problems_at_addr}
 
-    assert ProblemType.DISASM in problem_types, "Should include DISASM problem"
-    assert ProblemType.BADSTACK in problem_types, "Should include BADSTACK problem"
-    assert ProblemType.NOXREFS in problem_types, "Should include NOXREFS problem"
+    assert ProblemType.DISASM in problem_types, 'Should include DISASM problem'
+    assert ProblemType.BADSTACK in problem_types, 'Should include BADSTACK problem'
+    assert ProblemType.NOXREFS in problem_types, 'Should include NOXREFS problem'
 
 
 def test_remove_deletes_specific_problem_type(problems_db):
@@ -196,13 +190,13 @@ def test_remove_deletes_specific_problem_type(problems_db):
     # Remove one problem type
     result = problems_db.problems.remove(test_ea, ProblemType.DISASM)
 
-    assert result is True, "remove() should return True for existing problem"
-    assert not problems_db.problems.has_problem(
-        test_ea, ProblemType.DISASM
-    ), "DISASM problem should be removed"
-    assert problems_db.problems.has_problem(
-        test_ea, ProblemType.BADSTACK
-    ), "BADSTACK problem should remain"
+    assert result is True, 'remove() should return True for existing problem'
+    assert not problems_db.problems.has_problem(test_ea, ProblemType.DISASM), (
+        'DISASM problem should be removed'
+    )
+    assert problems_db.problems.has_problem(test_ea, ProblemType.BADSTACK), (
+        'BADSTACK problem should remain'
+    )
 
 
 def test_remove_returns_false_for_nonexistent_problem(problems_db):
@@ -218,7 +212,7 @@ def test_remove_returns_false_for_nonexistent_problem(problems_db):
     # Try to remove problem that doesn't exist
     result = problems_db.problems.remove(test_ea, ProblemType.DISASM)
 
-    assert result is False, "remove() should return False for non-existent problem"
+    assert result is False, 'remove() should return False for non-existent problem'
 
 
 def test_remove_at_deletes_all_problems_at_address(problems_db):
@@ -241,10 +235,8 @@ def test_remove_at_deletes_all_problems_at_address(problems_db):
     # Remove all problems at address
     removed_count = problems_db.problems.remove_at(test_ea)
 
-    assert removed_count == 3, "Should remove all 3 problems"
-    assert not problems_db.problems.has_problem(
-        test_ea
-    ), "No problems should remain at address"
+    assert removed_count == 3, 'Should remove all 3 problems'
+    assert not problems_db.problems.has_problem(test_ea), 'No problems should remain at address'
 
 
 def test_clear_removes_all_problems_of_specific_type(problems_db):
@@ -274,13 +266,13 @@ def test_clear_removes_all_problems_of_specific_type(problems_db):
     # Clear all DISASM problems
     removed_count = problems_db.problems.clear(ProblemType.DISASM)
 
-    assert removed_count == 3, "Should remove 3 DISASM problems"
+    assert removed_count == 3, 'Should remove 3 DISASM problems'
     assert not problems_db.problems.has_problem(ea1, ProblemType.DISASM)
     assert not problems_db.problems.has_problem(ea2, ProblemType.DISASM)
     assert not problems_db.problems.has_problem(ea3, ProblemType.DISASM)
-    assert problems_db.problems.has_problem(
-        ea1, ProblemType.BADSTACK
-    ), "Other problem types should remain"
+    assert problems_db.problems.has_problem(ea1, ProblemType.BADSTACK), (
+        'Other problem types should remain'
+    )
 
 
 def test_clear_all_removes_all_problems(problems_db):
@@ -304,8 +296,8 @@ def test_clear_all_removes_all_problems(problems_db):
     # Clear all problems
     removed_count = problems_db.problems.clear_all()
 
-    assert removed_count == 3, "Should remove all 3 problems"
-    assert len(problems_db.problems) == 0, "No problems should remain in database"
+    assert removed_count == 3, 'Should remove all 3 problems'
+    assert len(problems_db.problems) == 0, 'No problems should remain in database'
     assert not problems_db.problems.has_problem(ea1)
     assert not problems_db.problems.has_problem(ea2)
 
@@ -339,10 +331,10 @@ def test_get_all_returns_all_problems_when_no_filter(problems_db):
     problem_types = {p.type for p in all_problems}
     addresses = {p.address for p in all_problems}
 
-    assert ProblemType.DISASM in problem_types, "Should include DISASM problems"
-    assert ProblemType.BADSTACK in problem_types, "Should include BADSTACK problems"
-    assert ea1 in addresses, "Should include problems from ea1"
-    assert ea2 in addresses, "Should include problems from ea2"
+    assert ProblemType.DISASM in problem_types, 'Should include DISASM problems'
+    assert ProblemType.BADSTACK in problem_types, 'Should include BADSTACK problems'
+    assert ea1 in addresses, 'Should include problems from ea1'
+    assert ea2 in addresses, 'Should include problems from ea2'
 
 
 def test_get_all_filters_by_problem_type(problems_db):
@@ -366,11 +358,9 @@ def test_get_all_filters_by_problem_type(problems_db):
     # Get only DISASM problems
     disasm_problems = list(problems_db.problems.get_all(ProblemType.DISASM))
 
-    assert len(disasm_problems) == 2, "Should find exactly 2 DISASM problems"
+    assert len(disasm_problems) == 2, 'Should find exactly 2 DISASM problems'
     for problem in disasm_problems:
-        assert (
-            problem.type == ProblemType.DISASM
-        ), "All problems should be DISASM type"
+        assert problem.type == ProblemType.DISASM, 'All problems should be DISASM type'
 
 
 def test_get_between_returns_problems_in_range(problems_db):
@@ -402,14 +392,10 @@ def test_get_between_returns_problems_in_range(problems_db):
     problems_in_range = list(problems_db.problems.get_between(start_ea, end_ea))
     addresses_in_range = {p.address for p in problems_in_range}
 
-    assert ea_before not in addresses_in_range, "Problem before range should be excluded"
-    assert (
-        ea_in_range1 in addresses_in_range
-    ), "Problem at range start should be included"
-    assert (
-        ea_in_range2 in addresses_in_range
-    ), "Problem within range should be included"
-    assert ea_after not in addresses_in_range, "Problem at range end should be excluded"
+    assert ea_before not in addresses_in_range, 'Problem before range should be excluded'
+    assert ea_in_range1 in addresses_in_range, 'Problem at range start should be included'
+    assert ea_in_range2 in addresses_in_range, 'Problem within range should be included'
+    assert ea_after not in addresses_in_range, 'Problem at range end should be excluded'
 
 
 def test_get_between_with_type_filter(problems_db):
@@ -430,14 +416,12 @@ def test_get_between_with_type_filter(problems_db):
 
     # Get only DISASM problems in range
     problems = list(
-        problems_db.problems.get_between(
-            ea1, ea2 + 0x10, problem_type=ProblemType.DISASM
-        )
+        problems_db.problems.get_between(ea1, ea2 + 0x10, problem_type=ProblemType.DISASM)
     )
 
-    assert len(problems) == 2, "Should find 2 DISASM problems"
+    assert len(problems) == 2, 'Should find 2 DISASM problems'
     for problem in problems:
-        assert problem.type == ProblemType.DISASM, "All should be DISASM type"
+        assert problem.type == ProblemType.DISASM, 'All should be DISASM type'
 
 
 def test_get_next_finds_next_problem_of_any_type(problems_db):
@@ -462,8 +446,8 @@ def test_get_next_finds_next_problem_of_any_type(problems_db):
     # Find next problem from before first one
     next_problem = problems_db.problems.get_next(search_from)
 
-    assert next_problem is not None, "Should find a problem"
-    assert next_problem.address == ea1, "Should find problem at ea1 (closest)"
+    assert next_problem is not None, 'Should find a problem'
+    assert next_problem.address == ea1, 'Should find problem at ea1 (closest)'
 
 
 def test_get_next_with_type_filter(problems_db):
@@ -487,8 +471,8 @@ def test_get_next_with_type_filter(problems_db):
     # Should skip BADSTACK at ea2 and find DISASM at ea3
     next_problem = problems_db.problems.get_next(ea2, ProblemType.DISASM)
 
-    assert next_problem is not None, "Should find a DISASM problem"
-    assert next_problem.address == ea3, "Should find DISASM at ea3, skipping BADSTACK"
+    assert next_problem is not None, 'Should find a DISASM problem'
+    assert next_problem.address == ea3, 'Should find DISASM at ea3, skipping BADSTACK'
     assert next_problem.type == ProblemType.DISASM
 
 
@@ -535,8 +519,8 @@ def test_count_by_type_returns_correct_count(problems_db):
     disasm_count = problems_db.problems.count_by_type(ProblemType.DISASM)
     badstack_count = problems_db.problems.count_by_type(ProblemType.BADSTACK)
 
-    assert disasm_count == 3, "Should count 3 DISASM problems"
-    assert badstack_count == 1, "Should count 1 BADSTACK problem"
+    assert disasm_count == 3, 'Should count 3 DISASM problems'
+    assert badstack_count == 1, 'Should count 1 BADSTACK problem'
 
 
 def test_was_auto_decision_detects_ida_decisions(problems_db):
@@ -557,12 +541,10 @@ def test_was_auto_decision_detects_ida_decisions(problems_db):
     # Add different problem type
     problems_db.problems.add(ea_no_decision, ProblemType.DISASM)
 
-    assert problems_db.problems.was_auto_decision(
-        ea_decision
-    ), "Should detect IDA decision"
-    assert not problems_db.problems.was_auto_decision(
-        ea_no_decision
-    ), "Should not report decision for DISASM problem"
+    assert problems_db.problems.was_auto_decision(ea_decision), 'Should detect IDA decision'
+    assert not problems_db.problems.was_auto_decision(ea_no_decision), (
+        'Should not report decision for DISASM problem'
+    )
 
 
 def test_problem_type_name_returns_readable_string(problems_db):
@@ -575,15 +557,15 @@ def test_problem_type_name_returns_readable_string(problems_db):
     """
     ea = problems_db.minimum_ea + 0xF0
 
-    problems_db.problems.add(ea, ProblemType.DISASM, "Test description")
+    problems_db.problems.add(ea, ProblemType.DISASM, 'Test description')
 
     problem = next(problems_db.problems.get_at(ea))
     type_name = problem.type_name
 
-    assert isinstance(type_name, str), "type_name should return a string"
-    assert len(type_name) > 0, "type_name should not be empty"
+    assert isinstance(type_name, str), 'type_name should return a string'
+    assert len(type_name) > 0, 'type_name should not be empty'
     # Should be something like "Can't disassemble"
-    assert "disasm" in type_name.lower() or "can't" in type_name.lower()
+    assert 'disasm' in type_name.lower() or "can't" in type_name.lower()
 
 
 # =============================================================================
@@ -698,8 +680,8 @@ def test_iter_protocol_iterates_all_problems(problems_db):
     problems_list = []
     for problem in problems_db.problems:
         problems_list.append(problem)
-        assert isinstance(problem, Problem), "Should yield Problem objects"
+        assert isinstance(problem, Problem), 'Should yield Problem objects'
 
     addresses = {p.address for p in problems_list}
-    assert ea1 in addresses, "Should include problem at ea1"
-    assert ea2 in addresses, "Should include problem at ea2"
+    assert ea1 in addresses, 'Should include problem at ea1'
+    assert ea2 in addresses, 'Should include problem at ea2'

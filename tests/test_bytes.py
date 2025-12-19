@@ -19,6 +19,7 @@ def bytes_test_setup():
 
     # Copy tiny_c.bin from test resources
     import shutil
+
     current_dir = os.path.dirname(os.path.abspath(__file__))
     src_path = os.path.join(current_dir, 'resources', 'tiny_c.bin')
     shutil.copy2(src_path, idb_path)
@@ -55,13 +56,13 @@ class TestBytesItemNavigation:
         """
         # Get the first valid head in the database
         first_head = test_env.bytes.get_next_head(test_env.minimum_ea)
-        assert first_head is not None, "Should have at least one head in database"
+        assert first_head is not None, 'Should have at least one head in database'
 
         # Calling get_item_head_at on a head should return the same address
         head = test_env.bytes.get_item_head_at(first_head)
         assert head == first_head, (
-            f"get_item_head_at should return same address for a head: "
-            f"expected 0x{first_head:x}, got 0x{head:x}"
+            f'get_item_head_at should return same address for a head: '
+            f'expected 0x{first_head:x}, got 0x{head:x}'
         )
 
     def test_get_item_head_at_on_tail_finds_head(self, test_env):
@@ -83,24 +84,24 @@ class TestBytesItemNavigation:
 
         # Ensure we're at a valid location
         if not test_env.is_valid_ea(test_addr):
-            pytest.skip("Test address not mapped in database")
+            pytest.skip('Test address not mapped in database')
 
         # Create a dword (4 bytes) at test_addr
         success = test_env.bytes.create_dword_at(test_addr, count=1, force=True)
         if not success:
-            pytest.skip("Could not create dword at test address")
+            pytest.skip('Could not create dword at test address')
 
         # The head should be at test_addr
         head = test_env.bytes.get_item_head_at(test_addr)
-        assert head == test_addr, f"Expected head at 0x{test_addr:x}, got 0x{head:x}"
+        assert head == test_addr, f'Expected head at 0x{test_addr:x}, got 0x{head:x}'
 
         # Check tail bytes (bytes 1, 2, 3 of the dword)
         for offset in [1, 2, 3]:
             tail_addr = test_addr + offset
             head_of_tail = test_env.bytes.get_item_head_at(tail_addr)
             assert head_of_tail == test_addr, (
-                f"get_item_head_at on tail byte at offset {offset} should return "
-                f"head address 0x{test_addr:x}, got 0x{head_of_tail:x}"
+                f'get_item_head_at on tail byte at offset {offset} should return '
+                f'head address 0x{test_addr:x}, got 0x{head_of_tail:x}'
             )
 
     def test_get_item_end_at_returns_exclusive_end(self, test_env):
@@ -117,22 +118,20 @@ class TestBytesItemNavigation:
         """
         # Get the first valid head
         first_head = test_env.bytes.get_next_head(test_env.minimum_ea)
-        assert first_head is not None, "Should have at least one head in database"
+        assert first_head is not None, 'Should have at least one head in database'
 
         # Get the end address
         end = test_env.bytes.get_item_end_at(first_head)
 
         # End should be greater than head
-        assert end > first_head, (
-            f"Item end 0x{end:x} should be greater than head 0x{first_head:x}"
-        )
+        assert end > first_head, f'Item end 0x{end:x} should be greater than head 0x{first_head:x}'
 
         # Get item size and verify consistency
         size = test_env.bytes.get_item_size_at(first_head)
         assert end - first_head == size, (
-            f"Item size should equal end - head: "
-            f"end=0x{end:x}, head=0x{first_head:x}, "
-            f"end-head={end-first_head}, size={size}"
+            f'Item size should equal end - head: '
+            f'end=0x{end:x}, head=0x{first_head:x}, '
+            f'end-head={end - first_head}, size={size}'
         )
 
     def test_get_item_size_at_returns_correct_size(self, test_env):
@@ -150,7 +149,7 @@ class TestBytesItemNavigation:
         test_base = test_env.minimum_ea + 0x200
 
         if not test_env.is_valid_ea(test_base):
-            pytest.skip("Test address range not mapped in database")
+            pytest.skip('Test address range not mapped in database')
 
         # Test different data types with known sizes
         test_cases = [
@@ -167,12 +166,12 @@ class TestBytesItemNavigation:
             # Create the data item
             success = create_func(test_addr)
             if not success:
-                pytest.skip(f"Could not create {type_name} at 0x{test_addr:x}")
+                pytest.skip(f'Could not create {type_name} at 0x{test_addr:x}')
 
             # Verify size
             actual_size = test_env.bytes.get_item_size_at(test_addr)
             assert actual_size == expected_size, (
-                f"Size of {type_name} should be {expected_size}, got {actual_size}"
+                f'Size of {type_name} should be {expected_size}, got {actual_size}'
             )
 
             # Move to next test location (with some padding)
@@ -237,7 +236,7 @@ class TestBytesItemNavigation:
         """
         # Get first head
         first_head = test_env.bytes.get_next_head(test_env.minimum_ea)
-        assert first_head is not None, "Should have at least one head in database"
+        assert first_head is not None, 'Should have at least one head in database'
 
         # Get all three values
         head = test_env.bytes.get_item_head_at(first_head)
@@ -246,7 +245,7 @@ class TestBytesItemNavigation:
 
         # Verify consistency: size = end - head
         assert size == end - head, (
-            f"Item navigation inconsistency: size={size}, but end-head={end-head}"
+            f'Item navigation inconsistency: size={size}, but end-head={end - head}'
         )
 
         # If item has multiple bytes, verify tail byte returns same info
@@ -258,16 +257,16 @@ class TestBytesItemNavigation:
             tail_size = test_env.bytes.get_item_size_at(tail_addr)
 
             assert tail_head == head, (
-                f"get_item_head_at should return same head for tail byte: "
-                f"expected 0x{head:x}, got 0x{tail_head:x}"
+                f'get_item_head_at should return same head for tail byte: '
+                f'expected 0x{head:x}, got 0x{tail_head:x}'
             )
             assert tail_end == end, (
-                f"get_item_end_at should return same end for tail byte: "
-                f"expected 0x{end:x}, got 0x{tail_end:x}"
+                f'get_item_end_at should return same end for tail byte: '
+                f'expected 0x{end:x}, got 0x{tail_end:x}'
             )
             assert tail_size == size, (
-                f"get_item_size_at should return same size for tail byte: "
-                f"expected {size}, got {tail_size}"
+                f'get_item_size_at should return same size for tail byte: '
+                f'expected {size}, got {tail_size}'
             )
 
     def test_iterating_items_with_navigation_methods(self, test_env):
@@ -301,16 +300,16 @@ class TestBytesItemNavigation:
             item_size = test_env.bytes.get_item_size_at(head)
 
             # Verify consistency
-            assert item_head == head, "Head should be at returned next_head address"
-            assert item_size == item_end - item_head, "Size should equal end - head"
-            assert item_size > 0, "Item size must be positive"
+            assert item_head == head, 'Head should be at returned next_head address'
+            assert item_size == item_end - item_head, 'Size should equal end - head'
+            assert item_size > 0, 'Item size must be positive'
 
             # Move to next item (exclusive end is start of search range)
             current_ea = item_end
             items_found += 1
 
         # Should have found at least a few items
-        assert items_found > 0, "Should have found at least one item in database"
+        assert items_found > 0, 'Should have found at least one item in database'
 
 
 class TestBytesOperandManipulation:
@@ -355,11 +354,12 @@ class TestBytesOperandManipulation:
             search_addr = next_head + 1
 
         if found_addr is None:
-            pytest.skip("Could not find instruction with immediate operand")
+            pytest.skip('Could not find instruction with immediate operand')
 
         # Verify set_operand_hex returned True
-        assert test_env.bytes.set_operand_hex(found_addr, 0), \
-            f"set_operand_hex should return True for valid instruction at 0x{found_addr:x}"
+        assert test_env.bytes.set_operand_hex(found_addr, 0), (
+            f'set_operand_hex should return True for valid instruction at 0x{found_addr:x}'
+        )
 
     def test_set_operand_decimal_changes_display_representation(self, test_env):
         """
@@ -393,10 +393,11 @@ class TestBytesOperandManipulation:
             search_addr = next_head + 1
 
         if found_addr is None:
-            pytest.skip("Could not find instruction with immediate operand")
+            pytest.skip('Could not find instruction with immediate operand')
 
-        assert test_env.bytes.set_operand_decimal(found_addr, 0), \
-            f"set_operand_decimal should return True for valid instruction at 0x{found_addr:x}"
+        assert test_env.bytes.set_operand_decimal(found_addr, 0), (
+            f'set_operand_decimal should return True for valid instruction at 0x{found_addr:x}'
+        )
 
     def test_set_operand_format_methods_are_reversible(self, test_env):
         """
@@ -425,22 +426,23 @@ class TestBytesOperandManipulation:
 
             if test_env.bytes.is_code_at(next_head):
                 # Try both formats to verify the instruction supports formatting
-                if (test_env.bytes.set_operand_hex(next_head, 0) and
-                    test_env.bytes.set_operand_decimal(next_head, 0)):
+                if test_env.bytes.set_operand_hex(
+                    next_head, 0
+                ) and test_env.bytes.set_operand_decimal(next_head, 0):
                     found_addr = next_head
                     break
 
             search_addr = next_head + 1
 
         if found_addr is None:
-            pytest.skip("Could not find instruction with formattable operand")
+            pytest.skip('Could not find instruction with formattable operand')
 
         # Test reversibility: hex -> decimal -> octal -> binary -> hex
-        assert test_env.bytes.set_operand_hex(found_addr, 0), "Should set to hex"
-        assert test_env.bytes.set_operand_decimal(found_addr, 0), "Should set to decimal"
-        assert test_env.bytes.set_operand_octal(found_addr, 0), "Should set to octal"
-        assert test_env.bytes.set_operand_binary(found_addr, 0), "Should set to binary"
-        assert test_env.bytes.set_operand_hex(found_addr, 0), "Should set back to hex"
+        assert test_env.bytes.set_operand_hex(found_addr, 0), 'Should set to hex'
+        assert test_env.bytes.set_operand_decimal(found_addr, 0), 'Should set to decimal'
+        assert test_env.bytes.set_operand_octal(found_addr, 0), 'Should set to octal'
+        assert test_env.bytes.set_operand_binary(found_addr, 0), 'Should set to binary'
+        assert test_env.bytes.set_operand_hex(found_addr, 0), 'Should set back to hex'
 
     def test_set_operand_char_for_ascii_values(self, test_env):
         """
@@ -474,10 +476,11 @@ class TestBytesOperandManipulation:
             search_addr = next_head + 1
 
         if found_addr is None:
-            pytest.skip("Could not find instruction suitable for character formatting")
+            pytest.skip('Could not find instruction suitable for character formatting')
 
-        assert test_env.bytes.set_operand_char(found_addr, 0), \
-            f"set_operand_char should return True for valid instruction at 0x{found_addr:x}"
+        assert test_env.bytes.set_operand_char(found_addr, 0), (
+            f'set_operand_char should return True for valid instruction at 0x{found_addr:x}'
+        )
 
     def test_set_operand_with_invalid_address_raises_error(self, test_env):
         """
@@ -525,7 +528,7 @@ class TestBytesOperandManipulation:
         # Get a valid code address
         first_code = test_env.bytes.get_next_head(test_env.minimum_ea)
         if first_code is None:
-            pytest.skip("No code found in database")
+            pytest.skip('No code found in database')
 
         # All methods should raise InvalidParameterError for negative operand number
         from ida_domain.base import InvalidParameterError
@@ -561,7 +564,7 @@ class TestBytesOperandManipulation:
         # Get a valid code address
         first_code = test_env.bytes.get_next_head(test_env.minimum_ea)
         if first_code is None:
-            pytest.skip("No code found in database")
+            pytest.skip('No code found in database')
 
         from ida_domain.base import InvalidParameterError
 
@@ -571,7 +574,7 @@ class TestBytesOperandManipulation:
 
         # Non-integer enum_id should raise error
         with pytest.raises(InvalidParameterError):
-            test_env.bytes.set_operand_enum(first_code, 0, "not_an_int")
+            test_env.bytes.set_operand_enum(first_code, 0, 'not_an_int')
 
     def test_set_operand_methods_on_second_operand(self, test_env):
         """
@@ -607,13 +610,13 @@ class TestBytesOperandManipulation:
             search_addr = next_head + 1
 
         if found_addr is None:
-            pytest.skip("Could not find instruction with second operand")
+            pytest.skip('Could not find instruction with second operand')
 
         # Test various formats on second operand
-        assert test_env.bytes.set_operand_hex(found_addr, 1), \
-            "Should format second operand as hex"
-        assert test_env.bytes.set_operand_decimal(found_addr, 1), \
-            "Should format second operand as decimal"
+        assert test_env.bytes.set_operand_hex(found_addr, 1), 'Should format second operand as hex'
+        assert test_env.bytes.set_operand_decimal(found_addr, 1), (
+            'Should format second operand as decimal'
+        )
 
     def test_set_operand_works_on_data_items(self, test_env):
         """
@@ -648,13 +651,12 @@ class TestBytesOperandManipulation:
             search_addr = next_head + 1
 
         if found_data is None:
-            pytest.skip("Could not find data address")
+            pytest.skip('Could not find data address')
 
         # Operand formatting on data should work (return True)
         result = test_env.bytes.set_operand_hex(found_data, 0)
         # IDA allows formatting data items, so this should succeed
-        assert isinstance(result, bool), \
-            f"set_operand_hex should return bool, got {type(result)}"
+        assert isinstance(result, bool), f'set_operand_hex should return bool, got {type(result)}'
 
 
 # =============================================================================
@@ -698,8 +700,7 @@ def test_is_offset_operand_with_offset(test_env):
             if test_env.bytes.is_code_at(ea):
                 # Should return False for non-offset operands
                 result = test_env.bytes.is_offset_operand(ea, 0)
-                assert isinstance(result, bool), \
-                    "is_offset_operand should return bool"
+                assert isinstance(result, bool), 'is_offset_operand should return bool'
                 # Don't assert False - we just verify it returns a bool
                 break
             ea = test_env.bytes.get_next_head(ea)
@@ -707,8 +708,9 @@ def test_is_offset_operand_with_offset(test_env):
                 break
     else:
         # Found an offset, verify it returns True
-        assert test_env.bytes.is_offset_operand(found_offset, 0) is True, \
-            f"is_offset_operand should return True for offset at {hex(found_offset)}"
+        assert test_env.bytes.is_offset_operand(found_offset, 0) is True, (
+            f'is_offset_operand should return True for offset at {hex(found_offset)}'
+        )
 
 
 def test_is_offset_operand_invalid_address(test_env):
@@ -754,8 +756,7 @@ def test_is_char_operand_basic(test_env):
     while ea < max_ea and ea != BADADDR:
         if test_env.bytes.is_code_at(ea):
             result = test_env.bytes.is_char_operand(ea, 0)
-            assert isinstance(result, bool), \
-                "is_char_operand should return bool"
+            assert isinstance(result, bool), 'is_char_operand should return bool'
             break
         ea = test_env.bytes.get_next_head(ea)
         if ea is None:
@@ -788,8 +789,7 @@ def test_is_enum_operand_basic(test_env):
     while ea < max_ea and ea != BADADDR:
         if test_env.bytes.is_code_at(ea):
             result = test_env.bytes.is_enum_operand(ea, 0)
-            assert isinstance(result, bool), \
-                "is_enum_operand should return bool"
+            assert isinstance(result, bool), 'is_enum_operand should return bool'
             break
         ea = test_env.bytes.get_next_head(ea)
         if ea is None:
@@ -823,8 +823,7 @@ def test_is_struct_offset_operand_basic(test_env):
     while ea < max_ea and ea != BADADDR:
         if test_env.bytes.is_code_at(ea):
             result = test_env.bytes.is_struct_offset_operand(ea, 0)
-            assert isinstance(result, bool), \
-                "is_struct_offset_operand should return bool"
+            assert isinstance(result, bool), 'is_struct_offset_operand should return bool'
             break
         ea = test_env.bytes.get_next_head(ea)
         if ea is None:
@@ -864,8 +863,7 @@ def test_is_stack_var_operand_in_function(test_env):
                 for n in range(2):
                     try:
                         result = test_env.bytes.is_stack_var_operand(ea, n)
-                        assert isinstance(result, bool), \
-                            "is_stack_var_operand should return bool"
+                        assert isinstance(result, bool), 'is_stack_var_operand should return bool'
 
                         # If we found a stack var operand, verify it's in a function
                         if result:
@@ -889,8 +887,7 @@ def test_is_stack_var_operand_in_function(test_env):
     while ea < max_ea and ea != BADADDR:
         if test_env.bytes.is_code_at(ea):
             result = test_env.bytes.is_stack_var_operand(ea, 0)
-            assert isinstance(result, bool), \
-                "is_stack_var_operand should return bool"
+            assert isinstance(result, bool), 'is_stack_var_operand should return bool'
             break
         ea = test_env.bytes.get_next_head(ea)
         if ea is None:
@@ -926,25 +923,25 @@ def test_all_operand_test_methods_with_multiple_operands(test_env):
             # Test all methods with operands 0, 1, 2
             for n in [0, 1, 2]:
                 # All methods should return bool without errors
-                assert isinstance(
-                    test_env.bytes.is_offset_operand(ea, n), bool
-                ), f"is_offset_operand should return bool for operand {n}"
+                assert isinstance(test_env.bytes.is_offset_operand(ea, n), bool), (
+                    f'is_offset_operand should return bool for operand {n}'
+                )
 
-                assert isinstance(
-                    test_env.bytes.is_char_operand(ea, n), bool
-                ), f"is_char_operand should return bool for operand {n}"
+                assert isinstance(test_env.bytes.is_char_operand(ea, n), bool), (
+                    f'is_char_operand should return bool for operand {n}'
+                )
 
-                assert isinstance(
-                    test_env.bytes.is_enum_operand(ea, n), bool
-                ), f"is_enum_operand should return bool for operand {n}"
+                assert isinstance(test_env.bytes.is_enum_operand(ea, n), bool), (
+                    f'is_enum_operand should return bool for operand {n}'
+                )
 
-                assert isinstance(
-                    test_env.bytes.is_struct_offset_operand(ea, n), bool
-                ), f"is_struct_offset_operand should return bool for operand {n}"
+                assert isinstance(test_env.bytes.is_struct_offset_operand(ea, n), bool), (
+                    f'is_struct_offset_operand should return bool for operand {n}'
+                )
 
-                assert isinstance(
-                    test_env.bytes.is_stack_var_operand(ea, n), bool
-                ), f"is_stack_var_operand should return bool for operand {n}"
+                assert isinstance(test_env.bytes.is_stack_var_operand(ea, n), bool), (
+                    f'is_stack_var_operand should return bool for operand {n}'
+                )
 
             # Test passed for at least one instruction
             break
@@ -979,7 +976,7 @@ class TestBytesSearchMethods:
         # Get a known function to extract a byte pattern from it
         all_funcs = list(db.functions.get_all())
         if len(all_funcs) == 0:
-            pytest.skip("Need at least 1 function for pattern search test")
+            pytest.skip('Need at least 1 function for pattern search test')
 
         func = all_funcs[0]
 
@@ -1013,7 +1010,7 @@ class TestBytesSearchMethods:
         # Get two functions with different addresses
         all_funcs = list(db.functions.get_all())
         if len(all_funcs) < 2:
-            pytest.skip("Need at least 2 functions for range test")
+            pytest.skip('Need at least 2 functions for range test')
 
         func1 = all_funcs[0]
         func2 = all_funcs[1]
@@ -1028,9 +1025,7 @@ class TestBytesSearchMethods:
         if pattern and len(pattern) >= 2:
             # Search only in range before func2 - should not find it
             result = db.bytes.find_bytes_between(
-                pattern,
-                start_ea=db.minimum_ea,
-                end_ea=func2.start_ea
+                pattern, start_ea=db.minimum_ea, end_ea=func2.start_ea
             )
 
             # Should either not find it, or find a different occurrence before func2
@@ -1054,7 +1049,7 @@ class TestBytesSearchMethods:
 
         # Try to search with string instead of bytes
         with pytest.raises(InvalidParameterError):
-            db.bytes.find_bytes_between("not bytes")
+            db.bytes.find_bytes_between('not bytes')
 
     def test_find_bytes_between_with_empty_pattern_raises_error(self, test_env):
         """
@@ -1136,9 +1131,7 @@ class TestBytesSearchMethods:
         # tiny_c.bin likely has multiple null bytes
         pattern = bytes([0x00])
         end_range = min(db.minimum_ea + 0x1000, db.maximum_ea)
-        results = db.bytes.find_binary_sequence(
-            pattern, start_ea=db.minimum_ea, end_ea=end_range
-        )
+        results = db.bytes.find_binary_sequence(pattern, start_ea=db.minimum_ea, end_ea=end_range)
 
         # Should return a list
         assert isinstance(results, list)
@@ -1182,7 +1175,7 @@ class TestBytesSearchMethods:
 
         # Invalid type
         with pytest.raises(InvalidParameterError):
-            db.bytes.find_binary_sequence("not bytes")
+            db.bytes.find_binary_sequence('not bytes')
 
         # Empty pattern
         with pytest.raises(InvalidParameterError):
@@ -1227,6 +1220,7 @@ class TestBytesSearchMethods:
         if found_test_string and test_string:
             # Now try to find this string
             from ida_domain.bytes import SearchFlags
+
             result = db.bytes.find_text_between(test_string, flags=SearchFlags.DOWN)
 
             # Should find the string
@@ -1249,7 +1243,7 @@ class TestBytesSearchMethods:
 
         # Empty string
         with pytest.raises(InvalidParameterError):
-            db.bytes.find_text_between("")
+            db.bytes.find_text_between('')
 
     def test_find_text_between_respects_search_flags(self, test_env):
         """
@@ -1269,13 +1263,13 @@ class TestBytesSearchMethods:
 
         # Should accept SearchFlags without error
         # Test with a simple string
-        result = db.bytes.find_text_between("test", flags=SearchFlags.DOWN)
+        result = db.bytes.find_text_between('test', flags=SearchFlags.DOWN)
 
         # Should return None or valid address
         assert result is None or db.is_valid_ea(result)
 
         # Test with case-sensitive flag
-        result = db.bytes.find_text_between("TEST", flags=SearchFlags.DOWN | SearchFlags.CASE)
+        result = db.bytes.find_text_between('TEST', flags=SearchFlags.DOWN | SearchFlags.CASE)
         assert result is None or db.is_valid_ea(result)
 
     def test_find_immediate_between_finds_known_constant(self, test_env):
@@ -1316,7 +1310,7 @@ class TestBytesSearchMethods:
 
         # Invalid type (not an integer)
         with pytest.raises(InvalidParameterError):
-            db.bytes.find_immediate_between("123")
+            db.bytes.find_immediate_between('123')
 
         with pytest.raises(InvalidParameterError):
             db.bytes.find_immediate_between(123.45)

@@ -21,9 +21,7 @@ def decompiler_test_setup():
     and use_val) that the Hex-Rays decompiler can process. This binary was
     specifically compiled to provide realistic test scenarios for decompilation.
     """
-    idb_path = os.path.join(
-        tempfile.gettempdir(), 'api_tests_work_dir', 'decompiler_test.bin'
-    )
+    idb_path = os.path.join(tempfile.gettempdir(), 'api_tests_work_dir', 'decompiler_test.bin')
     os.makedirs(os.path.dirname(idb_path), exist_ok=True)
 
     # Copy test binary
@@ -31,7 +29,7 @@ def decompiler_test_setup():
     src_path = os.path.join(current_dir, 'resources', 'tiny_c.bin')
 
     if not os.path.exists(src_path):
-        pytest.skip("Test binary not found")
+        pytest.skip('Test binary not found')
 
     shutil.copy(src_path, idb_path)
     return idb_path
@@ -49,9 +47,7 @@ def decompiler_db(decompiler_test_setup):
     """
     idb_path = decompiler_test_setup
     ida_options = IdaCommandOptions(new_database=True, auto_analysis=True)
-    db = ida_domain.Database.open(
-        path=idb_path, args=ida_options, save_on_close=False
-    )
+    db = ida_domain.Database.open(path=idb_path, args=ida_options, save_on_close=False)
     yield db
     if db.is_open():
         db.close(False)
@@ -99,19 +95,19 @@ class TestDecompileAt:
         check is_available first.
         """
         if not decompiler_db.decompiler.is_available:
-            pytest.skip("Hex-Rays decompiler not available")
+            pytest.skip('Hex-Rays decompiler not available')
 
         # Get first function in database
         func = next(decompiler_db.functions.get_all())
-        assert func is not None, "No functions found in test binary"
+        assert func is not None, 'No functions found in test binary'
 
         # Decompile at function start
         lines = decompiler_db.decompiler.decompile_at(func.start_ea)
 
         # Should get pseudocode lines
-        assert lines is not None, "Decompilation returned None for valid function"
+        assert lines is not None, 'Decompilation returned None for valid function'
         assert isinstance(lines, list)
-        assert len(lines) > 0, "Decompilation returned empty list"
+        assert len(lines) > 0, 'Decompilation returned empty list'
 
         # Lines should be strings
         assert all(isinstance(line, str) for line in lines)
@@ -119,10 +115,7 @@ class TestDecompileAt:
         # Pseudocode should contain typical C constructs
         pseudocode_text = '\n'.join(lines)
         # At minimum, should have some C-like content (braces, semicolons, or returns)
-        has_c_syntax = any(
-            char in pseudocode_text
-            for char in ['{', '}', ';', '(', ')']
-        )
+        has_c_syntax = any(char in pseudocode_text for char in ['{', '}', ';', '(', ')'])
         assert has_c_syntax, f"Pseudocode doesn't look like C code: {pseudocode_text[:200]}"
 
     def test_decompile_at_with_remove_tags(self, decompiler_db):
@@ -138,7 +131,7 @@ class TestDecompileAt:
         We test both with and without tag removal to ensure the parameter works.
         """
         if not decompiler_db.decompiler.is_available:
-            pytest.skip("Hex-Rays decompiler not available")
+            pytest.skip('Hex-Rays decompiler not available')
 
         # Get first function
         func = next(decompiler_db.functions.get_all())
@@ -172,7 +165,7 @@ class TestDecompileAt:
         outside any valid address range for test binaries.
         """
         if not decompiler_db.decompiler.is_available:
-            pytest.skip("Hex-Rays decompiler not available")
+            pytest.skip('Hex-Rays decompiler not available')
 
         # Use an address that's definitely invalid
         invalid_ea = 0xFFFFFFFF
@@ -193,7 +186,7 @@ class TestDecompileAt:
         should exist. The behavior should be to return None, not raise an error.
         """
         if not decompiler_db.decompiler.is_available:
-            pytest.skip("Hex-Rays decompiler not available")
+            pytest.skip('Hex-Rays decompiler not available')
 
         # Get a valid address that's likely not in a function
         # Use an address in a data segment
@@ -211,13 +204,13 @@ class TestDecompileAt:
                 # Found an address with no function
                 result = decompiler_db.decompiler.decompile_at(ea)
                 assert result is None, (
-                    f"Expected None when decompiling address 0x{ea:x} with no function, "
-                    f"got {result}"
+                    f'Expected None when decompiling address 0x{ea:x} with no function, '
+                    f'got {result}'
                 )
                 return
 
         # If we couldn't find such an address, skip the test
-        pytest.skip("Could not find a valid address without a function")
+        pytest.skip('Could not find a valid address without a function')
 
     def test_decompile_at_without_decompiler_available(self, decompiler_db):
         """
@@ -241,7 +234,7 @@ class TestDecompileAt:
 
         if not decompiler_db.decompiler.is_available:
             # If decompiler not available, should raise RuntimeError
-            with pytest.raises(RuntimeError, match="Hex-Rays decompiler not available"):
+            with pytest.raises(RuntimeError, match='Hex-Rays decompiler not available'):
                 decompiler_db.decompiler.decompile_at(func.start_ea)
         else:
             # If available, should work fine
@@ -261,7 +254,7 @@ class TestDecompileAt:
         containing function before decompilation.
         """
         if not decompiler_db.decompiler.is_available:
-            pytest.skip("Hex-Rays decompiler not available")
+            pytest.skip('Hex-Rays decompiler not available')
 
         # Get a function with some size
         for func in decompiler_db.functions.get_all():
@@ -277,12 +270,12 @@ class TestDecompileAt:
                 # (since they're the same function)
                 if lines_start is not None and lines_mid is not None:
                     assert lines_start == lines_mid, (
-                        "Decompiling at function start and middle should produce "
-                        "identical pseudocode"
+                        'Decompiling at function start and middle should produce '
+                        'identical pseudocode'
                     )
                     return
 
-        pytest.skip("Could not find a suitable function for this test")
+        pytest.skip('Could not find a suitable function for this test')
 
     def test_decompile_at_returns_string_list(self, decompiler_db):
         """
@@ -299,7 +292,7 @@ class TestDecompileAt:
         This is important for API consumers who need to process the output.
         """
         if not decompiler_db.decompiler.is_available:
-            pytest.skip("Hex-Rays decompiler not available")
+            pytest.skip('Hex-Rays decompiler not available')
 
         # Get first function
         func = next(decompiler_db.functions.get_all())
@@ -308,16 +301,14 @@ class TestDecompileAt:
         # If we got a result, validate its structure
         if lines is not None:
             # Must be a list
-            assert isinstance(lines, list), f"Expected list, got {type(lines)}"
+            assert isinstance(lines, list), f'Expected list, got {type(lines)}'
 
             # Must contain strings
-            assert all(isinstance(line, str) for line in lines), (
-                "All elements must be strings"
-            )
+            assert all(isinstance(line, str) for line in lines), 'All elements must be strings'
 
             # Should have at least some content
-            assert len(lines) > 0, "Empty pseudocode list"
+            assert len(lines) > 0, 'Empty pseudocode list'
 
             # Check that we have reasonable content - at least one non-empty line
             non_empty_lines = [line for line in lines if line.strip()]
-            assert len(non_empty_lines) > 0, "All lines are empty"
+            assert len(non_empty_lines) > 0, 'All lines are empty'

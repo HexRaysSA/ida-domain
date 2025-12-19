@@ -32,7 +32,7 @@ def imports_test_setup():
     src_path = os.path.join(current_dir, 'resources', 'tiny_c.bin')
 
     if not os.path.exists(src_path):
-        pytest.skip("Test binary not found")
+        pytest.skip('Test binary not found')
 
     shutil.copy(src_path, idb_path)
     return idb_path
@@ -72,14 +72,14 @@ def test_imports_module_count(imports_db):
 
     # tiny_c.bin might not have imports if it's statically linked
     # Real-world binaries will have imports
-    assert count >= 0, "Import count should be non-negative"
+    assert count >= 0, 'Import count should be non-negative'
 
     # If no imports, skip remaining assertions
     if count == 0:
-        pytest.skip("Test binary has no imports (statically linked?)")
+        pytest.skip('Test binary has no imports (statically linked?)')
 
     # If we have imports, verify they're accessible
-    assert count > 0, "Expected test binary to have at least one import module"
+    assert count > 0, 'Expected test binary to have at least one import module'
 
 
 def test_imports_module_iteration(imports_db):
@@ -101,14 +101,14 @@ def test_imports_module_iteration(imports_db):
     modules = list(imports_db.imports)
 
     if len(modules) == 0:
-        pytest.skip("Test binary has no imports")
+        pytest.skip('Test binary has no imports')
 
     # Verify basic properties
     for idx, module in enumerate(modules):
-        assert isinstance(module.name, str), "Module name should be string"
-        assert len(module.name) > 0, "Module name should not be empty"
-        assert module.index == idx, f"Module index should match iteration order"
-        assert module.import_count >= 0, "Import count should be non-negative"
+        assert isinstance(module.name, str), 'Module name should be string'
+        assert len(module.name) > 0, 'Module name should not be empty'
+        assert module.index == idx, f'Module index should match iteration order'
+        assert module.import_count >= 0, 'Import count should be non-negative'
 
 
 def test_imports_get_module_by_index(imports_db):
@@ -128,13 +128,13 @@ def test_imports_get_module_by_index(imports_db):
     count = len(imports_db.imports)
 
     if count == 0:
-        pytest.skip("Test binary has no imports")
+        pytest.skip('Test binary has no imports')
 
     # Test valid index
     module = imports_db.imports.get_module(0)
-    assert module is not None, "First module should exist"
-    assert module.index == 0, "Module index should be 0"
-    assert isinstance(module.name, str), "Module name should be string"
+    assert module is not None, 'First module should exist'
+    assert module.index == 0, 'Module index should be 0'
+    assert isinstance(module.name, str), 'Module name should be string'
 
     # Test negative index (should raise)
     with pytest.raises(Exception):  # Should raise InvalidParameterError
@@ -142,15 +142,15 @@ def test_imports_get_module_by_index(imports_db):
 
     # Test out of range
     module = imports_db.imports.get_module(count + 100)
-    assert module is None, "Out-of-range index should return None"
+    assert module is None, 'Out-of-range index should return None'
 
     # Test consistency with iteration
     all_modules = list(imports_db.imports)
     for idx, iter_module in enumerate(all_modules):
         idx_module = imports_db.imports.get_module(idx)
-        assert idx_module is not None, f"Module at index {idx} should exist"
-        assert idx_module.name == iter_module.name, "Module name should match"
-        assert idx_module.index == iter_module.index, "Module index should match"
+        assert idx_module is not None, f'Module at index {idx} should exist'
+        assert idx_module.name == iter_module.name, 'Module name should match'
+        assert idx_module.index == iter_module.index, 'Module index should match'
 
 
 def test_imports_get_module_by_name(imports_db):
@@ -171,7 +171,7 @@ def test_imports_get_module_by_name(imports_db):
     count = len(imports_db.imports)
 
     if count == 0:
-        pytest.skip("Test binary has no imports")
+        pytest.skip('Test binary has no imports')
 
     # Get first module to test with
     first_module = imports_db.imports.get_module(0)
@@ -179,9 +179,9 @@ def test_imports_get_module_by_name(imports_db):
 
     # Test exact name match
     module = imports_db.imports.get_module_by_name(first_module.name)
-    assert module is not None, "Should find module by exact name"
-    assert module.name == first_module.name, "Module names should match"
-    assert module.index == first_module.index, "Module indices should match"
+    assert module is not None, 'Should find module by exact name'
+    assert module.name == first_module.name, 'Module names should match'
+    assert module.index == first_module.index, 'Module indices should match'
 
     # Test case-insensitive match
     module_upper = imports_db.imports.get_module_by_name(first_module.name.upper())
@@ -189,12 +189,12 @@ def test_imports_get_module_by_name(imports_db):
 
     # At least one case variant should match (case-insensitive)
     assert module_upper is not None or module_lower is not None, (
-        "Case-insensitive lookup should work"
+        'Case-insensitive lookup should work'
     )
 
     # Test non-existent module
-    module = imports_db.imports.get_module_by_name("nonexistent_module_xyz_123.dll")
-    assert module is None, "Non-existent module should return None"
+    module = imports_db.imports.get_module_by_name('nonexistent_module_xyz_123.dll')
+    assert module is None, 'Non-existent module should return None'
 
 
 def test_imports_module_entries(imports_db):
@@ -217,7 +217,7 @@ def test_imports_module_entries(imports_db):
     count = len(imports_db.imports)
 
     if count == 0:
-        pytest.skip("Test binary has no imports")
+        pytest.skip('Test binary has no imports')
 
     # Get first module
     module = imports_db.imports.get_module(0)
@@ -233,33 +233,33 @@ def test_imports_module_entries(imports_db):
 
     if len(entries) == 0:
         # Module exists but has no imports (unusual but valid)
-        pytest.skip("Module has no import entries")
+        pytest.skip('Module has no import entries')
 
     # Verify each entry's properties
     for entry in entries:
         # Every entry should have an address
-        assert entry.address > 0, "Import should have valid address"
+        assert entry.address > 0, 'Import should have valid address'
 
         # Entry should be either named or ordinal import
         assert entry.is_named_import or entry.is_ordinal_import, (
-            "Import should be either named or ordinal"
+            'Import should be either named or ordinal'
         )
 
         # Entry should know its parent module
-        assert entry.module_name == module.name, "Entry should reference correct module"
-        assert entry.module_index == module.index, "Entry should have correct module index"
+        assert entry.module_name == module.name, 'Entry should reference correct module'
+        assert entry.module_index == module.index, 'Entry should have correct module index'
 
         # If named import, name should not be empty
         if entry.is_named_import:
-            assert len(entry.name) > 0, "Named import should have non-empty name"
+            assert len(entry.name) > 0, 'Named import should have non-empty name'
 
         # If ordinal import, ordinal should be non-zero
         if entry.is_ordinal_import:
-            assert entry.ordinal > 0, "Ordinal import should have non-zero ordinal"
+            assert entry.ordinal > 0, 'Ordinal import should have non-zero ordinal'
 
         # full_name should always be valid
-        assert len(entry.full_name) > 0, "Entry should have non-empty full_name"
-        assert module.name in entry.full_name, "full_name should contain module name"
+        assert len(entry.full_name) > 0, 'Entry should have non-empty full_name'
+        assert module.name in entry.full_name, 'full_name should contain module name'
 
 
 def test_imports_get_entries_by_module(imports_db):
@@ -281,7 +281,7 @@ def test_imports_get_entries_by_module(imports_db):
     count = len(imports_db.imports)
 
     if count == 0:
-        pytest.skip("Test binary has no imports")
+        pytest.skip('Test binary has no imports')
 
     # Test valid module index
     entries_direct = list(imports_db.imports.get_entries_by_module(0))
@@ -292,7 +292,7 @@ def test_imports_get_entries_by_module(imports_db):
 
     # Should get same results both ways
     assert len(entries_direct) == len(entries_via_module), (
-        "Direct and via-module access should return same count"
+        'Direct and via-module access should return same count'
     )
 
     # Test negative index
@@ -323,7 +323,7 @@ def test_imports_get_all_entries(imports_db):
     count = len(imports_db.imports)
 
     if count == 0:
-        pytest.skip("Test binary has no imports")
+        pytest.skip('Test binary has no imports')
 
     # Get all entries (flattened)
     all_entries = list(imports_db.imports.get_all_entries())
@@ -332,21 +332,21 @@ def test_imports_get_all_entries(imports_db):
     expected_count = sum(module.import_count for module in imports_db.imports)
 
     assert len(all_entries) == expected_count, (
-        f"get_all_entries() should return all imports: "
-        f"got {len(all_entries)}, expected {expected_count}"
+        f'get_all_entries() should return all imports: '
+        f'got {len(all_entries)}, expected {expected_count}'
     )
 
     if len(all_entries) == 0:
-        pytest.skip("No import entries found")
+        pytest.skip('No import entries found')
 
     # Verify each entry
     for entry in all_entries:
-        assert entry.address > 0, "Entry should have valid address"
-        assert isinstance(entry.module_name, str), "Module name should be string"
-        assert len(entry.module_name) > 0, "Module name should not be empty"
-        assert entry.module_index >= 0, "Module index should be non-negative"
+        assert entry.address > 0, 'Entry should have valid address'
+        assert isinstance(entry.module_name, str), 'Module name should be string'
+        assert len(entry.module_name) > 0, 'Module name should not be empty'
+        assert entry.module_index >= 0, 'Module index should be non-negative'
         assert entry.is_named_import or entry.is_ordinal_import, (
-            "Entry should be either named or ordinal"
+            'Entry should be either named or ordinal'
         )
 
 
@@ -370,7 +370,7 @@ def test_imports_get_at(imports_db):
     count = len(imports_db.imports)
 
     if count == 0:
-        pytest.skip("Test binary has no imports")
+        pytest.skip('Test binary has no imports')
 
     # Get first import entry to test with
     first_module = imports_db.imports.get_module(0)
@@ -378,16 +378,16 @@ def test_imports_get_at(imports_db):
 
     first_entries = list(first_module.imports)
     if len(first_entries) == 0:
-        pytest.skip("First module has no entries")
+        pytest.skip('First module has no entries')
 
     first_entry = first_entries[0]
 
     # Test getting import at known address
     entry = imports_db.imports.get_at(first_entry.address)
-    assert entry is not None, "Should find import at known address"
-    assert entry.address == first_entry.address, "Addresses should match"
-    assert entry.name == first_entry.name, "Names should match"
-    assert entry.module_name == first_entry.module_name, "Module names should match"
+    assert entry is not None, 'Should find import at known address'
+    assert entry.address == first_entry.address, 'Addresses should match'
+    assert entry.name == first_entry.name, 'Names should match'
+    assert entry.module_name == first_entry.module_name, 'Module names should match'
 
     # Test with non-import address (database minimum_ea is typically not an import)
     non_import_ea = imports_db.minimum_ea
@@ -398,6 +398,7 @@ def test_imports_get_at(imports_db):
 
     # Test with invalid address (should raise InvalidEAError)
     from ida_domain.base import InvalidEAError
+
     with pytest.raises(InvalidEAError):
         imports_db.imports.get_at(0xFFFFFFFFFFFFFFFF)
 
@@ -421,7 +422,7 @@ def test_imports_find_by_name(imports_db):
     count = len(imports_db.imports)
 
     if count == 0:
-        pytest.skip("Test binary has no imports")
+        pytest.skip('Test binary has no imports')
 
     # Get a known import name to test with
     first_module = imports_db.imports.get_module(0)
@@ -429,7 +430,7 @@ def test_imports_find_by_name(imports_db):
 
     first_entries = list(first_module.imports)
     if len(first_entries) == 0:
-        pytest.skip("First module has no entries")
+        pytest.skip('First module has no entries')
 
     # Find a named import (skip ordinal imports)
     test_entry = None
@@ -439,29 +440,29 @@ def test_imports_find_by_name(imports_db):
             break
 
     if test_entry is None:
-        pytest.skip("No named imports found in first module")
+        pytest.skip('No named imports found in first module')
 
     # Test finding by name (no module filter)
     found_entry = imports_db.imports.find_by_name(test_entry.name)
     assert found_entry is not None, f"Should find import '{test_entry.name}'"
-    assert found_entry.name == test_entry.name, "Names should match"
-    assert found_entry.address == test_entry.address, "Addresses should match"
+    assert found_entry.name == test_entry.name, 'Names should match'
+    assert found_entry.address == test_entry.address, 'Addresses should match'
 
     # Test finding by name with module filter
     found_entry = imports_db.imports.find_by_name(test_entry.name, test_entry.module_name)
     assert found_entry is not None, (
         f"Should find '{test_entry.name}' in '{test_entry.module_name}'"
     )
-    assert found_entry.name == test_entry.name, "Names should match"
-    assert found_entry.module_name == test_entry.module_name, "Module names should match"
+    assert found_entry.name == test_entry.name, 'Names should match'
+    assert found_entry.module_name == test_entry.module_name, 'Module names should match'
 
     # Test finding with wrong module filter (should return None)
-    found_entry = imports_db.imports.find_by_name(test_entry.name, "nonexistent_module.dll")
-    assert found_entry is None, "Should not find import in wrong module"
+    found_entry = imports_db.imports.find_by_name(test_entry.name, 'nonexistent_module.dll')
+    assert found_entry is None, 'Should not find import in wrong module'
 
     # Test finding non-existent import
-    found_entry = imports_db.imports.find_by_name("ThisFunctionDefinitelyDoesNotExist12345")
-    assert found_entry is None, "Should not find non-existent import"
+    found_entry = imports_db.imports.find_by_name('ThisFunctionDefinitelyDoesNotExist12345')
+    assert found_entry is None, 'Should not find non-existent import'
 
 
 def test_imports_find_by_name_case_insensitive_module(imports_db):
@@ -479,7 +480,7 @@ def test_imports_find_by_name_case_insensitive_module(imports_db):
     count = len(imports_db.imports)
 
     if count == 0:
-        pytest.skip("Test binary has no imports")
+        pytest.skip('Test binary has no imports')
 
     # Get a known import
     first_module = imports_db.imports.get_module(0)
@@ -487,7 +488,7 @@ def test_imports_find_by_name_case_insensitive_module(imports_db):
 
     first_entries = list(first_module.imports)
     if len(first_entries) == 0:
-        pytest.skip("First module has no entries")
+        pytest.skip('First module has no entries')
 
     # Find a named import
     test_entry = None
@@ -497,7 +498,7 @@ def test_imports_find_by_name_case_insensitive_module(imports_db):
             break
 
     if test_entry is None:
-        pytest.skip("No named imports found")
+        pytest.skip('No named imports found')
 
     # Test with different case variations of module name
     module_lower = test_entry.module_name.lower()
@@ -508,7 +509,7 @@ def test_imports_find_by_name_case_insensitive_module(imports_db):
 
     # At least one should succeed (case-insensitive)
     assert found_lower is not None or found_upper is not None, (
-        "Module name filter should be case-insensitive"
+        'Module name filter should be case-insensitive'
     )
 
 
@@ -536,30 +537,27 @@ def test_imports_get_module_names(imports_db):
     count = len(imports_db.imports)
 
     if count == 0:
-        pytest.skip("Test binary has no imports")
+        pytest.skip('Test binary has no imports')
 
     # Get module names
     names = imports_db.imports.get_module_names()
 
     # Should be a list, not iterator
-    assert isinstance(names, list), "get_module_names should return a list"
+    assert isinstance(names, list), 'get_module_names should return a list'
 
     # Length should match module count
-    assert len(names) == count, (
-        f"get_module_names() should return {count} names, got {len(names)}"
-    )
+    assert len(names) == count, f'get_module_names() should return {count} names, got {len(names)}'
 
     # Each name should be a non-empty string
     for name in names:
-        assert isinstance(name, str), "Each module name should be a string"
-        assert len(name) > 0, "Module names should not be empty"
+        assert isinstance(name, str), 'Each module name should be a string'
+        assert len(name) > 0, 'Module names should not be empty'
 
     # Names should match iteration order
     modules = list(imports_db.imports)
     for i, (name, module) in enumerate(zip(names, modules)):
         assert name == module.name, (
-            f"Module name at index {i} should match: "
-            f"got '{name}', expected '{module.name}'"
+            f"Module name at index {i} should match: got '{name}', expected '{module.name}'"
         )
 
 
@@ -593,20 +591,21 @@ def test_imports_empty_database():
         try:
             # Should return 0, not crash
             count = len(db.imports)
-            assert count >= 0, "Import count should be non-negative even for empty database"
+            assert count >= 0, 'Import count should be non-negative even for empty database'
 
             # Should return empty iterator, not crash
             modules = list(db.imports)
-            assert len(modules) == count, "Iteration should match count"
+            assert len(modules) == count, 'Iteration should match count'
 
             # get_module should return None
             module = db.imports.get_module(0)
             if count == 0:
-                assert module is None, "get_module should return None when no imports"
+                assert module is None, 'get_module should return None when no imports'
 
         finally:
             if db.is_open():
                 db.close(False)
+
 
 def test_imports_find_all_by_name(imports_db):
     """
@@ -624,14 +623,14 @@ def test_imports_find_all_by_name(imports_db):
     - Can detect duplicates if they exist in the test binary
     """
     if len(imports_db.imports) == 0:
-        pytest.skip("Test binary has no imports")
+        pytest.skip('Test binary has no imports')
 
     # Get first import to use as test case
     first_module = next(iter(imports_db.imports))
     entries_from_module = list(first_module.imports)
 
     if len(entries_from_module) == 0:
-        pytest.skip("First module has no imports")
+        pytest.skip('First module has no imports')
 
     # Find first named import
     test_entry = None
@@ -641,27 +640,27 @@ def test_imports_find_all_by_name(imports_db):
             break
 
     if not test_entry:
-        pytest.skip("No named imports in first module")
+        pytest.skip('No named imports in first module')
 
     # Test: find all by name (should find at least the test entry)
     results = list(imports_db.imports.find_all_by_name(test_entry.name))
 
-    assert len(results) >= 1, "Should find at least one match"
-    assert any(r.name == test_entry.name for r in results), "Results should include test entry"
+    assert len(results) >= 1, 'Should find at least one match'
+    assert any(r.name == test_entry.name for r in results), 'Results should include test entry'
 
     # Test: find all by name with module filter
     results_filtered = list(
         imports_db.imports.find_all_by_name(test_entry.name, test_entry.module_name)
     )
 
-    assert len(results_filtered) >= 1, "Should find at least one match with module filter"
-    assert all(
-        r.module_name == test_entry.module_name for r in results_filtered
-    ), "All results should be from specified module"
+    assert len(results_filtered) >= 1, 'Should find at least one match with module filter'
+    assert all(r.module_name == test_entry.module_name for r in results_filtered), (
+        'All results should be from specified module'
+    )
 
     # Test: non-existent name returns empty
-    results_empty = list(imports_db.imports.find_all_by_name("_NonExistentFunction_12345"))
-    assert len(results_empty) == 0, "Should return empty for non-existent function"
+    results_empty = list(imports_db.imports.find_all_by_name('_NonExistentFunction_12345'))
+    assert len(results_empty) == 0, 'Should return empty for non-existent function'
 
 
 def test_imports_filter_entries(imports_db):
@@ -679,12 +678,12 @@ def test_imports_filter_entries(imports_db):
     - Returns empty when no matches
     """
     if len(imports_db.imports) == 0:
-        pytest.skip("Test binary has no imports")
+        pytest.skip('Test binary has no imports')
 
     # Get all entries to establish ground truth
     all_entries = list(imports_db.imports.get_all_entries())
     if len(all_entries) == 0:
-        pytest.skip("Test binary has no import entries")
+        pytest.skip('Test binary has no import entries')
 
     # Test: filter for first module only
     first_module = next(iter(imports_db.imports))
@@ -692,27 +691,27 @@ def test_imports_filter_entries(imports_db):
         imports_db.imports.filter_entries(lambda e: e.module_name == first_module.name)
     )
 
-    assert len(filtered) > 0, "Should find imports from first module"
-    assert all(
-        e.module_name == first_module.name for e in filtered
-    ), "All filtered entries should be from first module"
+    assert len(filtered) > 0, 'Should find imports from first module'
+    assert all(e.module_name == first_module.name for e in filtered), (
+        'All filtered entries should be from first module'
+    )
 
     # Test: filter for named imports only
     named_only = list(imports_db.imports.filter_entries(lambda e: e.is_named_import))
 
-    assert all(e.is_named_import for e in named_only), "All should be named imports"
+    assert all(e.is_named_import for e in named_only), 'All should be named imports'
 
     # Test: filter that matches nothing
     empty_filter = list(
         imports_db.imports.filter_entries(lambda e: e.address == 0xFFFFFFFFFFFFFFFF)
     )
 
-    assert len(empty_filter) == 0, "Should return empty when no matches"
+    assert len(empty_filter) == 0, 'Should return empty when no matches'
 
     # Test: filter always returns True (should match all)
     all_filter = list(imports_db.imports.filter_entries(lambda e: True))
 
-    assert len(all_filter) == len(all_entries), "Should return all entries with always-true filter"
+    assert len(all_filter) == len(all_entries), 'Should return all entries with always-true filter'
 
 
 def test_imports_search_by_pattern(imports_db):
@@ -731,12 +730,12 @@ def test_imports_search_by_pattern(imports_db):
     - Handles invalid regex patterns gracefully
     """
     if len(imports_db.imports) == 0:
-        pytest.skip("Test binary has no imports")
+        pytest.skip('Test binary has no imports')
 
     # Get sample import name to test with
     all_entries = list(imports_db.imports.get_all_entries())
     if len(all_entries) == 0:
-        pytest.skip("Test binary has no import entries")
+        pytest.skip('Test binary has no import entries')
 
     # Find first named import
     test_entry = None
@@ -746,41 +745,41 @@ def test_imports_search_by_pattern(imports_db):
             break
 
     if not test_entry:
-        pytest.skip("No suitable named import found")
+        pytest.skip('No suitable named import found')
 
     # Test: search by exact name (should find at least one)
-    exact_results = list(imports_db.imports.search_by_pattern(f"^{test_entry.name}$"))
+    exact_results = list(imports_db.imports.search_by_pattern(f'^{test_entry.name}$'))
 
-    assert len(exact_results) >= 1, "Should find exact match"
-    assert all(e.name == test_entry.name for e in exact_results), "Should match exact name"
+    assert len(exact_results) >= 1, 'Should find exact match'
+    assert all(e.name == test_entry.name for e in exact_results), 'Should match exact name'
 
     # Test: search by prefix (first 3 chars)
     prefix = test_entry.name[:3]
-    prefix_results = list(imports_db.imports.search_by_pattern(f"^{prefix}"))
+    prefix_results = list(imports_db.imports.search_by_pattern(f'^{prefix}'))
 
-    assert len(prefix_results) >= 1, "Should find entries matching prefix"
-    assert all(
-        e.name.startswith(prefix) for e in prefix_results
-    ), "All results should start with prefix"
+    assert len(prefix_results) >= 1, 'Should find entries matching prefix'
+    assert all(e.name.startswith(prefix) for e in prefix_results), (
+        'All results should start with prefix'
+    )
 
     # Test: case-insensitive (default)
     case_insensitive = list(
         imports_db.imports.search_by_pattern(test_entry.name.lower(), case_sensitive=False)
     )
 
-    assert len(case_insensitive) >= 1, "Case-insensitive should find match"
+    assert len(case_insensitive) >= 1, 'Case-insensitive should find match'
 
     # Test: case-sensitive (should still find if name has same case)
     case_sensitive = list(
         imports_db.imports.search_by_pattern(test_entry.name, case_sensitive=True)
     )
 
-    assert len(case_sensitive) >= 1, "Case-sensitive should find exact case match"
+    assert len(case_sensitive) >= 1, 'Case-sensitive should find exact case match'
 
     # Test: pattern matching nothing
     no_match = list(imports_db.imports.search_by_pattern(r'^_NONEXISTENT_PATTERN_12345$'))
 
-    assert len(no_match) == 0, "Should return empty for non-matching pattern"
+    assert len(no_match) == 0, 'Should return empty for non-matching pattern'
 
 
 def test_imports_has_imports(imports_db):
@@ -803,7 +802,7 @@ def test_imports_has_imports(imports_db):
     # Result should match len() check
     has_imports_via_len = len(imports_db.imports) > 0
 
-    assert has_imports == has_imports_via_len, "has_imports should match len() > 0"
+    assert has_imports == has_imports_via_len, 'has_imports should match len() > 0'
 
     # Test with empty database
     work_dir = os.path.join(tempfile.gettempdir(), 'api_tests_work_dir')
@@ -823,7 +822,7 @@ def test_imports_has_imports(imports_db):
             has_empty = db_empty.imports.has_imports()
             count_empty = len(db_empty.imports)
 
-            assert has_empty == (count_empty > 0), "has_imports should match count > 0"
+            assert has_empty == (count_empty > 0), 'has_imports should match count > 0'
 
         finally:
             if db_empty.is_open():
@@ -846,22 +845,22 @@ def test_imports_is_import(imports_db):
     - Handles edge cases (BADADDR, segment boundaries)
     """
     if len(imports_db.imports) == 0:
-        pytest.skip("Test binary has no imports")
+        pytest.skip('Test binary has no imports')
 
     # Get a known import address
     all_entries = list(imports_db.imports.get_all_entries())
     if len(all_entries) == 0:
-        pytest.skip("Test binary has no import entries")
+        pytest.skip('Test binary has no import entries')
 
     test_entry = all_entries[0]
 
     # Test: known import address should return True
     is_import = imports_db.imports.is_import(test_entry.address)
-    assert is_import, "Should return True for import address"
+    assert is_import, 'Should return True for import address'
 
     # Test: verify consistency with get_at
     entry_via_get_at = imports_db.imports.get_at(test_entry.address)
-    assert entry_via_get_at is not None, "get_at should also find this import"
+    assert entry_via_get_at is not None, 'get_at should also find this import'
 
     # Test: non-import address should return False
     # Use function start (if we have functions, it's unlikely to be an import)
@@ -871,7 +870,7 @@ def test_imports_is_import(imports_db):
 
         # Function starts are typically not imports (though thunks might be)
         # Just verify the call doesn't crash and returns a boolean
-        assert isinstance(is_func_import, bool), "Should return boolean"
+        assert isinstance(is_func_import, bool), 'Should return boolean'
 
     # Test: invalid address should raise InvalidEAError
     from ida_domain.base import InvalidEAError
@@ -898,50 +897,46 @@ def test_imports_get_statistics(imports_db):
     - most_imported_module is correctly identified
     """
     if len(imports_db.imports) == 0:
-        pytest.skip("Test binary has no imports")
+        pytest.skip('Test binary has no imports')
 
     stats = imports_db.imports.get_statistics()
 
     # Verify module count
-    assert stats.module_count == len(
-        imports_db.imports
-    ), "module_count should match len(imports)"
+    assert stats.module_count == len(imports_db.imports), 'module_count should match len(imports)'
 
     # Manually count total imports
     all_entries = list(imports_db.imports.get_all_entries())
     actual_total = len(all_entries)
 
-    assert stats.total_imports == actual_total, "total_imports should match actual count"
+    assert stats.total_imports == actual_total, 'total_imports should match actual count'
 
     # Verify named vs ordinal split
     actual_named = sum(1 for e in all_entries if e.is_named_import)
     actual_ordinal = sum(1 for e in all_entries if e.is_ordinal_import)
 
-    assert stats.named_imports == actual_named, "named_imports count should be correct"
-    assert stats.ordinal_imports == actual_ordinal, "ordinal_imports count should be correct"
+    assert stats.named_imports == actual_named, 'named_imports count should be correct'
+    assert stats.ordinal_imports == actual_ordinal, 'ordinal_imports count should be correct'
 
     # named + ordinal should equal total
-    assert (
-        stats.named_imports + stats.ordinal_imports == stats.total_imports
-    ), "named + ordinal should equal total"
+    assert stats.named_imports + stats.ordinal_imports == stats.total_imports, (
+        'named + ordinal should equal total'
+    )
 
     # Verify most-imported module
     if stats.module_count > 0:
         # Find module with most imports manually
         max_count = 0
-        max_module_name = ""
+        max_module_name = ''
 
         for module in imports_db.imports:
             if module.import_count > max_count:
                 max_count = module.import_count
                 max_module_name = module.name
 
-        assert (
-            stats.most_imported_module == max_module_name
-        ), "most_imported_module should be correct"
-        assert (
-            stats.most_imported_count == max_count
-        ), "most_imported_count should be correct"
+        assert stats.most_imported_module == max_module_name, (
+            'most_imported_module should be correct'
+        )
+        assert stats.most_imported_count == max_count, 'most_imported_count should be correct'
 
 
 def test_imports_get_entries_by_module_variants(imports_db):
@@ -962,42 +957,42 @@ def test_imports_get_entries_by_module_variants(imports_db):
     - Proper error handling for invalid inputs
     """
     if len(imports_db.imports) == 0:
-        pytest.skip("Test binary has no imports")
+        pytest.skip('Test binary has no imports')
 
     first_module = next(iter(imports_db.imports))
 
     # Test: get entries by index (int)
     entries_by_index = list(imports_db.imports.get_entries_by_module(first_module.index))
 
-    assert len(entries_by_index) >= 0, "Should return entries (possibly empty)"
+    assert len(entries_by_index) >= 0, 'Should return entries (possibly empty)'
 
     # Test: get entries by name (str)
     entries_by_name = list(imports_db.imports.get_entries_by_module(first_module.name))
 
-    assert len(entries_by_name) == len(
-        entries_by_index
-    ), "Should return same count for name and index"
+    assert len(entries_by_name) == len(entries_by_index), (
+        'Should return same count for name and index'
+    )
 
     # Test: get entries by module object
     entries_by_module = list(imports_db.imports.get_entries_by_module(first_module))
 
-    assert len(entries_by_module) == len(
-        entries_by_index
-    ), "Should return same count for module object"
+    assert len(entries_by_module) == len(entries_by_index), (
+        'Should return same count for module object'
+    )
 
     # Test: all three should return same entries (compare addresses)
     addrs_by_index = {e.address for e in entries_by_index}
     addrs_by_name = {e.address for e in entries_by_name}
     addrs_by_module = {e.address for e in entries_by_module}
 
-    assert addrs_by_index == addrs_by_name, "Index and name should return same addresses"
-    assert addrs_by_index == addrs_by_module, "Index and module should return same addresses"
+    assert addrs_by_index == addrs_by_name, 'Index and name should return same addresses'
+    assert addrs_by_index == addrs_by_module, 'Index and module should return same addresses'
 
     # Test: invalid module name should raise error
     from ida_domain.base import InvalidParameterError
 
     with pytest.raises(InvalidParameterError):
-        list(imports_db.imports.get_entries_by_module("_NonExistentModule_12345"))
+        list(imports_db.imports.get_entries_by_module('_NonExistentModule_12345'))
 
     # Test: invalid type should raise error
     with pytest.raises(InvalidParameterError):

@@ -300,9 +300,7 @@ class Problems(DatabaseEntity):
                     desc = None
                 yield Problem(ea, ptype, desc)
 
-    def get_next(
-        self, ea: ea_t, problem_type: Optional[ProblemType] = None
-    ) -> Optional[Problem]:
+    def get_next(self, ea: ea_t, problem_type: Optional[ProblemType] = None) -> Optional[Problem]:
         """
         Get the next problem at or after the specified address.
 
@@ -354,9 +352,7 @@ class Problems(DatabaseEntity):
             desc = ida_problems.get_problem_desc(closest_type, closest_ea)
             return Problem(closest_ea, closest_type, desc or None)
 
-    def has_problem(
-        self, ea: ea_t, problem_type: Optional[ProblemType] = None
-    ) -> bool:
+    def has_problem(self, ea: ea_t, problem_type: Optional[ProblemType] = None) -> bool:
         """
         Check if an address has a problem.
 
@@ -437,9 +433,7 @@ class Problems(DatabaseEntity):
             count += 1
         return count
 
-    def add(
-        self, ea: ea_t, problem_type: ProblemType, description: Optional[str] = None
-    ) -> None:
+    def add(self, ea: ea_t, problem_type: ProblemType, description: Optional[str] = None) -> None:
         """
         Add a problem to the list.
 

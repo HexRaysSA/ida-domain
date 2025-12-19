@@ -34,7 +34,7 @@ def search_test_setup():
     src_path = os.path.join(current_dir, 'resources', 'tiny_asm.bin')
 
     if not os.path.exists(src_path):
-        pytest.skip("Test binary not found")
+        pytest.skip('Test binary not found')
 
     shutil.copy(src_path, idb_path)
     return idb_path
@@ -79,9 +79,9 @@ def test_next_undefined_finds_address(search_db):
     result = search_db.search.next_undefined(start_ea)
 
     # Result can be None if everything is defined, or an address
-    assert result is None or (
-        isinstance(result, int) and search_db.is_valid_ea(result)
-    ), "next_undefined should return None or a valid address"
+    assert result is None or (isinstance(result, int) and search_db.is_valid_ea(result)), (
+        'next_undefined should return None or a valid address'
+    )
 
 
 def test_next_defined_finds_address(search_db):
@@ -99,8 +99,8 @@ def test_next_defined_finds_address(search_db):
     result = search_db.search.next_defined(start_ea)
 
     # With auto-analysis, we should find at least some defined addresses
-    assert result is not None, "Should find defined addresses in analyzed binary"
-    assert search_db.is_valid_ea(result), "Result should be a valid address"
+    assert result is not None, 'Should find defined addresses in analyzed binary'
+    assert search_db.is_valid_ea(result), 'Result should be a valid address'
 
 
 def test_all_undefined_iterator(search_db):
@@ -123,14 +123,14 @@ def test_all_undefined_iterator(search_db):
     # Test that it's iterable and addresses are valid
     count = 0
     for ea in search_db.search.all_undefined(start_ea, end_ea):
-        assert search_db.is_valid_ea(ea), f"Undefined address {hex(ea)} should be valid"
-        assert start_ea <= ea < end_ea, "Address should be within range"
+        assert search_db.is_valid_ea(ea), f'Undefined address {hex(ea)} should be valid'
+        assert start_ea <= ea < end_ea, 'Address should be within range'
         count += 1
         if count >= 10:  # Limit to prevent infinite loops in tests
             break
 
     # Count can be 0 if fully analyzed, which is fine
-    assert count >= 0, "Should return non-negative count"
+    assert count >= 0, 'Should return non-negative count'
 
 
 def test_all_defined_iterator(search_db):
@@ -152,14 +152,14 @@ def test_all_defined_iterator(search_db):
     # Test that it's iterable and addresses are valid
     count = 0
     for ea in search_db.search.all_defined(start_ea, end_ea):
-        assert search_db.is_valid_ea(ea), f"Defined address {hex(ea)} should be valid"
-        assert start_ea <= ea < end_ea, "Address should be within range"
+        assert search_db.is_valid_ea(ea), f'Defined address {hex(ea)} should be valid'
+        assert start_ea <= ea < end_ea, 'Address should be within range'
         count += 1
         if count >= 10:  # Limit for test performance
             break
 
     # With auto-analysis, should have some defined addresses
-    assert count > 0, "Should find defined addresses in analyzed binary"
+    assert count > 0, 'Should find defined addresses in analyzed binary'
 
 
 # =============================================================================
@@ -183,8 +183,8 @@ def test_next_code_finds_instruction(search_db):
     start_ea = search_db.minimum_ea
     result = search_db.search.next_code(start_ea)
 
-    assert result is not None, "Should find code in binary with entry point"
-    assert search_db.is_valid_ea(result), "Code address should be valid"
+    assert result is not None, 'Should find code in binary with entry point'
+    assert search_db.is_valid_ea(result), 'Code address should be valid'
 
 
 def test_next_data_finds_data_item(search_db):
@@ -200,9 +200,9 @@ def test_next_data_finds_data_item(search_db):
     result = search_db.search.next_data(start_ea)
 
     # Result can be None if binary has no data sections
-    assert result is None or (
-        isinstance(result, int) and search_db.is_valid_ea(result)
-    ), "next_data should return None or valid data address"
+    assert result is None or (isinstance(result, int) and search_db.is_valid_ea(result)), (
+        'next_data should return None or valid data address'
+    )
 
 
 def test_search_direction_up(search_db):
@@ -222,12 +222,12 @@ def test_search_direction_up(search_db):
 
     # Should find code when searching upward from top of memory
     # (might be None if no code near top, which is acceptable)
-    assert result is None or (
-        isinstance(result, int) and search_db.is_valid_ea(result)
-    ), "Search UP should return None or valid address"
+    assert result is None or (isinstance(result, int) and search_db.is_valid_ea(result)), (
+        'Search UP should return None or valid address'
+    )
 
     if result is not None:
-        assert result <= start_ea, "UP search should find lower or equal address"
+        assert result <= start_ea, 'UP search should find lower or equal address'
 
 
 def test_all_code_iterator(search_db):
@@ -247,12 +247,12 @@ def test_all_code_iterator(search_db):
 
     count = 0
     for ea in search_db.search.all_code(start_ea, end_ea):
-        assert search_db.is_valid_ea(ea), f"Code address {hex(ea)} should be valid"
+        assert search_db.is_valid_ea(ea), f'Code address {hex(ea)} should be valid'
         count += 1
         if count >= 20:  # Test first 20 code locations
             break
 
-    assert count > 0, "Should find code addresses in analyzed binary"
+    assert count > 0, 'Should find code addresses in analyzed binary'
 
 
 def test_all_data_iterator(search_db):
@@ -268,14 +268,14 @@ def test_all_data_iterator(search_db):
 
     count = 0
     for ea in search_db.search.all_data(start_ea, end_ea):
-        assert search_db.is_valid_ea(ea), f"Data address {hex(ea)} should be valid"
-        assert start_ea <= ea < end_ea, "Address should be within range"
+        assert search_db.is_valid_ea(ea), f'Data address {hex(ea)} should be valid'
+        assert start_ea <= ea < end_ea, 'Address should be within range'
         count += 1
         if count >= 10:
             break
 
     # Count can be 0 if no data sections
-    assert count >= 0, "Should return non-negative count"
+    assert count >= 0, 'Should return non-negative count'
 
 
 def test_next_code_outside_function(search_db):
@@ -294,9 +294,9 @@ def test_next_code_outside_function(search_db):
     result = search_db.search.next_code_outside_function(start_ea)
 
     # Can be None if all code is in functions (good analysis)
-    assert result is None or (
-        isinstance(result, int) and search_db.is_valid_ea(result)
-    ), "Should return None or valid address"
+    assert result is None or (isinstance(result, int) and search_db.is_valid_ea(result)), (
+        'Should return None or valid address'
+    )
 
 
 def test_all_code_outside_functions_iterator(search_db):
@@ -312,13 +312,13 @@ def test_all_code_outside_functions_iterator(search_db):
     """
     count = 0
     for ea in search_db.search.all_code_outside_functions():
-        assert search_db.is_valid_ea(ea), "Orphaned code address should be valid"
+        assert search_db.is_valid_ea(ea), 'Orphaned code address should be valid'
         count += 1
         if count >= 5:
             break
 
     # Can be 0 if all code is properly in functions
-    assert count >= 0, "Should return non-negative count"
+    assert count >= 0, 'Should return non-negative count'
 
 
 # =============================================================================
@@ -340,15 +340,15 @@ def test_next_error_handling(search_db):
     start_ea = search_db.minimum_ea
     result = search_db.search.next_error(start_ea)
 
-    assert isinstance(result, tuple), "next_error should return tuple"
-    assert len(result) == 2, "Tuple should have 2 elements (ea, opnum)"
+    assert isinstance(result, tuple), 'next_error should return tuple'
+    assert len(result) == 2, 'Tuple should have 2 elements (ea, opnum)'
 
     ea, opnum = result
     if ea is not None:
-        assert search_db.is_valid_ea(ea), "Error address should be valid"
-        assert isinstance(opnum, int), "Operand number should be int"
+        assert search_db.is_valid_ea(ea), 'Error address should be valid'
+        assert isinstance(opnum, int), 'Operand number should be int'
     else:
-        assert opnum is None, "If no error found, both values should be None"
+        assert opnum is None, 'If no error found, both values should be None'
 
 
 def test_next_untyped_operand_handling(search_db):
@@ -364,13 +364,13 @@ def test_next_untyped_operand_handling(search_db):
     start_ea = search_db.minimum_ea
     result = search_db.search.next_untyped_operand(start_ea)
 
-    assert isinstance(result, tuple), "next_untyped_operand should return tuple"
-    assert len(result) == 2, "Tuple should have 2 elements"
+    assert isinstance(result, tuple), 'next_untyped_operand should return tuple'
+    assert len(result) == 2, 'Tuple should have 2 elements'
 
     ea, opnum = result
     if ea is not None:
-        assert search_db.is_valid_ea(ea), "Address should be valid"
-        assert isinstance(opnum, int), "Operand number should be int"
+        assert search_db.is_valid_ea(ea), 'Address should be valid'
+        assert isinstance(opnum, int), 'Operand number should be int'
 
 
 def test_next_suspicious_operand_handling(search_db):
@@ -386,8 +386,8 @@ def test_next_suspicious_operand_handling(search_db):
     start_ea = search_db.minimum_ea
     result = search_db.search.next_suspicious_operand(start_ea)
 
-    assert isinstance(result, tuple), "next_suspicious_operand should return tuple"
-    assert len(result) == 2, "Tuple should have 2 elements"
+    assert isinstance(result, tuple), 'next_suspicious_operand should return tuple'
+    assert len(result) == 2, 'Tuple should have 2 elements'
 
 
 def test_all_errors_iterator(search_db):
@@ -402,14 +402,14 @@ def test_all_errors_iterator(search_db):
     """
     count = 0
     for ea, opnum in search_db.search.all_errors():
-        assert search_db.is_valid_ea(ea), "Error address should be valid"
-        assert isinstance(opnum, int), "Operand number should be int"
+        assert search_db.is_valid_ea(ea), 'Error address should be valid'
+        assert isinstance(opnum, int), 'Operand number should be int'
         count += 1
         if count >= 5:
             break
 
     # Typically 0 for well-analyzed binaries
-    assert count >= 0, "Should return non-negative count"
+    assert count >= 0, 'Should return non-negative count'
 
 
 def test_all_untyped_operands_iterator(search_db):
@@ -423,13 +423,13 @@ def test_all_untyped_operands_iterator(search_db):
     """
     count = 0
     for ea, opnum in search_db.search.all_untyped_operands():
-        assert search_db.is_valid_ea(ea), "Address should be valid"
-        assert isinstance(opnum, int), "Operand number should be int"
+        assert search_db.is_valid_ea(ea), 'Address should be valid'
+        assert isinstance(opnum, int), 'Operand number should be int'
         count += 1
         if count >= 5:
             break
 
-    assert count >= 0, "Should return non-negative count"
+    assert count >= 0, 'Should return non-negative count'
 
 
 # =============================================================================
@@ -439,8 +439,8 @@ def test_all_untyped_operands_iterator(search_db):
 
 @pytest.mark.skip(
     reason=(
-        "Register access search requires reg_access_t which is not "
-        "accessible in current IDA Python version"
+        'Register access search requires reg_access_t which is not '
+        'accessible in current IDA Python version'
     )
 )
 def test_next_register_access_format(search_db):
@@ -466,25 +466,25 @@ def test_next_register_access_format(search_db):
 
     # Test READ access
     result_read = search_db.search.next_register_access(
-        "rax", start_ea, access_type=AccessType.READ
+        'rax', start_ea, access_type=AccessType.READ
     )
-    assert result_read is None or search_db.is_valid_ea(
-        result_read
-    ), "Should return None or valid address"
+    assert result_read is None or search_db.is_valid_ea(result_read), (
+        'Should return None or valid address'
+    )
 
     # Test WRITE access
     result_write = search_db.search.next_register_access(
-        "rax", start_ea, access_type=AccessType.WRITE
+        'rax', start_ea, access_type=AccessType.WRITE
     )
-    assert result_write is None or search_db.is_valid_ea(
-        result_write
-    ), "Should return None or valid address"
+    assert result_write is None or search_db.is_valid_ea(result_write), (
+        'Should return None or valid address'
+    )
 
 
 @pytest.mark.skip(
     reason=(
-        "Register access search requires reg_access_t which is not "
-        "accessible in current IDA Python version"
+        'Register access search requires reg_access_t which is not '
+        'accessible in current IDA Python version'
     )
 )
 def test_all_register_accesses_iterator(search_db):
@@ -507,16 +507,16 @@ def test_all_register_accesses_iterator(search_db):
 
     count = 0
     for ea in search_db.search.all_register_accesses(
-        "rax", start_ea, end_ea, access_type=AccessType.READ
+        'rax', start_ea, end_ea, access_type=AccessType.READ
     ):
-        assert search_db.is_valid_ea(ea), f"Register access at {hex(ea)} should be valid"
-        assert start_ea <= ea < end_ea, "Address should be within range"
+        assert search_db.is_valid_ea(ea), f'Register access at {hex(ea)} should be valid'
+        assert start_ea <= ea < end_ea, 'Address should be within range'
         count += 1
         if count >= 10:
             break
 
     # Count can be 0 if register not used in range
-    assert count >= 0, "Should return non-negative count"
+    assert count >= 0, 'Should return non-negative count'
 
 
 # =============================================================================
@@ -579,7 +579,7 @@ def test_empty_register_name_raises_error(search_db):
     start_ea = search_db.minimum_ea
 
     with pytest.raises(InvalidParameterError):
-        search_db.search.next_register_access("", start_ea)
+        search_db.search.next_register_access('', start_ea)
 
 
 # =============================================================================
@@ -597,12 +597,12 @@ def test_search_entity_accessible_from_database(search_db):
 
     This is a smoke test ensuring the entity is properly wired up.
     """
-    assert hasattr(search_db, 'search'), "Database should have search property"
-    assert search_db.search is not None, "search property should not be None"
+    assert hasattr(search_db, 'search'), 'Database should have search property'
+    assert search_db.search is not None, 'search property should not be None'
 
     from ida_domain.search import Search
 
-    assert isinstance(search_db.search, Search), "search should be Search instance"
+    assert isinstance(search_db.search, Search), 'search should be Search instance'
 
 
 def test_search_with_database_range(search_db):
@@ -618,12 +618,12 @@ def test_search_with_database_range(search_db):
     # Should use database min/max by default
     code_count = 0
     for ea in search_db.search.all_code():
-        assert search_db.is_valid_ea(ea), "Address should be valid"
+        assert search_db.is_valid_ea(ea), 'Address should be valid'
         code_count += 1
         if code_count >= 5:
             break
 
-    assert code_count >= 0, "Should be able to search entire database"
+    assert code_count >= 0, 'Should be able to search entire database'
 
 
 def test_multiple_searches_on_same_database(search_db):
@@ -643,11 +643,11 @@ def test_multiple_searches_on_same_database(search_db):
     code2 = search_db.search.next_code(search_db.minimum_ea)
 
     # Should get same result (deterministic)
-    assert code1 == code2, "Multiple searches should give consistent results"
+    assert code1 == code2, 'Multiple searches should give consistent results'
 
     # Try different search types
     data1 = search_db.search.next_data(search_db.minimum_ea)
     undefined1 = search_db.search.next_undefined(search_db.minimum_ea)
 
     # Should not interfere with each other
-    assert True, "Multiple different search types should work"
+    assert True, 'Multiple different search types should work'

@@ -18,6 +18,7 @@ def functions_test_setup():
 
     # Copy tiny_asm.bin from test resources
     import shutil
+
     current_dir = os.path.dirname(os.path.abspath(__file__))
     src_path = os.path.join(current_dir, 'resources', 'tiny_asm.bin')
     shutil.copy2(src_path, idb_path)
@@ -31,9 +32,7 @@ def functions_test_setup():
 def test_env(functions_test_setup):
     """Opens tiny_asm database for each test."""
     ida_options = IdaCommandOptions(new_database=True, auto_analysis=True)
-    db = ida_domain.Database.open(
-        path=functions_test_setup, args=ida_options, save_on_close=False
-    )
+    db = ida_domain.Database.open(path=functions_test_setup, args=ida_options, save_on_close=False)
     yield db
     db.close()
 
@@ -56,7 +55,7 @@ class TestFunctionsGetPrevious:
 
         # Get all functions in order
         all_funcs = list(db.functions.get_all())
-        assert len(all_funcs) >= 2, "Need at least 2 functions for this test"
+        assert len(all_funcs) >= 2, 'Need at least 2 functions for this test'
 
         # Take the second function and find its predecessor
         second_func = all_funcs[1]
@@ -247,7 +246,7 @@ class TestFunctionsGetIndex:
         # The key is that get_index raises ValueError when get_func_num returns -1
         # We trust that behavior is correct based on the implementation
 
-        pytest.skip("Complex test setup required - behavior verified by implementation")
+        pytest.skip('Complex test setup required - behavior verified by implementation')
 
 
 class TestFunctionsContains:
@@ -337,7 +336,7 @@ class TestFunctionsContains:
 
         all_funcs = list(db.functions.get_all())
         if len(all_funcs) < 2:
-            pytest.skip("Need at least 2 functions")
+            pytest.skip('Need at least 2 functions')
 
         func = all_funcs[1]
 
@@ -376,7 +375,7 @@ class TestFunctionsContains:
                 break
 
         if func_with_tails is None:
-            pytest.skip("No functions with tail chunks found in test binary")
+            pytest.skip('No functions with tail chunks found in test binary')
 
         # Test that addresses in tail chunks are contained
         tails = db.functions.get_tails(func_with_tails)
@@ -405,7 +404,7 @@ class TestFunctionsSetStart:
 
         # Get a function to modify
         all_funcs = list(db.functions.get_all())
-        assert len(all_funcs) > 0, "Need at least one function for test"
+        assert len(all_funcs) > 0, 'Need at least one function for test'
 
         func = all_funcs[0]
         original_start = func.start_ea
@@ -463,7 +462,7 @@ class TestFunctionsSetEnd:
 
         # Get a function to modify
         all_funcs = list(db.functions.get_all())
-        assert len(all_funcs) > 0, "Need at least one function for test"
+        assert len(all_funcs) > 0, 'Need at least one function for test'
 
         func = all_funcs[0]
         original_start = func.start_ea
@@ -517,7 +516,7 @@ class TestFunctionsUpdate:
 
         # Get a function
         all_funcs = list(db.functions.get_all())
-        assert len(all_funcs) > 0, "Need at least one function for test"
+        assert len(all_funcs) > 0, 'Need at least one function for test'
 
         func = all_funcs[0]
 
@@ -541,7 +540,7 @@ class TestFunctionsUpdate:
 
         # Get a function
         all_funcs = list(db.functions.get_all())
-        assert len(all_funcs) > 0, "Need at least one function for test"
+        assert len(all_funcs) > 0, 'Need at least one function for test'
 
         func = all_funcs[0]
         original_start = func.start_ea
@@ -573,7 +572,7 @@ class TestFunctionsReanalyze:
 
         # Get a function
         all_funcs = list(db.functions.get_all())
-        assert len(all_funcs) > 0, "Need at least one function for test"
+        assert len(all_funcs) > 0, 'Need at least one function for test'
 
         func = all_funcs[0]
 
@@ -597,7 +596,7 @@ class TestFunctionsReanalyze:
 
         # Get multiple functions
         all_funcs = list(db.functions.get_all())
-        assert len(all_funcs) >= 2, "Need at least 2 functions for test"
+        assert len(all_funcs) >= 2, 'Need at least 2 functions for test'
 
         # Reanalyze first two functions
         for i in range(min(2, len(all_funcs))):
@@ -648,7 +647,7 @@ class TestFunctionsTailOperations:
 
         # Get a function to work with
         all_funcs = list(db.functions.get_all())
-        assert len(all_funcs) >= 1, "Need at least 1 function for test"
+        assert len(all_funcs) >= 1, 'Need at least 1 function for test'
         func = all_funcs[0]
 
         # Record initial tail count
@@ -821,7 +820,7 @@ class TestFunctionsTailOperations:
         # Get two functions
         all_funcs = list(db.functions.get_all())
         if len(all_funcs) < 2:
-            pytest.skip("Need at least 2 functions for roundtrip test")
+            pytest.skip('Need at least 2 functions for roundtrip test')
 
         func = all_funcs[0]
         other_func = all_funcs[1]

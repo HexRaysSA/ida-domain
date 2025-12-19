@@ -2268,7 +2268,7 @@ class Bytes(DatabaseEntity):
             raise InvalidEAError(ea)
 
         if n < 0:
-            raise InvalidParameterError("n", n, "operand number must be non-negative")
+            raise InvalidParameterError('n', n, 'operand number must be non-negative')
 
         # op_hex is inline in IDA SDK: set_op_type(ea, hex_flag(), n)
         return bool(ida_bytes.set_op_type(ea, ida_bytes.hex_flag(), n))
@@ -2303,7 +2303,7 @@ class Bytes(DatabaseEntity):
             raise InvalidEAError(ea)
 
         if n < 0:
-            raise InvalidParameterError("n", n, "operand number must be non-negative")
+            raise InvalidParameterError('n', n, 'operand number must be non-negative')
 
         # op_dec is inline in IDA SDK: set_op_type(ea, dec_flag(), n)
         return bool(ida_bytes.set_op_type(ea, ida_bytes.dec_flag(), n))
@@ -2338,7 +2338,7 @@ class Bytes(DatabaseEntity):
             raise InvalidEAError(ea)
 
         if n < 0:
-            raise InvalidParameterError("n", n, "operand number must be non-negative")
+            raise InvalidParameterError('n', n, 'operand number must be non-negative')
 
         # op_oct is inline in IDA SDK: set_op_type(ea, oct_flag(), n)
         return bool(ida_bytes.set_op_type(ea, ida_bytes.oct_flag(), n))
@@ -2373,7 +2373,7 @@ class Bytes(DatabaseEntity):
             raise InvalidEAError(ea)
 
         if n < 0:
-            raise InvalidParameterError("n", n, "operand number must be non-negative")
+            raise InvalidParameterError('n', n, 'operand number must be non-negative')
 
         # op_bin is inline in IDA SDK: set_op_type(ea, bin_flag(), n)
         return bool(ida_bytes.set_op_type(ea, ida_bytes.bin_flag(), n))
@@ -2409,7 +2409,7 @@ class Bytes(DatabaseEntity):
             raise InvalidEAError(ea)
 
         if n < 0:
-            raise InvalidParameterError("n", n, "operand number must be non-negative")
+            raise InvalidParameterError('n', n, 'operand number must be non-negative')
 
         # op_chr is inline in IDA SDK: set_op_type(ea, char_flag(), n)
         return bool(ida_bytes.set_op_type(ea, ida_bytes.char_flag(), n))
@@ -2450,13 +2450,13 @@ class Bytes(DatabaseEntity):
             raise InvalidEAError(ea)
 
         if n < 0:
-            raise InvalidParameterError("n", n, "operand number must be non-negative")
+            raise InvalidParameterError('n', n, 'operand number must be non-negative')
 
         if not isinstance(enum_id, int):
-            raise InvalidParameterError("enum_id", enum_id, "must be an integer")
+            raise InvalidParameterError('enum_id', enum_id, 'must be an integer')
 
         if enum_id < 0:
-            raise InvalidParameterError("enum_id", enum_id, "must be non-negative")
+            raise InvalidParameterError('enum_id', enum_id, 'must be non-negative')
 
         return bool(ida_bytes.op_enum(ea, n, enum_id, serial))
 
@@ -2490,7 +2490,7 @@ class Bytes(DatabaseEntity):
             raise InvalidEAError(ea)
 
         if n < 0:
-            raise InvalidParameterError("n", n, "operand number must be non-negative")
+            raise InvalidParameterError('n', n, 'operand number must be non-negative')
 
         flags = ida_bytes.get_flags(ea)
         return cast(bool, ida_bytes.is_off(flags, n))
@@ -2524,7 +2524,7 @@ class Bytes(DatabaseEntity):
             raise InvalidEAError(ea)
 
         if n < 0:
-            raise InvalidParameterError("n", n, "operand number must be non-negative")
+            raise InvalidParameterError('n', n, 'operand number must be non-negative')
 
         flags = ida_bytes.get_flags(ea)
         return cast(bool, ida_bytes.is_char(flags, n))
@@ -2558,7 +2558,7 @@ class Bytes(DatabaseEntity):
             raise InvalidEAError(ea)
 
         if n < 0:
-            raise InvalidParameterError("n", n, "operand number must be non-negative")
+            raise InvalidParameterError('n', n, 'operand number must be non-negative')
 
         flags = ida_bytes.get_flags(ea)
         return cast(bool, ida_bytes.is_enum(flags, n))
@@ -2593,7 +2593,7 @@ class Bytes(DatabaseEntity):
             raise InvalidEAError(ea)
 
         if n < 0:
-            raise InvalidParameterError("n", n, "operand number must be non-negative")
+            raise InvalidParameterError('n', n, 'operand number must be non-negative')
 
         flags = ida_bytes.get_flags(ea)
         return cast(bool, ida_bytes.is_stroff(flags, n))
@@ -2628,7 +2628,7 @@ class Bytes(DatabaseEntity):
             raise InvalidEAError(ea)
 
         if n < 0:
-            raise InvalidParameterError("n", n, "operand number must be non-negative")
+            raise InvalidParameterError('n', n, 'operand number must be non-negative')
 
         flags = ida_bytes.get_flags(ea)
         return cast(bool, ida_bytes.is_stkvar(flags, n))

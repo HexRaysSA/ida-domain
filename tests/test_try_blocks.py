@@ -167,8 +167,7 @@ def test_get_at_returns_none_for_address_without_try_block(try_blocks_db):
 
     result = try_blocks_db.try_blocks.get_at(ea)
 
-    assert result is None or isinstance(result, TryBlock), \
-        'get_at should return None or TryBlock'
+    assert result is None or isinstance(result, TryBlock), 'get_at should return None or TryBlock'
 
 
 def test_get_at_validates_address(try_blocks_db):
@@ -347,8 +346,9 @@ def test_find_seh_region_returns_none_for_non_seh_code(try_blocks_db):
 
     result = try_blocks_db.try_blocks.find_seh_region(ea)
 
-    assert result is None or isinstance(result, int), \
+    assert result is None or isinstance(result, int), (
         'find_seh_region should return None or address'
+    )
 
 
 def test_find_seh_region_validates_address(try_blocks_db):

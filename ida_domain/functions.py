@@ -862,7 +862,7 @@ class Functions(DatabaseEntity):
         index = ida_funcs.get_func_num(func.start_ea)
 
         if index == -1:
-            raise ValueError(f"Function at 0x{func.start_ea:x} not found in database")
+            raise ValueError(f'Function at 0x{func.start_ea:x} not found in database')
 
         return cast(int, index)
 

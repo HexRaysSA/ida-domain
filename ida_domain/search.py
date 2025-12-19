@@ -168,9 +168,7 @@ class Search(DatabaseEntity):
 
         ea = start_ea
         while ea < end_ea:
-            ea = ida_search.find_unknown(
-                ea, ida_search.SEARCH_DOWN | ida_search.SEARCH_NEXT
-            )
+            ea = ida_search.find_unknown(ea, ida_search.SEARCH_DOWN | ida_search.SEARCH_NEXT)
             if ea == BADADDR or ea >= end_ea:
                 break
             yield ea
@@ -447,9 +445,7 @@ class Search(DatabaseEntity):
 
         ea = start_ea
         while ea < end_ea:
-            ea = ida_search.find_not_func(
-                ea, ida_search.SEARCH_DOWN | ida_search.SEARCH_NEXT
-            )
+            ea = ida_search.find_not_func(ea, ida_search.SEARCH_DOWN | ida_search.SEARCH_NEXT)
             if ea == BADADDR or ea >= end_ea:
                 break
             yield ea
@@ -626,9 +622,7 @@ class Search(DatabaseEntity):
 
         ea = start_ea
         while ea < end_ea:
-            result = ida_search.find_error(
-                ea, ida_search.SEARCH_DOWN | ida_search.SEARCH_NEXT
-            )
+            result = ida_search.find_error(ea, ida_search.SEARCH_DOWN | ida_search.SEARCH_NEXT)
 
             if isinstance(result, tuple):
                 ea, opnum = result
@@ -678,9 +672,7 @@ class Search(DatabaseEntity):
 
         ea = start_ea
         while ea < end_ea:
-            result = ida_search.find_notype(
-                ea, ida_search.SEARCH_DOWN | ida_search.SEARCH_NEXT
-            )
+            result = ida_search.find_notype(ea, ida_search.SEARCH_DOWN | ida_search.SEARCH_NEXT)
 
             if isinstance(result, tuple):
                 ea, opnum = result
