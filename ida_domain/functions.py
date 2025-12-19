@@ -615,6 +615,29 @@ class Functions(DatabaseEntity):
             if start_ea <= func.start_ea < end_ea:
                 yield func
 
+    def get_in_range(self, start: ea_t, end: ea_t) -> Iterator[func_t]:
+        """
+        Get functions in the specified address range.
+
+        This is an LLM-friendly alias for get_between().
+
+        Args:
+            start: Start address of the range (inclusive).
+            end: End address of the range (exclusive).
+
+        Yields:
+            Function objects whose start address falls within the specified range.
+
+        Raises:
+            InvalidEAError: If the start/end are specified but they are not
+            in the database range.
+
+        Example:
+            >>> for func in db.functions.get_in_range(0x401000, 0x410000):
+            ...     print(db.functions.get_name(func))
+        """
+        return self.get_between(start, end)
+
     def get_all(self) -> Iterator[func_t]:
         """
         Retrieves all functions in the database.

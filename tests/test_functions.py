@@ -875,3 +875,20 @@ class TestFunctionsExistsAt:
             assert db.functions.exists_at(func.start_ea) is True
         # Non-function address should return False
         assert db.functions.exists_at(0xDEADBEEF) is False
+
+
+class TestFunctionsGetInRange:
+    """Tests for get_in_range() method."""
+
+    def test_functions_get_in_range_alias(self, test_env):
+        """Test get_in_range() is alias for get_between()."""
+        db = test_env
+        start = db.minimum_ea
+        end = db.maximum_ea
+
+        between_funcs = list(db.functions.get_between(start, end))
+        range_funcs = list(db.functions.get_in_range(start, end))
+
+        assert len(between_funcs) == len(range_funcs)
+        for f1, f2 in zip(between_funcs, range_funcs):
+            assert f1.start_ea == f2.start_ea
