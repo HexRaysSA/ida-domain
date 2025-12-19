@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import functools
 import logging
+import warnings
 from collections.abc import Callable
 
 from ida_idaapi import ea_t
@@ -102,6 +103,31 @@ def decorate_all_methods(decorator: Callable[[F], F]) -> Callable[[C], C]:
         return cls
 
     return decorate
+
+
+def deprecated(reason: str) -> Callable[[F], F]:
+    """
+    Decorator to mark functions as deprecated.
+
+    Args:
+        reason: Message explaining what to use instead.
+
+    Example:
+        @deprecated("Use get_in_range instead")
+        def get_between(self, start, end):
+            ...
+    """
+    def decorator(func: F) -> F:
+        @functools.wraps(func)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            warnings.warn(
+                f"{func.__qualname__} is deprecated. {reason}",
+                DeprecationWarning,
+                stacklevel=2
+            )
+            return func(*args, **kwargs)
+        return cast(F, wrapper)
+    return decorator
 
 
 def check_db_open(fn: Callable[P, R]) -> Callable[P, R]:
