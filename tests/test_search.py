@@ -651,3 +651,142 @@ def test_multiple_searches_on_same_database(search_db):
 
     # Should not interfere with each other
     assert True, 'Multiple different search types should work'
+
+
+# =============================================================================
+# LLM-FRIENDLY API TESTS
+# =============================================================================
+
+
+def test_find_next_method_exists_and_is_callable(search_db):
+    """
+    Test that find_next() method exists as an LLM-friendly unified search interface.
+
+    RATIONALE: The find_next() method provides a unified interface for LLMs to
+    search for different address types using a string parameter instead of
+    remembering individual method names like next_undefined(), next_code(), etc.
+    This follows the same pattern as Analysis.schedule() which unified scheduling.
+    """
+    assert hasattr(search_db.search, 'find_next'), 'find_next() method should exist'
+    assert callable(search_db.search.find_next), 'find_next() should be callable'
+
+
+def test_find_next_with_undefined_type(search_db):
+    """
+    Test that find_next(ea, "undefined") works like next_undefined().
+
+    RATIONALE: LLMs should be able to use find_next(ea, "undefined") as an
+    alternative to next_undefined(ea). Both should return the same result.
+    """
+    start_ea = search_db.minimum_ea
+
+    # Call find_next with "undefined"
+    result = search_db.search.find_next(start_ea, "undefined")
+
+    # Compare with direct method call
+    expected = search_db.search.next_undefined(start_ea)
+
+    assert result == expected, 'find_next("undefined") should match next_undefined()'
+
+
+def test_find_next_with_defined_type(search_db):
+    """
+    Test that find_next(ea, "defined") works like next_defined().
+    """
+    start_ea = search_db.minimum_ea
+
+    result = search_db.search.find_next(start_ea, "defined")
+    expected = search_db.search.next_defined(start_ea)
+
+    assert result == expected, 'find_next("defined") should match next_defined()'
+
+
+def test_find_next_with_code_type(search_db):
+    """
+    Test that find_next(ea, "code") works like next_code().
+    """
+    start_ea = search_db.minimum_ea
+
+    result = search_db.search.find_next(start_ea, "code")
+    expected = search_db.search.next_code(start_ea)
+
+    assert result == expected, 'find_next("code") should match next_code()'
+
+
+def test_find_next_with_data_type(search_db):
+    """
+    Test that find_next(ea, "data") works like next_data().
+    """
+    start_ea = search_db.minimum_ea
+
+    result = search_db.search.find_next(start_ea, "data")
+    expected = search_db.search.next_data(start_ea)
+
+    assert result == expected, 'find_next("data") should match next_data()'
+
+
+def test_find_next_with_code_outside_function_type(search_db):
+    """
+    Test that find_next(ea, "code_outside_function") works like next_code_outside_function().
+    """
+    start_ea = search_db.minimum_ea
+
+    result = search_db.search.find_next(start_ea, "code_outside_function")
+    expected = search_db.search.next_code_outside_function(start_ea)
+
+    assert result == expected, 'find_next("code_outside_function") should match'
+
+
+def test_find_next_with_backward_direction(search_db):
+    """
+    Test that find_next() supports "backward" direction.
+
+    RATIONALE: LLMs can use direction="backward" instead of needing to know
+    about SearchDirection.UP enum. String literals are more intuitive.
+    """
+    start_ea = search_db.maximum_ea - 1
+
+    # Call find_next with backward direction
+    result = search_db.search.find_next(start_ea, "code", direction="backward")
+
+    # Compare with direct method call
+    expected = search_db.search.next_code(start_ea, direction=SearchDirection.UP)
+
+    assert result == expected, 'find_next with backward should match UP direction'
+
+
+def test_find_next_validates_address(search_db):
+    """
+    Test that find_next() properly validates the address parameter.
+    """
+    from ida_domain.base import InvalidEAError
+
+    with pytest.raises(InvalidEAError):
+        search_db.search.find_next(0xFFFFFFFFFFFFFFFF, "code")
+
+
+def test_find_next_validates_what_parameter(search_db):
+    """
+    Test that find_next() validates the 'what' parameter.
+    """
+    from ida_domain.base import InvalidParameterError
+
+    valid_ea = search_db.minimum_ea
+
+    with pytest.raises(InvalidParameterError):
+        search_db.search.find_next(valid_ea, "invalid_type")
+
+    with pytest.raises(InvalidParameterError):
+        search_db.search.find_next(valid_ea, "")
+
+
+def test_find_next_validates_direction_parameter(search_db):
+    """
+    Test that find_next() validates the 'direction' parameter.
+    """
+    from ida_domain.base import InvalidParameterError
+
+    valid_ea = search_db.minimum_ea
+
+    with pytest.raises(InvalidParameterError):
+        search_db.search.find_next(valid_ea, "code", direction="invalid")

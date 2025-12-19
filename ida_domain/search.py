@@ -60,6 +60,83 @@ class Search(DatabaseEntity):
         super().__init__(database)
 
     # ============================================================================
+    # LLM-FRIENDLY UNIFIED SEARCH
+    # ============================================================================
+
+    def find_next(
+        self, ea: ea_t, what: str, direction: str = "forward"
+    ) -> Optional[ea_t]:
+        """
+        Find next address of specified type (LLM-friendly unified search).
+
+        This is an LLM-friendly unified interface for finding addresses. Instead
+        of remembering multiple method names (next_undefined, next_code, etc.),
+        LLMs can use this single method with a string parameter.
+
+        Args:
+            ea: Starting address for search
+            what: Type of address to find. One of:
+                - "undefined": Find next undefined/unexplored byte
+                - "defined": Find next defined item (instruction or data)
+                - "code": Find next code address
+                - "data": Find next data address
+                - "code_outside_function": Find next orphaned code
+            direction: Search direction. Either:
+                - "forward": Search towards higher addresses (default)
+                - "backward": Search towards lower addresses
+
+        Returns:
+            Address of next match, or None if not found
+
+        Raises:
+            InvalidEAError: If address is invalid
+            InvalidParameterError: If what or direction is not a valid option
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Find next code
+            >>> ea = db.search.find_next(0x401000, "code")
+            >>> # Find previous data
+            >>> ea = db.search.find_next(0x401000, "data", direction="backward")
+
+        Note:
+            This method provides a simpler API for LLMs that don't need to
+            remember the specific method names for each search type.
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        # Map direction string to enum
+        direction_lower = direction.lower()
+        if direction_lower == "forward":
+            search_dir = SearchDirection.DOWN
+        elif direction_lower == "backward":
+            search_dir = SearchDirection.UP
+        else:
+            raise InvalidParameterError(
+                'direction', direction, 'must be one of: "forward", "backward"'
+            )
+
+        # Dispatch to appropriate method based on what
+        what_lower = what.lower()
+        if what_lower == "undefined":
+            return self.next_undefined(ea, direction=search_dir)
+        elif what_lower == "defined":
+            return self.next_defined(ea, direction=search_dir)
+        elif what_lower == "code":
+            return self.next_code(ea, direction=search_dir)
+        elif what_lower == "data":
+            return self.next_data(ea, direction=search_dir)
+        elif what_lower == "code_outside_function":
+            return self.next_code_outside_function(ea, direction=search_dir)
+        else:
+            raise InvalidParameterError(
+                'what', what,
+                'must be one of: "undefined", "defined", "code", "data", '
+                '"code_outside_function"'
+            )
+
+    # ============================================================================
     # STATE-BASED SEARCHES
     # ============================================================================
 
