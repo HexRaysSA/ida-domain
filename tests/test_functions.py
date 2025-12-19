@@ -848,3 +848,16 @@ class TestFunctionsTailOperations:
             # Should return to original count (or close to it)
             # Note: IDA's behavior may vary, so we just check it's a valid result
             assert isinstance(after_remove_tails, list)
+
+
+class TestFunctionsCount:
+    """Tests for count() method."""
+
+    def test_functions_count(self, test_env):
+        """Test count() returns total function count."""
+        db = test_env
+        count = db.functions.count()
+        assert isinstance(count, int)
+        assert count >= 0
+        # Should match len()
+        assert count == len(db.functions)

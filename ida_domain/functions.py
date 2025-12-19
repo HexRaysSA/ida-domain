@@ -552,6 +552,19 @@ class Functions(DatabaseEntity):
         """
         return cast(int, ida_funcs.get_func_qty())
 
+    def count(self) -> int:
+        """
+        Get the total number of functions in the database.
+
+        Returns:
+            int: The total function count.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> print(f"Database has {db.functions.count()} functions")
+        """
+        return len(self)
+
     def get_between(self, start_ea: ea_t, end_ea: ea_t) -> Iterator[func_t]:
         """
         Retrieves functions within the specified address range.
