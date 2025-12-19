@@ -861,3 +861,17 @@ class TestFunctionsCount:
         assert count >= 0
         # Should match len()
         assert count == len(db.functions)
+
+
+class TestFunctionsExistsAt:
+    """Tests for exists_at() method."""
+
+    def test_functions_exists_at(self, test_env):
+        """Test exists_at() checks if function exists."""
+        db = test_env
+        # Get a known function address
+        func = next(iter(db.functions.get_all()), None)
+        if func:
+            assert db.functions.exists_at(func.start_ea) is True
+        # Non-function address should return False
+        assert db.functions.exists_at(0xDEADBEEF) is False

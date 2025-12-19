@@ -565,6 +565,22 @@ class Functions(DatabaseEntity):
         """
         return len(self)
 
+    def exists_at(self, ea: ea_t) -> bool:
+        """
+        Check if a function exists at the given address.
+
+        Args:
+            ea: Address to check.
+
+        Returns:
+            bool: True if a function exists at or contains the address.
+
+        Example:
+            >>> if db.functions.exists_at(0x401000):
+            ...     func = db.functions.get_at(0x401000)
+        """
+        return self.get_at(ea) is not None
+
     def get_between(self, start_ea: ea_t, end_ea: ea_t) -> Iterator[func_t]:
         """
         Retrieves functions within the specified address range.
