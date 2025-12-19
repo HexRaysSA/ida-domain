@@ -100,6 +100,80 @@ class Exporter(DatabaseEntity):
         """Initialize the Exporter entity."""
         super().__init__(database)
 
+    # ============================================================================
+    # LLM-FRIENDLY UNIFIED EXPORT
+    # ============================================================================
+
+    def export(
+        self,
+        path: str,
+        format: str,
+        start: Optional[ea_t] = None,
+        end: Optional[ea_t] = None,
+    ) -> bool:
+        """
+        Export database contents to a file (LLM-friendly unified export).
+
+        This is an LLM-friendly unified interface for exporting database contents.
+        Instead of remembering multiple method names (generate_assembly,
+        generate_map_file, etc.), LLMs can use this single method with a
+        string format parameter.
+
+        Args:
+            path: Output file path
+            format: Export format. One of:
+                - "asm": Assembly file
+                - "lst": Listing file
+                - "map": MAP file (address map with symbols)
+                - "idc": IDC script
+                - "exe": Reconstructed executable
+                - "diff": Difference file
+            start: Start address (None = database minimum)
+            end: End address (None = database maximum)
+
+        Returns:
+            True if export was successful, False otherwise
+
+        Raises:
+            InvalidParameterError: If format is not a valid option
+            InvalidEAError: If start or end address is invalid
+            IOError: If file cannot be written
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Export assembly file
+            >>> db.exporter.export("output.asm", "asm")
+            >>> # Export MAP file
+            >>> db.exporter.export("output.map", "map")
+
+        Note:
+            This method provides a simpler API for LLMs that don't need to
+            remember the specific method names for each export format.
+        """
+        format_lower = format.lower()
+
+        if format_lower == "asm":
+            return self.generate_assembly(path, start, end)
+        elif format_lower == "lst":
+            return self.generate_listing(path, start, end)
+        elif format_lower == "map":
+            return self.generate_map_file(path, start, end)
+        elif format_lower == "idc":
+            return self.generate_idc_script(path, start, end)
+        elif format_lower == "exe":
+            return self.generate_executable(path)
+        elif format_lower == "diff":
+            return self.generate_diff(path, start, end)
+        else:
+            raise InvalidParameterError(
+                'format', format,
+                'must be one of: "asm", "lst", "map", "idc", "exe", "diff"'
+            )
+
+    # ============================================================================
+    # EXPORT METHODS
+    # ============================================================================
+
     def generate_map_file(
         self,
         output_path: str,

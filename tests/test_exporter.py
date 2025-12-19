@@ -476,3 +476,34 @@ def test_export_flags_enum_has_correct_values():
     # Test flag combination
     combined = ExportFlags.GEN_XREF | ExportFlags.GEN_ASSUME
     assert isinstance(combined, ExportFlags), 'Combined flags should be ExportFlags type'
+
+
+# =============================================================================
+# LLM-FRIENDLY API TESTS
+# =============================================================================
+
+
+def test_export_method_exists_and_is_callable(exporter_db):
+    """
+    Test that export() method exists as an LLM-friendly unified export interface.
+
+    RATIONALE: The export() method provides a unified interface for LLMs to
+    export database contents using a string format parameter instead of
+    remembering individual method names like generate_assembly(), generate_map_file(),
+    etc. This follows the LLM-friendly API pattern.
+    """
+    assert hasattr(exporter_db.exporter, 'export'), 'export() method should exist'
+    assert callable(exporter_db.exporter.export), 'export() should be callable'
+
+
+def test_export_validates_format_parameter(exporter_db, temp_output_dir):
+    """
+    Test that export() validates the 'format' parameter.
+    """
+    output_path = os.path.join(temp_output_dir, 'test_output.txt')
+
+    with pytest.raises(InvalidParameterError):
+        exporter_db.exporter.export(output_path, "invalid_format")
+
+    with pytest.raises(InvalidParameterError):
+        exporter_db.exporter.export(output_path, "")
