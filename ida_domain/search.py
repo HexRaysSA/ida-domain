@@ -19,7 +19,7 @@ from .base import (
 if TYPE_CHECKING:
     from .database import Database
 
-__all__ = ['Search', 'SearchDirection', 'AccessType']
+__all__ = ['Search', 'SearchDirection']
 
 
 class SearchDirection(IntEnum):
@@ -29,15 +29,6 @@ class SearchDirection(IntEnum):
     """Search towards lower addresses"""
     DOWN = 1
     """Search towards higher addresses"""
-
-
-class AccessType(IntEnum):
-    """Type of register access to search for."""
-
-    READ = ida_search.SEARCH_USE  # 0x200
-    """Search for register read access"""
-    WRITE = ida_search.SEARCH_DEF  # 0x400
-    """Search for register write access"""
 
 
 @decorate_all_methods(check_db_open)
@@ -825,132 +816,3 @@ class Search(DatabaseEntity):
                 if ea == BADADDR or ea >= end_ea:
                     break
                 yield (ea, 0)
-
-    # ============================================================================
-    # REGISTER ACCESS SEARCHES
-    # ============================================================================
-
-    def next_register_access(
-        self,
-        register_name: str,
-        start_ea: ea_t,
-        end_ea: Optional[ea_t] = None,
-        access_type: AccessType = AccessType.READ,
-        direction: SearchDirection = SearchDirection.DOWN,
-    ) -> Optional[ea_t]:
-        """
-        Find the next access to a specific register.
-
-        Args:
-            register_name: Name of register to search for (e.g., "eax", "rdi")
-            start_ea: Starting address for search
-            end_ea: Ending address (default: None means unlimited)
-            access_type: Type of access to find (READ or WRITE)
-            direction: Search direction (default: DOWN)
-
-        Returns:
-            Address of register access, or None if not found
-
-        Raises:
-            InvalidEAError: If start_ea is invalid
-            InvalidParameterError: If register_name is empty
-
-        Note:
-            Does not follow control flow (scans linearly).
-            Only detects direct register references.
-            Ignores function calls and system traps.
-
-        Example:
-            >>> db = Database.open_current()
-            >>> ea = db.search.next_register_access("eax", 0x401000,
-            ...                                     access_type=AccessType.READ)
-            >>> if ea:
-            ...     insn = db.instructions.get_at(ea)
-            ...     print(f"EAX read at {hex(ea)}: {insn.mnemonic}")
-        """
-        if not self.database.is_valid_ea(start_ea):
-            raise InvalidEAError(start_ea)
-        if not register_name:
-            raise InvalidParameterError('register_name', register_name, 'cannot be empty')
-
-        if end_ea is None:
-            end_ea = BADADDR
-
-        sflag = ida_search.SEARCH_NEXT
-        if direction == SearchDirection.DOWN:
-            sflag |= ida_search.SEARCH_DOWN
-        else:
-            sflag |= ida_search.SEARCH_UP
-
-        # Add access type flag
-        sflag |= access_type.value
-
-        # Call legacy API - requires reg_access_t output parameter
-        # Note: reg_access_t is a SWIG-generated class that may not be accessible
-        # We create a simple object to satisfy the SWIG wrapper
-        class RegAccess:
-            pass
-
-        out = RegAccess()
-        ea = ida_search.find_reg_access(out, start_ea, end_ea, register_name, sflag)
-
-        return ea if ea != BADADDR else None
-
-    def all_register_accesses(
-        self,
-        register_name: str,
-        start_ea: Optional[ea_t] = None,
-        end_ea: Optional[ea_t] = None,
-        access_type: AccessType = AccessType.READ,
-    ) -> Iterator[ea_t]:
-        """
-        Iterate over all accesses to a specific register.
-
-        Args:
-            register_name: Name of register to search for
-            start_ea: Start of range (default: database minimum)
-            end_ea: End of range (default: database maximum)
-            access_type: Type of access to find (READ or WRITE)
-
-        Yields:
-            Addresses where register is accessed
-
-        Raises:
-            InvalidEAError: If start_ea or end_ea is invalid
-            InvalidParameterError: If register_name is empty or start_ea >= end_ea
-
-        Example:
-            >>> db = Database.open_current()
-            >>> for ea in db.search.all_register_accesses("rsp",
-            ...                                            access_type=AccessType.READ):
-            ...     print(f"RSP read at {hex(ea)}")
-            ...     break
-        """
-        if not register_name:
-            raise InvalidParameterError('register_name', register_name, 'cannot be empty')
-
-        if start_ea is None:
-            start_ea = ida_ida.inf_get_min_ea()
-        if end_ea is None:
-            end_ea = ida_ida.inf_get_max_ea()
-
-        if not self.database.is_valid_ea(start_ea, strict_check=False):
-            raise InvalidEAError(start_ea)
-        if not self.database.is_valid_ea(end_ea, strict_check=False):
-            raise InvalidEAError(end_ea)
-        if start_ea >= end_ea:
-            raise InvalidParameterError('start_ea', start_ea, 'must be less than end_ea')
-
-        ea = start_ea
-        while ea < end_ea:
-            # Build flags
-            sflag = ida_search.SEARCH_DOWN | ida_search.SEARCH_NEXT | access_type.value
-
-            # Find next access - requires reg_access_t output parameter
-            out = ida_search.reg_access_t()
-            ea = ida_search.find_reg_access(out, ea, end_ea, register_name, sflag)
-
-            if ea == BADADDR or ea >= end_ea:
-                break
-
-            yield ea

@@ -8,7 +8,7 @@ import pytest
 
 import ida_domain
 from ida_domain.database import IdaCommandOptions
-from ida_domain.search import AccessType, SearchDirection
+from ida_domain.search import SearchDirection
 
 
 @pytest.fixture(scope='module')
@@ -433,93 +433,6 @@ def test_all_untyped_operands_iterator(search_db):
 
 
 # =============================================================================
-# REGISTER ACCESS SEARCH TESTS
-# =============================================================================
-
-
-@pytest.mark.skip(
-    reason=(
-        'Register access search requires reg_access_t which is not '
-        'accessible in current IDA Python version'
-    )
-)
-def test_next_register_access_format(search_db):
-    """
-    Test that next_register_access has correct signature and return type.
-
-    RATIONALE: Register access search is used for data flow analysis and
-    tracking variable usage. The test validates:
-    - Method accepts register name and access type
-    - Returns Optional[ea_t] (address or None)
-    - Handles common register names
-
-    We search for a common register (rax/eax) which should appear in most
-    x86/x64 binaries. The result might be None if the register isn't used
-    in the scanned range, which is acceptable.
-
-    NOTE: This test is currently skipped because ida_search.reg_access_t is not
-    accessible in the IDA Python API. This is a known limitation that needs to
-    be investigated further or the API may need adjustment for this specific
-    functionality.
-    """
-    start_ea = search_db.minimum_ea
-
-    # Test READ access
-    result_read = search_db.search.next_register_access(
-        'rax', start_ea, access_type=AccessType.READ
-    )
-    assert result_read is None or search_db.is_valid_ea(result_read), (
-        'Should return None or valid address'
-    )
-
-    # Test WRITE access
-    result_write = search_db.search.next_register_access(
-        'rax', start_ea, access_type=AccessType.WRITE
-    )
-    assert result_write is None or search_db.is_valid_ea(result_write), (
-        'Should return None or valid address'
-    )
-
-
-@pytest.mark.skip(
-    reason=(
-        'Register access search requires reg_access_t which is not '
-        'accessible in current IDA Python version'
-    )
-)
-def test_all_register_accesses_iterator(search_db):
-    """
-    Test iteration over all accesses to a register.
-
-    RATIONALE: For data flow analysis, we need to find all uses of a register
-    within a function or region. This iterator enables such analysis.
-
-    The test validates iterator functionality and that any found accesses
-    have valid addresses within the search range.
-
-    NOTE: This test is currently skipped because ida_search.reg_access_t is not
-    accessible in the IDA Python API. This is a known limitation that needs to
-    be investigated further or the API may need adjustment for this specific
-    functionality.
-    """
-    start_ea = search_db.minimum_ea
-    end_ea = search_db.maximum_ea
-
-    count = 0
-    for ea in search_db.search.all_register_accesses(
-        'rax', start_ea, end_ea, access_type=AccessType.READ
-    ):
-        assert search_db.is_valid_ea(ea), f'Register access at {hex(ea)} should be valid'
-        assert start_ea <= ea < end_ea, 'Address should be within range'
-        count += 1
-        if count >= 10:
-            break
-
-    # Count can be 0 if register not used in range
-    assert count >= 0, 'Should return non-negative count'
-
-
-# =============================================================================
 # ERROR HANDLING TESTS
 # =============================================================================
 
@@ -563,23 +476,6 @@ def test_invalid_range_raises_error(search_db):
 
     with pytest.raises(InvalidParameterError):
         list(search_db.search.all_code(start_ea, end_ea))
-
-
-def test_empty_register_name_raises_error(search_db):
-    """
-    Test that empty register name raises InvalidParameterError.
-
-    RATIONALE: Register searches require a valid register name. Empty string
-    is not valid and should be caught before calling the legacy API.
-
-    This validates our input validation for register-based searches.
-    """
-    from ida_domain.base import InvalidParameterError
-
-    start_ea = search_db.minimum_ea
-
-    with pytest.raises(InvalidParameterError):
-        search_db.search.next_register_access('', start_ea)
 
 
 # =============================================================================
