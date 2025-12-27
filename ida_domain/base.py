@@ -1,3 +1,37 @@
+"""
+Base classes and utilities for ida-domain entities.
+
+API Return Conventions
+----------------------
+
+The ida-domain API follows these return conventions consistently:
+
+**get_* methods:**
+- Return `Optional[T]` - the item if found, or None if not found
+- Never raise exceptions for "not found" cases
+- Raise `InvalidEAError` only for invalid addresses
+
+**create_* / set_* methods:**
+- Return `bool` - True on success, False on failure
+- May raise exceptions for invalid parameters
+
+**has_* / is_* methods:**
+- Return `bool` - True if condition is met, False otherwise
+- Raise `InvalidEAError` for invalid addresses
+
+**count_* methods:**
+- Return `int` - the count (0 if none found)
+- Raise `InvalidEAError` for invalid addresses
+
+Example:
+    >>> func = db.functions.get_at(ea)  # Returns Optional[func_t]
+    >>> if func is None:
+    ...     print("No function at address")
+    >>>
+    >>> success = db.bytes.create_dword_at(ea)  # Returns bool
+    >>> if not success:
+    ...     print("Failed to create dword")
+"""
 from __future__ import annotations
 
 import functools
