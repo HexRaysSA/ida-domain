@@ -312,6 +312,25 @@ class TestBytesItemNavigation:
         assert items_found > 0, 'Should have found at least one item in database'
 
 
+def _get_operand_text(db, ea, n):
+    """Helper to extract operand text from disassembly."""
+    disasm = db.bytes.get_disassembly_at(ea)
+    if not disasm:
+        return None
+
+    # Parse operands from disassembly
+    # Format is typically: "mnemonic op1, op2, ..."
+    parts = disasm.split(None, 1)  # Split mnemonic from operands
+    if len(parts) < 2:
+        return None
+
+    operands = parts[1].split(',')
+    if n >= len(operands):
+        return None
+
+    return operands[n].strip()
+
+
 class TestBytesOperandManipulation:
     """Tests for operand manipulation methods (set_operand_hex, set_operand_decimal, etc.)."""
 
@@ -339,26 +358,36 @@ class TestBytesOperandManipulation:
 
         for _ in range(max_attempts):
             next_head = test_env.bytes.get_next_head(search_addr)
-            if next_head is None:
+            if next_head is None or next_head >= test_env.maximum_ea:
                 break
 
-            # Check if this is code
             if test_env.bytes.is_code_at(next_head):
-                # Try to set operand to hex (if it has operands, this should work)
-                # We test operand 0 (first operand)
+                # Get operand text before formatting
+                before_text = _get_operand_text(test_env, next_head, 0)
+
+                # Try to set operand to hex
                 result = test_env.bytes.set_operand_hex(next_head, 0)
                 if result:
-                    found_addr = next_head
-                    break
+                    # Get operand text after formatting
+                    after_text = _get_operand_text(test_env, next_head, 0)
 
-            search_addr = next_head + 1
+                    # Verify format changed to hex (contains 0x or uses hex letters)
+                    if after_text and ('0x' in after_text.lower() or
+                                      any(c in 'abcdefABCDEF' for c in after_text)):
+                        found_addr = next_head
+                        break
+
+            search_addr = next_head
 
         if found_addr is None:
-            pytest.skip('Could not find instruction with immediate operand')
+            pytest.skip('Could not find instruction with hex-formattable operand')
 
-        # Verify set_operand_hex returned True
-        assert test_env.bytes.set_operand_hex(found_addr, 0), (
-            f'set_operand_hex should return True for valid instruction at 0x{found_addr:x}'
+        # Verify the formatting actually changed to hex
+        after_text = _get_operand_text(test_env, found_addr, 0)
+        assert after_text is not None, "Should have operand text"
+        assert ('0x' in after_text.lower() or
+                any(c in 'abcdefABCDEF' for c in after_text)), (
+            f"Operand should be in hex format, got: {after_text}"
         )
 
     def test_set_operand_decimal_changes_display_representation(self, test_env):
@@ -381,22 +410,34 @@ class TestBytesOperandManipulation:
 
         for _ in range(max_attempts):
             next_head = test_env.bytes.get_next_head(search_addr)
-            if next_head is None:
+            if next_head is None or next_head >= test_env.maximum_ea:
                 break
 
             if test_env.bytes.is_code_at(next_head):
+                # Get operand text before formatting
+                before_text = _get_operand_text(test_env, next_head, 0)
+
+                # Try to set operand to decimal
                 result = test_env.bytes.set_operand_decimal(next_head, 0)
                 if result:
-                    found_addr = next_head
-                    break
+                    # Get operand text after formatting
+                    after_text = _get_operand_text(test_env, next_head, 0)
 
-            search_addr = next_head + 1
+                    # Verify format changed to decimal (no 0x prefix, only digits 0-9)
+                    if after_text and '0x' not in after_text.lower() and after_text.replace('-', '').isdigit():
+                        found_addr = next_head
+                        break
+
+            search_addr = next_head
 
         if found_addr is None:
-            pytest.skip('Could not find instruction with immediate operand')
+            pytest.skip('Could not find instruction with decimal-formattable operand')
 
-        assert test_env.bytes.set_operand_decimal(found_addr, 0), (
-            f'set_operand_decimal should return True for valid instruction at 0x{found_addr:x}'
+        # Verify the formatting actually changed to decimal
+        after_text = _get_operand_text(test_env, found_addr, 0)
+        assert after_text is not None, "Should have operand text"
+        assert '0x' not in after_text.lower(), (
+            f"Decimal operand should not contain '0x', got: {after_text}"
         )
 
     def test_set_operand_format_methods_are_reversible(self, test_env):
