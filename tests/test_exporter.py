@@ -114,6 +114,19 @@ def test_generate_map_file_with_address_range(exporter_db, temp_output_dir):
     assert success is True, 'generate_map_file should succeed with range'
     assert os.path.exists(output_path), 'MAP file should be created'
 
+    # CRITICAL: Verify content is actually a MAP file
+    with open(output_path, 'r') as f:
+        content = f.read()
+
+    # MAP files should contain address:symbol mappings or section information
+    has_map_content = len(content.strip()) > 0 and (
+        any(c in content for c in [':', '0x']) or  # Address notation
+        any(word in content.lower() for word in ['start', 'address', 'segment'])
+    )
+    assert has_map_content, (
+        f"MAP file should contain address mappings or segment information"
+    )
+
 
 def test_generate_map_file_invalid_start_ea_raises_error(exporter_db, temp_output_dir):
     """
@@ -170,6 +183,23 @@ def test_generate_assembly_creates_file(exporter_db, temp_output_dir):
     assert success is True, 'generate_assembly should return True on success'
     assert os.path.exists(output_path), 'Assembly file should be created'
     assert os.path.getsize(output_path) > 0, 'Assembly file should not be empty'
+
+    # CRITICAL: Verify content is actually assembly
+    with open(output_path, 'r') as f:
+        content = f.read()
+
+    # Assembly files should contain instruction mnemonics or assembly directives
+    # Check for common patterns
+    has_assembly = (
+        any(pattern in content.lower() for pattern in [
+            'mov', 'push', 'pop', 'call', 'jmp', 'ret',  # Common instructions
+            '.text', '.data', '.section',  # Directives
+            ';', '#'  # Comments
+        ])
+    )
+    assert has_assembly, (
+        f"Assembly file should contain assembly instructions or directives"
+    )
 
 
 def test_generate_assembly_with_flags(exporter_db, temp_output_dir):
@@ -276,11 +306,23 @@ def test_export_bytes_creates_binary_file(exporter_db, temp_output_dir):
     # Export a small range (100 bytes)
     end_ea = min_ea + 100
 
+    # Read original bytes from database
+    original_bytes = exporter_db.bytes.get_bytes_at(min_ea, 100)
+
     num_bytes = exporter_db.exporter.export_bytes(output_path, min_ea, end_ea)
 
     assert num_bytes == 100, 'export_bytes should return number of bytes exported'
     assert os.path.exists(output_path), 'Binary file should be created'
     assert os.path.getsize(output_path) == 100, 'File size should match exported byte count'
+
+    # CRITICAL: Verify exported bytes match original (round-trip validation)
+    with open(output_path, 'rb') as f:
+        exported_bytes = f.read()
+
+    assert exported_bytes == original_bytes, (
+        f"Exported bytes should match original: "
+        f"exported {len(exported_bytes)} bytes, original {len(original_bytes)} bytes"
+    )
 
 
 def test_export_bytes_invalid_range_raises_error(exporter_db, temp_output_dir):
