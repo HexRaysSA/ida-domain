@@ -4,16 +4,22 @@ Base classes and utilities for ida-domain entities.
 API Return Conventions
 ----------------------
 
-The ida-domain API follows these return conventions consistently:
+The ida-domain API follows these return conventions:
 
 **get_* methods:**
 - Return `Optional[T]` - the item if found, or None if not found
+- Some return `Iterator[T]` when multiple items are possible at one location
 - Never raise exceptions for "not found" cases
-- Raise `InvalidEAError` only for invalid addresses
+- Raise `InvalidEAError` for invalid addresses
 
-**create_* / set_* methods:**
-- Return `bool` - True on success, False on failure
+**create_* methods:**
+- Most return `bool` - True on success, False on failure
+- Factory methods may return the created object instead
 - May raise exceptions for invalid parameters
+
+**set_* methods:**
+- Most return `None` (raise exceptions on failure)
+- Some return `bool` for operations that may fail without exception
 
 **has_* / is_* methods:**
 - Return `bool` - True if condition is met, False otherwise
