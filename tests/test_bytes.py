@@ -177,48 +177,23 @@ class TestBytesItemNavigation:
             # Move to next test location (with some padding)
             offset += expected_size + 8
 
-    def test_get_item_head_at_with_invalid_address_raises_error(self, test_env):
+    @pytest.mark.parametrize("method_name,args", [
+        ("get_item_head_at", (0xFFFFFFFFFFFFFFFF,)),
+        ("get_item_end_at", (0xFFFFFFFFFFFFFFFF,)),
+        ("get_item_size_at", (0xFFFFFFFFFFFFFFFF,)),
+    ])
+    def test_item_navigation_methods_validate_addresses(self, test_env, method_name, args):
         """
-        Test that get_item_head_at raises InvalidEAError for invalid addresses.
-
-        RATIONALE: Robust error handling is critical for preventing crashes and
-        providing clear feedback when invalid inputs are provided. An address outside
-        the valid database range should raise a specific exception rather than
-        returning incorrect data or causing undefined behavior.
-
-        This test validates that the API properly validates input addresses and
-        raises the appropriate exception for out-of-range addresses.
-        """
-        invalid_addr = 0xFFFFFFFFFFFFFFFF  # Address outside valid range
-
-        with pytest.raises(InvalidEAError):
-            test_env.bytes.get_item_head_at(invalid_addr)
-
-    def test_get_item_end_at_with_invalid_address_raises_error(self, test_env):
-        """
-        Test that get_item_end_at raises InvalidEAError for invalid addresses.
+        Test that item navigation methods validate addresses and raise InvalidEAError.
 
         RATIONALE: Consistent error handling across all methods ensures predictable
-        API behavior. Just like get_item_head_at, get_item_end_at should validate
-        its input and raise InvalidEAError for addresses outside the valid range.
+        API behavior. All item navigation methods should validate input addresses
+        and raise InvalidEAError for out-of-range values.
         """
-        invalid_addr = 0xFFFFFFFFFFFFFFFF  # Address outside valid range
+        method = getattr(test_env.bytes, method_name)
 
         with pytest.raises(InvalidEAError):
-            test_env.bytes.get_item_end_at(invalid_addr)
-
-    def test_get_item_size_at_with_invalid_address_raises_error(self, test_env):
-        """
-        Test that get_item_size_at raises InvalidEAError for invalid addresses.
-
-        RATIONALE: Consistent error handling ensures that all three item navigation
-        methods behave predictably. An invalid address should always raise
-        InvalidEAError, making error handling in client code straightforward.
-        """
-        invalid_addr = 0xFFFFFFFFFFFFFFFF  # Address outside valid range
-
-        with pytest.raises(InvalidEAError):
-            test_env.bytes.get_item_size_at(invalid_addr)
+            method(*args)
 
     def test_item_navigation_consistency(self, test_env):
         """
