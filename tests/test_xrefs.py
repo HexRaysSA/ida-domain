@@ -200,26 +200,51 @@ class TestXrefExistence:
 
     def test_has_code_refs_to_for_data_address(self, test_env):
         """
-        Test has_code_refs_to returns False for a data address.
+        Test has_code_refs_to returns True for a data address with code references.
 
-        RATIONALE: Data addresses typically don't have code references (though they
-        may have data references). This test ensures has_code_refs_to specifically
-        filters for code references only, not data references.
+        RATIONALE: This test validates that has_code_refs_to correctly identifies
+        when code references point to data addresses. We create a data item and
+        add a code reference to it, then verify the method detects it.
 
-        We create a data item and verify it's not detected as having code references.
+        This ensures the method works correctly for data addresses that ARE
+        referenced by code, complementing other tests that check unreferenced data.
         """
-        # Find or create a data address
-        test_addr = test_env.minimum_ea + 0x1000
+        # Find instruction address - use first instruction in first function
+        funcs = list(test_env.functions.get_all())
+        assert len(funcs) > 0, 'Binary should have functions'
 
-        if not test_env.is_valid_ea(test_addr):
-            pytest.skip('Test address not available')
+        # Try to find any instruction in the first function
+        func = funcs[0]
+        instr_addr = None
+        ea = func.start_ea
+        while ea < func.end_ea:
+            insn = test_env.instructions.get_at(ea)
+            if insn:
+                instr_addr = insn.ea
+                break
+            ea += 1
 
-        # Ensure this is data
-        test_env.bytes.create_dword_at(test_addr, count=1, force=True)
+        # Fallback to function start if we can't find an instruction
+        if not instr_addr:
+            instr_addr = func.start_ea
 
-        # Data should not have code refs (though it might have data refs)
-        result = test_env.xrefs.has_code_refs_to(test_addr)
-        assert isinstance(result, bool), 'has_code_refs_to should return boolean'
+        # Find suitable data area
+        data_addr = test_env.minimum_ea + 0x2000
+        if not test_env.is_valid_ea(data_addr):
+            data_addr = test_env.maximum_ea - 0x100
+
+        # Create data and add code reference to it
+        test_env.bytes.create_dword_at(data_addr, force=True)
+
+        import ida_xref
+
+        test_env.instructions.add_data_reference(
+            from_ea=instr_addr, to_ea=data_addr, reference_type=ida_xref.dr_R
+        )
+
+        # Verify has_code_refs_to detects the code reference
+        result = test_env.xrefs.has_code_refs_to(data_addr)
+        assert result is True, f'Data at 0x{data_addr:x} should have code references'
 
     def test_has_data_refs_to_for_data_with_references(self, test_env):
         """
