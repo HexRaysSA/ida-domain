@@ -572,9 +572,10 @@ class TestOperandOffsetOperations:
             test_insn.ea, test_operand_n
         )
 
-        # Verify we got a base address back (should match what we set)
-        assert retrieved_base is not None or retrieved_base is None, (
-            'get_operand_offset_base should return address or None'
+        # Verify the base matches what we set
+        assert retrieved_base == base_addr, (
+            f"Retrieved base {hex(retrieved_base)} should match "
+            f"set base {hex(base_addr)}"
         )
 
     def test_get_operand_offset_base_returns_none_for_non_offset(self, test_env):
