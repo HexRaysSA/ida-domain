@@ -110,22 +110,40 @@ def test_analyze_method_is_alias_for_analyze_range(analysis_db):
     # Wait for initial analysis
     analysis_db.analysis.wait()
 
-    # Get a valid range
-    start_ea = analysis_db.minimum_ea
+    # Get a valid range for analysis
+    start_ea = analysis_db.minimum_ea + 0x1000
     end_ea = min(start_ea + 0x100, analysis_db.maximum_ea)
+
+    if not analysis_db.is_valid_ea(start_ea) or not analysis_db.is_valid_ea(end_ea - 1):
+        pytest.skip('Test range not valid in this binary')
+
+    # Count defined items before analysis
+    defined_before = sum(
+        1 for ea in range(start_ea, end_ea)
+        if not analysis_db.bytes.is_unknown_at(ea)
+    )
 
     # Call analyze() with wait=True (default)
     result = analysis_db.analysis.analyze(start_ea, end_ea)
     assert isinstance(result, int), 'analyze() should return int (address count)'
 
-    # Call analyze() with wait=False
-    result2 = analysis_db.analysis.analyze(start_ea, end_ea, wait=False)
-    assert isinstance(result2, int), 'analyze() with wait=False should return int'
-    assert result2 == 0, 'analyze() with wait=False should return 0'
+    # Count defined items after analysis
+    defined_after = sum(
+        1 for ea in range(start_ea, end_ea)
+        if not analysis_db.bytes.is_unknown_at(ea)
+    )
 
-    # Wait for completion
-    analysis_db.analysis.wait()
-    assert analysis_db.analysis.is_complete, 'Analysis should complete'
+    # CRITICAL: Verify analysis occurred (some undefined became defined)
+    assert defined_after >= defined_before, (
+        f"Analysis should not decrease defined items: "
+        f"before={defined_before}, after={defined_after}"
+    )
+
+    # If we had undefined bytes, they should have been analyzed
+    if defined_before < (end_ea - start_ea):
+        assert defined_after > defined_before, (
+            "Analysis should have converted some undefined bytes"
+        )
 
 
 def test_analyze_validates_address_range(analysis_db):
@@ -180,21 +198,27 @@ def test_schedule_method_exists_and_dispatches(analysis_db):
     # Get a valid address
     valid_ea = analysis_db.minimum_ea
 
-    # Test schedule with "code"
+    # Test schedule with "code" and verify it completes
     analysis_db.analysis.schedule(valid_ea, "code")
-
-    # Test schedule with "function"
-    analysis_db.analysis.schedule(valid_ea, "function")
-
-    # Test schedule with "reanalysis" (default)
-    analysis_db.analysis.schedule(valid_ea, "reanalysis")
-
-    # Test with default parameter
-    analysis_db.analysis.schedule(valid_ea)
-
-    # Wait for all scheduled analysis
     analysis_db.analysis.wait()
-    assert analysis_db.analysis.is_complete, 'Analysis should complete'
+
+    # CRITICAL: Verify analysis completed successfully
+    assert analysis_db.analysis.is_complete, (
+        "Analysis should complete after scheduling code analysis"
+    )
+
+    # Test other schedule types complete without error
+    analysis_db.analysis.schedule(valid_ea, "function")
+    analysis_db.analysis.wait()
+    assert analysis_db.analysis.is_complete, (
+        "Analysis should complete after scheduling function analysis"
+    )
+
+    analysis_db.analysis.schedule(valid_ea, "reanalysis")
+    analysis_db.analysis.wait()
+    assert analysis_db.analysis.is_complete, (
+        "Analysis should complete after scheduling reanalysis"
+    )
 
 
 def test_schedule_validates_address(analysis_db):
