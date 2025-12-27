@@ -432,8 +432,22 @@ class TestOperandOffsetOperations:
             base=0,  # Auto-detect base
         )
 
-        # Verify the method returns a boolean (success or failure)
-        assert isinstance(result, bool), 'set_operand_offset should return boolean'
+        # Verify it worked
+        if not result:
+            pytest.skip('Could not convert operand to offset')
+
+        assert result is True, "set_operand_offset should return True"
+
+        # CRITICAL: Verify the offset was actually set
+        base = test_env.instructions.get_operand_offset_base(test_insn.ea, test_operand_n)
+        assert base is not None, (
+            f"Operand at {hex(test_insn.ea)} should now have offset base"
+        )
+
+        # Verify operand is now marked as offset
+        assert test_env.bytes.is_offset_operand(test_insn.ea, test_operand_n), (
+            f"Operand at {hex(test_insn.ea)} should be marked as offset"
+        )
 
     def test_set_operand_offset_with_explicit_base_and_target(self, test_env):
         """
@@ -499,7 +513,22 @@ class TestOperandOffsetOperations:
                 test_insn.ea, test_operand_n, base=base_addr, target=target_addr
             )
 
-            assert isinstance(result, bool), 'set_operand_offset should return boolean'
+            # Verify it worked
+            if not result:
+                pytest.skip('Could not set operand offset with explicit base/target')
+
+            assert result is True, "set_operand_offset should return True"
+
+            # Verify the offset was actually set
+            retrieved_base = test_env.instructions.get_operand_offset_base(test_insn.ea, test_operand_n)
+            assert retrieved_base is not None, (
+                f"Operand should have offset base after set_operand_offset"
+            )
+
+            # Verify operand is marked as offset
+            assert test_env.bytes.is_offset_operand(test_insn.ea, test_operand_n), (
+                f"Operand should be marked as offset"
+            )
 
     def test_set_operand_offset_with_invalid_address_raises_error(self, test_env):
         """
@@ -828,9 +857,19 @@ class TestOperandOffsetOperations:
             test_insn.ea, test_operand_n, include_displacement=True
         )
 
-        # Verify result is either None or a string
-        assert expr is None or isinstance(expr, str), (
-            'format_offset_expression should return None or str'
+        # Verify result is a non-empty string with offset formatting
+        if expr is None:
+            pytest.skip('format_offset_expression returned None for this operand')
+
+        assert isinstance(expr, str), (
+            'format_offset_expression should return str'
+        )
+        assert len(expr) > 0, (
+            'Formatted expression should be non-empty'
+        )
+        # Formatted offset expressions typically contain hex values or symbolic names
+        assert any(c in expr for c in ['0', 'x', '+', '-']) or expr.isalnum(), (
+            f'Formatted expression should contain offset components, got: {expr}'
         )
 
     def test_format_offset_expression_with_invalid_address_raises_error(self, test_env):
