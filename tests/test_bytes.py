@@ -1255,17 +1255,31 @@ class TestBytesSearchMethods:
             if ea is None:
                 break
 
-        if found_test_string and test_string:
-            # Now try to find this string
-            from ida_domain.bytes import SearchFlags
+        if not found_test_string or not test_string:
+            # Create a test string in a safe location
+            # Find unused space in database
+            test_addr = db.minimum_ea + 0x1000
 
-            result = db.bytes.find_text_between(test_string, flags=SearchFlags.DOWN)
+            # Find actually valid address
+            while not db.is_valid_ea(test_addr) and test_addr < db.maximum_ea:
+                test_addr += 0x100
 
-            # We found this string in the binary, so find_text_between should find it too
-            assert result is not None, f'find_text_between should find "{test_string}" in binary'
-            assert db.is_valid_ea(result), f'Result 0x{result:x} should be a valid address'
-        else:
-            pytest.skip('No suitable string found in binary to test with')
+            if db.is_valid_ea(test_addr):
+                # Create a simple string "TEST" at this location
+                test_string_bytes = b"TEST\x00"
+                for i, byte in enumerate(test_string_bytes):
+                    db.bytes.patch_byte(test_addr + i, byte)
+
+                test_string = "TEST"
+
+        # Now try to find this string
+        from ida_domain.bytes import SearchFlags
+
+        result = db.bytes.find_text_between(test_string, flags=SearchFlags.DOWN)
+
+        # We found this string in the binary, so find_text_between should find it too
+        assert result is not None, f'find_text_between should find "{test_string}" in binary'
+        assert db.is_valid_ea(result), f'Result 0x{result:x} should be a valid address'
 
     def test_find_text_between_with_invalid_text_raises_error(self, test_env):
         """
