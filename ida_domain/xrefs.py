@@ -861,7 +861,7 @@ class Xrefs(DatabaseEntity):
     # Xref Mutation Methods
     # ========================================================================
 
-    def add_code_xref(self, from_ea: ea_t, to_ea: ea_t, xref_type: XrefType) -> bool:
+    def add_code_xref(self, from_ea: ea_t, to_ea: ea_t, xref_type: XrefType) -> None:
         """
         Add a code cross-reference between two addresses.
 
@@ -869,9 +869,6 @@ class Xrefs(DatabaseEntity):
             from_ea: Source address (typically an instruction).
             to_ea: Target address (typically a function or code label).
             xref_type: Type of code reference (CALL_NEAR, CALL_FAR, JUMP_NEAR, etc.).
-
-        Returns:
-            True if xref was added successfully, False otherwise.
 
         Raises:
             InvalidEAError: If either address is invalid.
@@ -891,9 +888,8 @@ class Xrefs(DatabaseEntity):
             )
 
         ida_xref.add_cref(from_ea, to_ea, xref_type)
-        return True
 
-    def add_data_xref(self, from_ea: ea_t, to_ea: ea_t, xref_type: XrefType) -> bool:
+    def add_data_xref(self, from_ea: ea_t, to_ea: ea_t, xref_type: XrefType) -> None:
         """
         Add a data cross-reference between two addresses.
 
@@ -901,9 +897,6 @@ class Xrefs(DatabaseEntity):
             from_ea: Source address (typically code that references data).
             to_ea: Target address (typically a data location).
             xref_type: Type of data reference (READ, WRITE, OFFSET, etc.).
-
-        Returns:
-            True if xref was added successfully, False otherwise.
 
         Raises:
             InvalidEAError: If either address is invalid.
@@ -923,7 +916,6 @@ class Xrefs(DatabaseEntity):
             )
 
         ida_xref.add_dref(from_ea, to_ea, xref_type)
-        return True
 
     def delete_xref(self, from_ea: ea_t, to_ea: ea_t) -> bool:
         """

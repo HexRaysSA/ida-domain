@@ -8,7 +8,7 @@ import pytest
 import ida_domain
 from ida_domain.base import InvalidEAError, InvalidParameterError
 from ida_domain.database import IdaCommandOptions
-from ida_domain.xrefs import XrefsFlags
+from ida_domain.xrefs import XrefsFlags, XrefType
 
 
 @pytest.fixture(scope='module')
@@ -833,8 +833,6 @@ class TestXrefMutation:
         RATIONALE: Users need to create xrefs programmatically when
         fixing analysis or annotating code flow.
         """
-        from ida_domain.xrefs import XrefType
-
         # Find two instructions to create xref between
         funcs = list(test_env.functions.get_all())
         if len(funcs) < 2:
@@ -846,15 +844,13 @@ class TestXrefMutation:
         # Count xrefs before
         count_before = test_env.xrefs.count_refs_to(to_ea, XrefsFlags.CODE_NOFLOW)
 
-        # Add code xref
-        result = test_env.xrefs.add_code_xref(from_ea, to_ea, XrefType.CALL_NEAR)
+        # Add code xref (returns None)
+        test_env.xrefs.add_code_xref(from_ea, to_ea, XrefType.CALL_NEAR)
 
-        assert result is True, 'add_code_xref should return True on success'
-
-        # Verify xref was created
+        # Verify xref was created - count must increase
         count_after = test_env.xrefs.count_refs_to(to_ea, XrefsFlags.CODE_NOFLOW)
-        assert count_after >= count_before, (
-            f'xref count should increase after add_code_xref'
+        assert count_after > count_before, (
+            f'xref count should increase after add_code_xref: before={count_before}, after={count_after}'
         )
 
     def test_add_data_xref_creates_xref(self, test_env):
@@ -864,8 +860,6 @@ class TestXrefMutation:
         RATIONALE: Users need to create data xrefs when manually
         identifying data references that IDA missed.
         """
-        from ida_domain.xrefs import XrefType
-
         # Find an instruction and a data address
         insn = test_env.instructions.get_at(test_env.minimum_ea)
         if insn is None:
@@ -878,10 +872,17 @@ class TestXrefMutation:
 
         from_ea = insn.ea
 
-        # Add data xref
-        result = test_env.xrefs.add_data_xref(from_ea, data_ea, XrefType.READ)
+        # Count data xrefs before
+        count_before = test_env.xrefs.count_refs_to(data_ea, XrefsFlags.DATA)
 
-        assert result is True, 'add_data_xref should return True on success'
+        # Add data xref (returns None)
+        test_env.xrefs.add_data_xref(from_ea, data_ea, XrefType.READ)
+
+        # Verify xref was created - count must increase
+        count_after = test_env.xrefs.count_refs_to(data_ea, XrefsFlags.DATA)
+        assert count_after > count_before, (
+            f'xref count should increase after add_data_xref: before={count_before}, after={count_after}'
+        )
 
     def test_delete_xref_removes_xref(self, test_env):
         """
@@ -890,8 +891,6 @@ class TestXrefMutation:
         RATIONALE: Users need to remove incorrect xrefs that were
         created by auto-analysis or by mistake.
         """
-        from ida_domain.xrefs import XrefType
-
         # First create an xref to delete
         funcs = list(test_env.functions.get_all())
         if len(funcs) < 2:
@@ -903,11 +902,25 @@ class TestXrefMutation:
         # Add xref
         test_env.xrefs.add_code_xref(from_ea, to_ea, XrefType.CALL_NEAR)
 
+        # Verify xref exists before deletion
+        xref_exists_before = any(
+            xref.from_ea == from_ea
+            for xref in test_env.xrefs.to_ea(to_ea, XrefsFlags.CODE_NOFLOW)
+        )
+        assert xref_exists_before, 'xref should exist before deletion'
+
         # Delete it
         result = test_env.xrefs.delete_xref(from_ea, to_ea)
 
         # Result indicates if xref existed and was deleted
-        assert isinstance(result, bool), 'delete_xref should return bool'
+        assert result is True, 'delete_xref should return True when xref was deleted'
+
+        # Verify xref no longer exists
+        xref_exists_after = any(
+            xref.from_ea == from_ea
+            for xref in test_env.xrefs.to_ea(to_ea, XrefsFlags.CODE_NOFLOW)
+        )
+        assert not xref_exists_after, 'xref should not exist after deletion'
 
     def test_add_code_xref_with_invalid_from_ea_raises_error(self, test_env):
         """
@@ -915,8 +928,6 @@ class TestXrefMutation:
 
         RATIONALE: Methods should validate addresses and raise appropriate errors.
         """
-        from ida_domain.xrefs import XrefType
-
         invalid_ea = 0xDEADBEEF
         valid_ea = test_env.minimum_ea
 
@@ -929,8 +940,6 @@ class TestXrefMutation:
 
         RATIONALE: Methods should validate addresses and raise appropriate errors.
         """
-        from ida_domain.xrefs import XrefType
-
         invalid_ea = 0xDEADBEEF
         valid_ea = test_env.minimum_ea
 
@@ -943,8 +952,6 @@ class TestXrefMutation:
 
         RATIONALE: Code xref methods should only accept code xref types.
         """
-        from ida_domain.xrefs import XrefType
-
         funcs = list(test_env.functions.get_all())
         if len(funcs) < 2:
             pytest.skip('Need at least 2 functions')
@@ -961,8 +968,6 @@ class TestXrefMutation:
 
         RATIONALE: Data xref methods should only accept data xref types.
         """
-        from ida_domain.xrefs import XrefType
-
         insn = test_env.instructions.get_at(test_env.minimum_ea)
         if insn is None:
             pytest.skip('No instruction found')
