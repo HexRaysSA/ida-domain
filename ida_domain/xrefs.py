@@ -95,6 +95,11 @@ class CallerInfo:
     xref_type: XrefType  # Type of the xref (always a call type)
     function_ea: Optional[ea_t] = None  # Start address of calling function (if in a function)
 
+    def __repr__(self) -> str:
+        """Return a readable representation with hex address and caller name."""
+        func_part = f", func=0x{self.function_ea:x}" if self.function_ea else ""
+        return f"CallerInfo(0x{self.ea:x}, '{self.name}', {self.xref_type.name}{func_part})"
+
 
 class XrefType(IntEnum):
     """Unified cross-reference types (both code and data)."""

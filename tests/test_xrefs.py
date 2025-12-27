@@ -794,3 +794,30 @@ class TestXrefInfoDataclass:
         assert xref.type.name in repr_str, (
             f'XrefInfo repr should contain type name, got: {repr_str}'
         )
+
+    def test_callerinfo_repr_contains_address_and_name(self, test_env):
+        """
+        Test CallerInfo __repr__ includes address and caller name.
+
+        RATIONALE: CallerInfo repr should show caller address and name
+        for easy identification of call sites.
+        """
+        # Find a function with callers
+        for func in test_env.functions.get_all():
+            callers = list(test_env.xrefs.get_callers(func.start_ea))
+            if callers:
+                caller = callers[0]
+                repr_str = repr(caller)
+
+                # Should contain hex address
+                assert f'0x{caller.ea:x}' in repr_str.lower(), (
+                    f'CallerInfo repr should contain ea in hex, got: {repr_str}'
+                )
+                # Should contain name if available
+                if caller.name:
+                    assert caller.name in repr_str, (
+                        f'CallerInfo repr should contain name, got: {repr_str}'
+                    )
+                return
+
+        pytest.skip('No function with callers found')
