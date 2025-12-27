@@ -227,12 +227,51 @@ class TestFunctionsGetInRange:
 class TestFunctionsDelete:
     """Tests for delete() method."""
 
-    def test_functions_delete_exists_and_is_callable(self, test_env):
-        """Test delete() exists and is callable as alias for remove()."""
-        db = test_env
+    def test_functions_delete_is_alias_for_remove(self, test_env):
+        """
+        Test that delete() is a functional alias for remove().
 
-        # Verify delete method exists
-        assert hasattr(db.functions, 'delete')
+        RATIONALE: The delete() method should provide identical behavior
+        to remove() for consistency with common programming patterns.
+        """
+        # Find a suitable address to test with (after last function)
+        all_funcs = list(test_env.functions.get_all())
+        if not all_funcs:
+            pytest.skip('Need at least one function for testing')
 
-        # Verify it's callable
-        assert callable(db.functions.delete)
+        # Use address after last function
+        last_func = all_funcs[-1]
+        test_ea = last_func.end_ea + 0x10
+
+        # Ensure it's valid and not already a function
+        if not test_env.is_valid_ea(test_ea):
+            pytest.skip('Test address not valid')
+        if test_env.functions.exists_at(test_ea):
+            pytest.skip('Test address already has function')
+
+        # Create a function at test address
+        created = test_env.functions.create(test_ea)
+        if not created:
+            pytest.skip('Could not create test function')
+
+        # Verify function exists
+        assert test_env.functions.exists_at(test_ea), (
+            "Created function should exist before deletion"
+        )
+
+        # Test delete() method
+        result = test_env.functions.delete(test_ea)
+        assert result is True, "delete() should return True for successful deletion"
+
+        # Verify function was deleted
+        assert not test_env.functions.exists_at(test_ea), (
+            "Function should not exist after deletion"
+        )
+
+        # Verify delete() and remove() have identical behavior
+        # (both should gracefully handle deleting non-existent function)
+        result_delete = test_env.functions.delete(test_ea)
+        result_remove = test_env.functions.remove(test_ea)
+        assert result_delete == result_remove, (
+            "delete() and remove() should return same result for non-existent function"
+        )
