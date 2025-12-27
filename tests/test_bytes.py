@@ -379,39 +379,54 @@ class TestBytesOperandManipulation:
 
         This test verifies that set_operand_decimal works correctly.
         """
-        # Find an instruction with an immediate operand
-        first_code = test_env.minimum_ea
-        search_addr = first_code
-        max_attempts = 100
         found_addr = None
+        found_op_num = None
 
-        for _ in range(max_attempts):
-            next_head = test_env.bytes.get_next_head(search_addr)
-            if next_head is None or next_head >= test_env.maximum_ea:
+        # Search more thoroughly - try all instructions, all operands
+        for func in test_env.functions.get_all():
+            for head in test_env.bytes.iterate_heads(func.start_ea, func.end_ea):
+                if test_env.instructions.can_decode(head):
+                    # Try all operands (0-5)
+                    for op_num in range(6):
+                        try:
+                            # Get operand text before formatting
+                            before_text = _get_operand_text(test_env, head, op_num)
+
+                            # Try to set operand to decimal
+                            if test_env.bytes.set_operand_decimal(head, op_num):
+                                # Get operand text after formatting
+                                after_text = _get_operand_text(test_env, head, op_num)
+
+                                # Verify format changed to decimal (no 0x prefix, only digits 0-9)
+                                if after_text and '0x' not in after_text.lower() and after_text.replace('-', '').isdigit():
+                                    found_addr = head
+                                    found_op_num = op_num
+                                    break
+                        except:
+                            continue
+                if found_addr:
+                    break
+            if found_addr:
                 break
 
-            if test_env.bytes.is_code_at(next_head):
-                # Get operand text before formatting
-                before_text = _get_operand_text(test_env, next_head, 0)
-
-                # Try to set operand to decimal
-                result = test_env.bytes.set_operand_decimal(next_head, 0)
-                if result:
-                    # Get operand text after formatting
-                    after_text = _get_operand_text(test_env, next_head, 0)
-
-                    # Verify format changed to decimal (no 0x prefix, only digits 0-9)
-                    if after_text and '0x' not in after_text.lower() and after_text.replace('-', '').isdigit():
-                        found_addr = next_head
-                        break
-
-            search_addr = next_head
-
+        # If still not found, create a simple instruction with immediate
         if found_addr is None:
-            pytest.skip('Could not find instruction with decimal-formattable operand')
+            # Find first function and create test data there
+            funcs = list(test_env.functions.get_all())
+            if funcs:
+                # Use end of first function as safe area
+                test_addr = funcs[0].end_ea - 0x10
+                if test_env.is_valid_ea(test_addr):
+                    # Create instruction (this will be architecture-dependent but IDA will handle it)
+                    test_env.instructions.create_at(test_addr)
+                    if test_env.instructions.can_decode(test_addr):
+                        found_addr = test_addr
+                        found_op_num = 0
+
+        assert found_addr is not None, 'Should find or create instruction with formattable operand'
 
         # Verify the formatting actually changed to decimal
-        after_text = _get_operand_text(test_env, found_addr, 0)
+        after_text = _get_operand_text(test_env, found_addr, found_op_num)
         assert after_text is not None, "Should have operand text"
         assert '0x' not in after_text.lower(), (
             f"Decimal operand should not contain '0x', got: {after_text}"
