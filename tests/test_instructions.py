@@ -1405,6 +1405,42 @@ class TestControlFlowAnalysis:
 class TestCrossReferenceManagement:
     """Tests for cross-reference management methods."""
 
+    def _find_valid_test_address(self, test_env, size_needed=4, avoid_code=False):
+        """
+        Helper to find a valid address for testing.
+
+        Args:
+            test_env: Test environment
+            size_needed: Bytes needed at address
+            avoid_code: If True, prefer non-code areas
+
+        Returns:
+            Valid address or raises assertion
+        """
+        # Try multiple strategies
+        candidates = [
+            test_env.minimum_ea + 0x100,
+            test_env.minimum_ea + 0x200,
+            test_env.minimum_ea + 0x50,
+            test_env.minimum_ea,
+            test_env.maximum_ea - size_needed - 0x100,
+        ]
+
+        for candidate in candidates:
+            # Check if address and required range are valid
+            if not test_env.is_valid_ea(candidate):
+                continue
+            if not test_env.is_valid_ea(candidate + size_needed - 1):
+                continue
+
+            return candidate
+
+        # Should always find something
+        raise AssertionError(
+            f'Could not find valid address with {size_needed} bytes. '
+            f'Binary range: 0x{test_env.minimum_ea:x}-0x{test_env.maximum_ea:x}'
+        )
+
     def test_add_code_reference_creates_code_xref(self, test_env):
         """
         Test that add_code_reference successfully creates a code cross-reference.
@@ -1640,40 +1676,50 @@ class TestCrossReferenceManagement:
         - dr_W: Write access
         - dr_O: Offset
         """
-        # Get instruction address
+        # Find existing code address or create one
+        code_addr = None
+
+        # Try to find an existing instruction
         first_insn = test_env.instructions.get_at(test_env.minimum_ea)
-        assert first_insn is not None
+        if first_insn:
+            code_addr = first_insn.ea
+        else:
+            # Use helper to find address and create instruction
+            code_addr = self._find_valid_test_address(test_env)
+            test_env.instructions.create_at(code_addr)
 
-        # Get a data address
-        import ida_segment
+        # Find or create data addresses - use different valid addresses
+        # Start from a base address and ensure they don't overlap
+        base_addr = self._find_valid_test_address(test_env, size_needed=16)
+        data_ea1 = base_addr
+        data_ea2 = base_addr + 4
+        data_ea3 = base_addr + 8
 
-        seg = ida_segment.get_first_seg()
-        if not seg:
-            pytest.skip('No segments in test binary')
+        test_env.bytes.create_dword_at(data_ea1, force=True)
+        test_env.bytes.create_dword_at(data_ea2, force=True)
+        test_env.bytes.create_dword_at(data_ea3, force=True)
 
-        data_ea1 = seg.start_ea + 0x100
-        data_ea2 = seg.start_ea + 0x200
-        data_ea3 = seg.start_ea + 0x300
-
-        if not all(test_env.is_valid_ea(ea) for ea in [data_ea1, data_ea2, data_ea3]):
-            pytest.skip('Could not find suitable data addresses')
+        assert code_addr is not None, 'Should have code address'
+        assert data_ea1 is not None, 'Should have data address 1'
+        assert data_ea2 is not None, 'Should have data address 2'
+        assert data_ea3 is not None, 'Should have data address 3'
 
         # Test different data reference types
         import ida_xref
 
         # Test read reference
         test_env.instructions.add_data_reference(
-            from_ea=first_insn.ea, to_ea=data_ea1, reference_type=ida_xref.dr_R
+            from_ea=code_addr, to_ea=data_ea1, reference_type=ida_xref.dr_R
         )
 
         # Test write reference
         test_env.instructions.add_data_reference(
-            from_ea=first_insn.ea, to_ea=data_ea2, reference_type=ida_xref.dr_W
+            from_ea=code_addr, to_ea=data_ea2, reference_type=ida_xref.dr_W
         )
 
         # Test offset reference
         test_env.instructions.add_data_reference(
-            from_ea=first_insn.ea, to_ea=data_ea3, reference_type=ida_xref.dr_O
+            from_ea=code_addr, to_ea=data_ea3, reference_type=ida_xref.dr_O
         )
 
         # All operations should complete without error
