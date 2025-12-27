@@ -402,7 +402,7 @@ class TestBytesOperandManipulation:
                                     found_addr = head
                                     found_op_num = op_num
                                     break
-                        except:
+                        except (Exception):  # Catch any exception during operand formatting
                             continue
                 if found_addr:
                     break
@@ -417,11 +417,18 @@ class TestBytesOperandManipulation:
                 # Use end of first function as safe area
                 test_addr = funcs[0].end_ea - 0x10
                 if test_env.is_valid_ea(test_addr):
-                    # Create instruction (this will be architecture-dependent but IDA will handle it)
-                    test_env.instructions.create_at(test_addr)
-                    if test_env.instructions.can_decode(test_addr):
-                        found_addr = test_addr
-                        found_op_num = 0
+                    # Only create if not already code to avoid corruption
+                    if not test_env.bytes.is_code_at(test_addr):
+                        # Create instruction - verify it succeeds
+                        if test_env.instructions.create_at(test_addr):
+                            # Verify it can be decoded and try operand 0
+                            if test_env.instructions.can_decode(test_addr):
+                                try:
+                                    if test_env.bytes.set_operand_decimal(test_addr, 0):
+                                        found_addr = test_addr
+                                        found_op_num = 0
+                                except Exception:
+                                    pass  # Created instruction doesn't have formattable operand
 
         assert found_addr is not None, 'Should find or create instruction with formattable operand'
 
