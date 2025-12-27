@@ -17,40 +17,64 @@ def switches_test_setup():
     Setup for switches tests.
 
     RATIONALE: We need a binary containing switch statements to properly test
-    the Switches entity. The tiny_c.bin binary is suitable as it contains
-    compiled C code which may include switch statements. While we cannot
-    guarantee switch statements exist in every test binary, this binary
-    provides a realistic test environment.
+    the Switches entity. The test_switches.bin binary is specifically designed
+    for this purpose - it contains 9 different switch statement patterns:
+    - dense_switch: consecutive cases 0-7
+    - dense_switch_offset: cases 10-15
+    - sparse_switch: non-consecutive cases (1, 5, 10, 50, 100, 500)
+    - fallthrough_switch: cases with fall-through behavior
+    - no_default_switch: switch without default case
+    - nested_switch: nested switch statements
+    - char_switch: switch on char values
+    - negative_switch: cases with negative values (-3 to 2)
+    - large_switch: 20 consecutive cases for guaranteed jump table
 
-    For tests requiring switches to exist, we'll need to either:
-    - Create switches manually (testing create/update/delete functionality)
-    - Skip tests if no natural switches exist in the binary
+    Uses pre-analyzed .i64 database for faster test execution.
     """
-    idb_path = os.path.join(tempfile.gettempdir(), 'api_tests_work_dir', 'switches_test.bin')
+    idb_path = os.path.join(tempfile.gettempdir(), 'api_tests_work_dir', 'test_switches.bin.i64')
     os.makedirs(os.path.dirname(idb_path), exist_ok=True)
 
-    # Copy test binary
+    # Copy pre-analyzed database
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    src_path = os.path.join(current_dir, 'resources', 'tiny_c.bin')
+    src_path = os.path.join(current_dir, 'resources', 'test_switches.bin.i64')
 
     if not os.path.exists(src_path):
-        pytest.skip('Test binary not found')
+        pytest.skip('Pre-analyzed database not found. Run: python tests/resources/create_idbs.py')
 
     shutil.copy(src_path, idb_path)
     return idb_path
 
 
 @pytest.fixture(scope='function')
-def switches_db(switches_test_setup):
+def db_readonly(switches_test_setup):
     """
-    Open database for switches testing.
+    Open database for read-only switches testing.
 
-    RATIONALE: Each test needs a fresh database instance to ensure test
-    isolation. We open the database with auto-analysis enabled to ensure
-    proper switch detection by IDA's automated analysis.
+    Note: Function scope is required for IDA databases because the IDA kernel
+    maintains global state that can be affected by other database instances.
+    Module-scoped fixtures cause test pollution when mutation tests run.
+    Uses pre-analyzed database for fast loading (no auto-analysis needed).
     """
     idb_path = switches_test_setup
-    ida_options = IdaCommandOptions(new_database=True, auto_analysis=True)
+    ida_options = IdaCommandOptions(new_database=False, auto_analysis=False)
+    db = ida_domain.Database.open(path=idb_path, args=ida_options, save_on_close=False)
+    yield db
+    if db.is_open():
+        db.close(False)
+
+
+@pytest.fixture(scope='function')
+def db_mutable(switches_test_setup):
+    """
+    Open database for mutation switches testing (fresh per test).
+
+    RATIONALE: Tests that modify switch data (create, update, remove) need
+    isolated database instances to prevent test interference. Each test
+    starts with a clean database state.
+    Uses pre-analyzed database for fast loading (no auto-analysis needed).
+    """
+    idb_path = switches_test_setup
+    ida_options = IdaCommandOptions(new_database=False, auto_analysis=False)
     db = ida_domain.Database.open(path=idb_path, args=ida_options, save_on_close=False)
     yield db
     if db.is_open():
@@ -62,25 +86,22 @@ def switches_db(switches_test_setup):
 # =============================================================================
 
 
-def test_get_at_returns_none_for_nonexistent_switch(switches_db):
+def test_get_at_returns_none_for_nonexistent_switch(db_readonly):
     """
     Test that get_at returns None when no switch exists at the address.
 
     RATIONALE: This validates the basic query operation when no switch is
-    present. We pick an arbitrary valid address that is unlikely to have
-    a switch statement. This tests the "not found" path of the method.
+    present. We use the entry point which is not a switch jump instruction.
     """
-    # Pick a valid address - use minimum_ea as it's valid but unlikely to be a switch
-    ea = switches_db.minimum_ea
-    result = switches_db.switches.get_at(ea)
+    # Use minimum_ea which is the entry point, not a switch
+    ea = db_readonly.minimum_ea
+    result = db_readonly.switches.get_at(ea)
 
-    # Most addresses don't have switches, so None is expected
-    assert result is None or isinstance(result, SwitchInfo), (
-        'get_at should return None or SwitchInfo'
-    )
+    # Entry point is not a switch, so None is expected
+    assert result is None, f'get_at at entry point 0x{ea:x} should return None, got {result}'
 
 
-def test_get_at_raises_on_invalid_address(switches_db):
+def test_get_at_raises_on_invalid_address(db_readonly):
     """
     Test that get_at raises InvalidEAError for invalid addresses.
 
@@ -94,29 +115,26 @@ def test_get_at_raises_on_invalid_address(switches_db):
     """
     from ida_domain.base import InvalidEAError
 
-    invalid_ea = switches_db.maximum_ea + 0x10000
+    invalid_ea = db_readonly.maximum_ea + 0x10000
 
     with pytest.raises(InvalidEAError):
-        switches_db.switches.get_at(invalid_ea)
+        db_readonly.switches.get_at(invalid_ea)
 
 
-def test_exists_at_returns_false_for_nonexistent_switch(switches_db):
+def test_exists_at_returns_false_for_nonexistent_switch(db_readonly):
     """
     Test that exists_at returns False when no switch exists.
 
     RATIONALE: The exists_at method is a convenience wrapper that should
-    return a boolean. This tests the common case where no switch is present.
-    It's simpler than get_at for existence checks.
+    return a boolean. We use the entry point which is not a switch.
     """
-    ea = switches_db.minimum_ea
-    result = switches_db.switches.exists_at(ea)
+    ea = db_readonly.minimum_ea
+    result = db_readonly.switches.exists_at(ea)
 
-    assert isinstance(result, bool), 'exists_at should return boolean'
-    # Most addresses don't have switches
-    assert result is False or result is True
+    assert result is False, f'exists_at at entry point 0x{ea:x} should return False'
 
 
-def test_exists_at_raises_on_invalid_address(switches_db):
+def test_exists_at_raises_on_invalid_address(db_readonly):
     """
     Test that exists_at raises InvalidEAError for invalid addresses.
 
@@ -125,10 +143,10 @@ def test_exists_at_raises_on_invalid_address(switches_db):
     """
     from ida_domain.base import InvalidEAError
 
-    invalid_ea = switches_db.maximum_ea + 0x10000
+    invalid_ea = db_readonly.maximum_ea + 0x10000
 
     with pytest.raises(InvalidEAError):
-        switches_db.switches.exists_at(invalid_ea)
+        db_readonly.switches.exists_at(invalid_ea)
 
 
 # =============================================================================
@@ -136,7 +154,7 @@ def test_exists_at_raises_on_invalid_address(switches_db):
 # =============================================================================
 
 
-def test_create_switch_with_valid_data(switches_db):
+def test_create_switch_with_valid_data(db_mutable):
     """
     Test creating a new switch statement with valid data.
 
@@ -150,10 +168,10 @@ def test_create_switch_with_valid_data(switches_db):
     We use addresses in the valid range but unlikely to have existing switches.
     """
     # Find a suitable address - use a code address if available
-    test_ea = switches_db.minimum_ea + 0x100  # Offset to avoid entry point
+    test_ea = db_mutable.minimum_ea + 0x100  # Offset to avoid entry point
 
     # Ensure address is valid
-    if not switches_db.is_valid_ea(test_ea):
+    if not db_mutable.is_valid_ea(test_ea):
         pytest.skip('Cannot find valid test address')
 
     # Create a simple dense switch (no value table)
@@ -172,18 +190,18 @@ def test_create_switch_with_valid_data(switches_db):
     )
 
     # Create the switch
-    result = switches_db.switches.create(test_ea, switch_info)
+    result = db_mutable.switches.create(test_ea, switch_info)
     assert result is True, 'create should return True for valid data'
 
     # Verify it was created
-    retrieved = switches_db.switches.get_at(test_ea)
+    retrieved = db_mutable.switches.get_at(test_ea)
     assert retrieved is not None, 'Should be able to retrieve created switch'
     assert retrieved.ncases == 5, 'Case count should match'
     assert retrieved.lowcase == 0, 'Lowcase should match'
     assert retrieved.defjump == test_ea + 0x200, 'Default jump should match'
 
 
-def test_create_switch_with_invalid_address_raises_error(switches_db):
+def test_create_switch_with_invalid_address_raises_error(db_mutable):
     """
     Test that create raises InvalidEAError for invalid addresses.
 
@@ -193,7 +211,7 @@ def test_create_switch_with_invalid_address_raises_error(switches_db):
     """
     from ida_domain.base import InvalidEAError
 
-    invalid_ea = switches_db.maximum_ea + 0x10000
+    invalid_ea = db_mutable.maximum_ea + 0x10000
 
     switch_info = SwitchInfo(
         flags=SwitchFlags.DEFAULT,
@@ -210,10 +228,10 @@ def test_create_switch_with_invalid_address_raises_error(switches_db):
     )
 
     with pytest.raises(InvalidEAError):
-        switches_db.switches.create(invalid_ea, switch_info)
+        db_mutable.switches.create(invalid_ea, switch_info)
 
 
-def test_create_switch_with_negative_ncases_raises_error(switches_db):
+def test_create_switch_with_negative_ncases_raises_error(db_mutable):
     """
     Test that create raises InvalidParameterError for negative case counts.
 
@@ -223,7 +241,7 @@ def test_create_switch_with_negative_ncases_raises_error(switches_db):
     """
     from ida_domain.base import InvalidParameterError
 
-    test_ea = switches_db.minimum_ea + 0x100
+    test_ea = db_mutable.minimum_ea + 0x100
 
     switch_info = SwitchInfo(
         flags=SwitchFlags.DEFAULT,
@@ -240,10 +258,10 @@ def test_create_switch_with_negative_ncases_raises_error(switches_db):
     )
 
     with pytest.raises(InvalidParameterError):
-        switches_db.switches.create(test_ea, switch_info)
+        db_mutable.switches.create(test_ea, switch_info)
 
 
-def test_update_switch_modifies_existing(switches_db):
+def test_update_switch_modifies_existing(db_mutable):
     """
     Test that update modifies an existing switch statement.
 
@@ -254,7 +272,7 @@ def test_update_switch_modifies_existing(switches_db):
     2. Updating it with different values
     3. Verifying the new values are persisted
     """
-    test_ea = switches_db.minimum_ea + 0x100
+    test_ea = db_mutable.minimum_ea + 0x100
 
     # Create initial switch
     switch_info = SwitchInfo(
@@ -271,7 +289,7 @@ def test_update_switch_modifies_existing(switches_db):
         regnum=-1,
     )
 
-    switches_db.switches.create(test_ea, switch_info)
+    db_mutable.switches.create(test_ea, switch_info)
 
     # Update with different case count
     updated_info = SwitchInfo(
@@ -288,17 +306,17 @@ def test_update_switch_modifies_existing(switches_db):
         regnum=-1,
     )
 
-    result = switches_db.switches.update(test_ea, updated_info)
+    result = db_mutable.switches.update(test_ea, updated_info)
     assert result is True, 'update should return True'
 
     # Verify the update
-    retrieved = switches_db.switches.get_at(test_ea)
+    retrieved = db_mutable.switches.get_at(test_ea)
     assert retrieved is not None
     assert retrieved.ncases == 7, 'Case count should be updated'
     assert retrieved.defjump == test_ea + 0x300, 'Default jump should be updated'
 
 
-def test_remove_deletes_existing_switch(switches_db):
+def test_remove_deletes_existing_switch(db_mutable):
     """
     Test that remove deletes an existing switch statement.
 
@@ -309,7 +327,7 @@ def test_remove_deletes_existing_switch(switches_db):
     - The switch is actually deleted (get_at returns None after)
     - Subsequent removes return False (idempotent)
     """
-    test_ea = switches_db.minimum_ea + 0x100
+    test_ea = db_mutable.minimum_ea + 0x100
 
     # Create a switch
     switch_info = SwitchInfo(
@@ -326,22 +344,22 @@ def test_remove_deletes_existing_switch(switches_db):
         regnum=-1,
     )
 
-    switches_db.switches.create(test_ea, switch_info)
+    db_mutable.switches.create(test_ea, switch_info)
 
     # Remove it
-    result = switches_db.switches.remove(test_ea)
+    result = db_mutable.switches.remove(test_ea)
     assert result is True, 'remove should return True for existing switch'
 
     # Verify it's gone
-    retrieved = switches_db.switches.get_at(test_ea)
+    retrieved = db_mutable.switches.get_at(test_ea)
     assert retrieved is None, 'Switch should be deleted'
 
     # Second remove should return False
-    result2 = switches_db.switches.remove(test_ea)
+    result2 = db_mutable.switches.remove(test_ea)
     assert result2 is False, 'remove should return False when no switch exists'
 
 
-def test_remove_nonexistent_returns_false(switches_db):
+def test_remove_nonexistent_returns_false(db_mutable):
     """
     Test that remove returns False when no switch exists.
 
@@ -350,10 +368,10 @@ def test_remove_nonexistent_returns_false(switches_db):
     switches allows callers to distinguish between successful deletion and
     no-op cases.
     """
-    test_ea = switches_db.minimum_ea + 0x100
+    test_ea = db_mutable.minimum_ea + 0x100
 
     # Try to remove non-existent switch
-    result = switches_db.switches.remove(test_ea)
+    result = db_mutable.switches.remove(test_ea)
     assert result is False, 'remove should return False when no switch exists'
 
 
@@ -362,7 +380,7 @@ def test_remove_nonexistent_returns_false(switches_db):
 # =============================================================================
 
 
-def test_get_parent_returns_none_for_no_relationship(switches_db):
+def test_get_parent_returns_none_for_no_relationship(db_readonly):
     """
     Test that get_parent returns None when no parent relationship exists.
 
@@ -371,13 +389,14 @@ def test_get_parent_returns_none_for_no_relationship(switches_db):
     The method should return None (converted from BADADDR) rather than
     raising an exception.
     """
-    ea = switches_db.minimum_ea
-    result = switches_db.switches.get_parent(ea)
+    # Entry point has no parent switch relationship
+    ea = db_readonly.minimum_ea
+    result = db_readonly.switches.get_parent(ea)
 
-    assert result is None or isinstance(result, int), 'get_parent should return None or an address'
+    assert result is None, f'get_parent at entry point 0x{ea:x} should return None'
 
 
-def test_set_parent_creates_relationship(switches_db):
+def test_set_parent_creates_relationship(db_mutable):
     """
     Test that set_parent creates a parent relationship between addresses.
 
@@ -388,11 +407,11 @@ def test_set_parent_creates_relationship(switches_db):
     - get_parent returns the correct parent address
     - The relationship persists
     """
-    switch_ea = switches_db.minimum_ea + 0x10
-    case_ea = switches_db.minimum_ea + 0x20
+    switch_ea = db_mutable.minimum_ea + 0x10
+    case_ea = db_mutable.minimum_ea + 0x20
 
     # Ensure both addresses are valid
-    if not switches_db.is_valid_ea(switch_ea) or not switches_db.is_valid_ea(case_ea):
+    if not db_mutable.is_valid_ea(switch_ea) or not db_mutable.is_valid_ea(case_ea):
         pytest.skip('Cannot find valid addresses for parent test')
 
     # Create a switch at switch_ea
@@ -410,18 +429,18 @@ def test_set_parent_creates_relationship(switches_db):
         regnum=-1,
     )
 
-    switches_db.switches.create(switch_ea, switch_info)
+    db_mutable.switches.create(switch_ea, switch_info)
 
     # Set parent relationship
-    result = switches_db.switches.set_parent(case_ea, switch_ea)
+    result = db_mutable.switches.set_parent(case_ea, switch_ea)
     assert result is True, 'set_parent should return True'
 
     # Verify the relationship
-    parent = switches_db.switches.get_parent(case_ea)
+    parent = db_mutable.switches.get_parent(case_ea)
     assert parent == switch_ea, 'get_parent should return the parent address'
 
 
-def test_remove_parent_deletes_relationship(switches_db):
+def test_remove_parent_deletes_relationship(db_mutable):
     """
     Test that remove_parent deletes an existing parent relationship.
 
@@ -429,11 +448,11 @@ def test_remove_parent_deletes_relationship(switches_db):
     no longer needed or were set incorrectly. This tests the deletion path
     by creating a relationship and then removing it.
     """
-    switch_ea = switches_db.minimum_ea + 0x10
-    case_ea = switches_db.minimum_ea + 0x20
+    switch_ea = db_mutable.minimum_ea + 0x10
+    case_ea = db_mutable.minimum_ea + 0x20
 
     # Ensure both addresses are valid
-    if not switches_db.is_valid_ea(switch_ea) or not switches_db.is_valid_ea(case_ea):
+    if not db_mutable.is_valid_ea(switch_ea) or not db_mutable.is_valid_ea(case_ea):
         pytest.skip('Cannot find valid addresses for parent test')
 
     # Create switch and set parent
@@ -451,28 +470,28 @@ def test_remove_parent_deletes_relationship(switches_db):
         regnum=-1,
     )
 
-    switches_db.switches.create(switch_ea, switch_info)
-    switches_db.switches.set_parent(case_ea, switch_ea)
+    db_mutable.switches.create(switch_ea, switch_info)
+    db_mutable.switches.set_parent(case_ea, switch_ea)
 
     # Remove the relationship
-    result = switches_db.switches.remove_parent(case_ea)
+    result = db_mutable.switches.remove_parent(case_ea)
     assert result is True, 'remove_parent should return True for existing relationship'
 
     # Verify it's removed
-    parent = switches_db.switches.get_parent(case_ea)
+    parent = db_mutable.switches.get_parent(case_ea)
     assert parent is None, 'Parent relationship should be deleted'
 
 
-def test_remove_parent_nonexistent_returns_false(switches_db):
+def test_remove_parent_nonexistent_returns_false(db_mutable):
     """
     Test that remove_parent returns False when no relationship exists.
 
     RATIONALE: Similar to remove, remove_parent should be idempotent and
     clearly indicate whether a relationship was actually deleted.
     """
-    ea = switches_db.minimum_ea + 0x100
+    ea = db_mutable.minimum_ea + 0x100
 
-    result = switches_db.switches.remove_parent(ea)
+    result = db_mutable.switches.remove_parent(ea)
     assert result is False, 'remove_parent should return False when no relationship exists'
 
 
@@ -481,7 +500,7 @@ def test_remove_parent_nonexistent_returns_false(switches_db):
 # =============================================================================
 
 
-def test_get_case_count_returns_zero_for_nonexistent(switches_db):
+def test_get_case_count_returns_zero_for_nonexistent(db_readonly):
     """
     Test that get_case_count returns 0 when no switch exists.
 
@@ -489,20 +508,20 @@ def test_get_case_count_returns_zero_for_nonexistent(switches_db):
     gracefully by returning 0 rather than raising an exception. This makes
     it easy to use in conditional logic without explicit existence checks.
     """
-    ea = switches_db.minimum_ea
-    count = switches_db.switches.get_case_count(ea)
+    ea = db_readonly.minimum_ea
+    count = db_readonly.switches.get_case_count(ea)
 
     assert count == 0, 'get_case_count should return 0 for non-existent switch'
 
 
-def test_get_case_count_returns_correct_count(switches_db):
+def test_get_case_count_returns_correct_count(db_mutable):
     """
     Test that get_case_count returns the correct case count for a switch.
 
     RATIONALE: This validates the convenience method against a known switch
     that we create. It should match the ncases field we set.
     """
-    test_ea = switches_db.minimum_ea + 0x100
+    test_ea = db_mutable.minimum_ea + 0x100
 
     switch_info = SwitchInfo(
         flags=SwitchFlags.DEFAULT,
@@ -518,13 +537,13 @@ def test_get_case_count_returns_correct_count(switches_db):
         regnum=-1,
     )
 
-    switches_db.switches.create(test_ea, switch_info)
+    db_mutable.switches.create(test_ea, switch_info)
 
-    count = switches_db.switches.get_case_count(test_ea)
+    count = db_mutable.switches.get_case_count(test_ea)
     assert count == 8, 'get_case_count should return the correct case count'
 
 
-def test_get_case_values_dense_switch(switches_db):
+def test_get_case_values_dense_switch(db_mutable):
     """
     Test getting case values for a dense switch statement.
 
@@ -532,7 +551,7 @@ def test_get_case_values_dense_switch(switches_db):
     This is the most common switch type. We create a dense switch and
     verify that get_case_values computes the correct sequential values.
     """
-    test_ea = switches_db.minimum_ea + 0x100
+    test_ea = db_mutable.minimum_ea + 0x100
 
     switch_info = SwitchInfo(
         flags=SwitchFlags.DEFAULT,
@@ -548,9 +567,9 @@ def test_get_case_values_dense_switch(switches_db):
         regnum=-1,
     )
 
-    switches_db.switches.create(test_ea, switch_info)
+    db_mutable.switches.create(test_ea, switch_info)
 
-    values = switches_db.switches.get_case_values(switch_info)
+    values = db_mutable.switches.get_case_values(switch_info)
 
     # Should be [10, 11, 12, 13, 14]
     assert len(values) == 5, 'Should have 5 case values'

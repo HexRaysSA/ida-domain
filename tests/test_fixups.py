@@ -112,10 +112,8 @@ def test_get_at_returns_none_for_address_without_fixup(fixups_db):
     ea = fixups_db.minimum_ea
     result = fixups_db.fixups.get_at(ea)
 
-    # Most addresses don't have fixups, so None is expected or a FixupInfo
-    assert result is None or isinstance(result, FixupInfo), (
-        'get_at should return None or FixupInfo'
-    )
+    # Entry point typically doesn't have a fixup
+    assert result is None, f'get_at at entry point 0x{ea:x} should return None'
 
 
 def test_get_at_raises_on_invalid_address(fixups_db):

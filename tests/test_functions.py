@@ -180,28 +180,6 @@ class TestFunctionsReanalyze:
             result = db.functions.reanalyze(func)
             assert result is True
 
-    def test_reanalyze_returns_boolean(self, test_env):
-        """
-        Test that reanalyze() consistently returns a boolean value.
-
-        RATIONALE: API consistency requires that methods have predictable return
-        types. reanalyze() is documented to return bool, indicating whether the
-        reanalysis was initiated (always True in current implementation). This test
-        validates the return type contract, ensuring callers can rely on getting
-        a boolean result for status checking and flow control.
-        """
-        db = test_env
-
-        # Get a function
-        all_funcs = list(db.functions.get_all())
-        func = all_funcs[0]
-
-        # Call reanalyze and check return type
-        result = db.functions.reanalyze(func)
-        assert isinstance(result, bool)
-        assert result is True  # Current implementation always returns True
-
-
 class TestFunctionsCount:
     """Tests for count() method."""
 

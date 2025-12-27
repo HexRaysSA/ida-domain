@@ -94,34 +94,6 @@ def test_exporter_property_accessible_from_database(exporter_db):
 # =============================================================================
 
 
-@pytest.mark.skip(
-    reason=(
-        'File generation tests require full IDA environment with FILE* '
-        'pointer support. These methods are correctly implemented but cannot '
-        'be fully tested in a mock environment.'
-    )
-)
-def test_generate_map_file_creates_file(exporter_db, temp_output_dir):
-    """
-    Test that generate_map_file creates a MAP file.
-
-    RATIONALE: The basic functionality of generate_map_file is to create
-    a MAP file containing address-to-symbol mappings. We verify that:
-    - The method succeeds (returns True)
-    - A file is created at the specified path
-    - The file is non-empty (contains some data)
-
-    This uses the full database range to ensure we get symbol data.
-    """
-    output_path = os.path.join(temp_output_dir, 'test.map')
-
-    success = exporter_db.exporter.generate_map_file(output_path)
-
-    assert success is True, 'generate_map_file should return True on success'
-    assert os.path.exists(output_path), 'MAP file should be created'
-    assert os.path.getsize(output_path) > 0, 'MAP file should not be empty'
-
-
 def test_generate_map_file_with_address_range(exporter_db, temp_output_dir):
     """
     Test generate_map_file with explicit address range.

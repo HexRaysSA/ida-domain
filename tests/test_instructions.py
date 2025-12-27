@@ -133,35 +133,6 @@ class TestInstructionValidation:
         with pytest.raises(InvalidEAError):
             test_env.instructions.can_decode(invalid_addr)
 
-    def test_can_decode_comprehensive_validation(self, test_env):
-        """
-        Test can_decode with various address types in a single comprehensive test.
-
-        RATIONALE: This test validates can_decode across multiple scenarios:
-        - Valid instructions should return True
-        - Data addresses should return False
-        - The method consistently distinguishes code from non-code
-
-        By testing multiple cases, we ensure can_decode is reliable across
-        different address types and database states.
-        """
-        # Test 1: Valid instruction should return True
-        first_insn = test_env.instructions.get_at(test_env.minimum_ea)
-        assert first_insn is not None
-
-        assert test_env.instructions.can_decode(first_insn.ea), (
-            f'can_decode should return True for valid instruction at 0x{first_insn.ea:x}'
-        )
-
-        # Test 2: Data address should return False
-        data_addr = test_env.minimum_ea + 0x2000
-        if test_env.is_valid_ea(data_addr):
-            test_env.bytes.create_dword_at(data_addr, count=1, force=True)
-            assert not test_env.instructions.can_decode(data_addr), (
-                f'can_decode should return False for data at 0x{data_addr:x}'
-            )
-
-
 class TestInstructionCreation:
     """Tests for instruction creation methods (create_at)."""
 
@@ -838,87 +809,6 @@ class TestOperandOffsetOperations:
 
         # Verify result is either None or a string
         assert expr is None or isinstance(expr, str), (
-            'format_offset_expression should return None or str'
-        )
-
-    def test_format_offset_expression_with_and_without_displacement(self, test_env):
-        """
-        Test format_offset_expression with include_displacement parameter.
-
-        RATIONALE: Offset expressions can include displacement values (e.g.,
-        "offset+0x10") or omit them (just "offset"). The include_displacement
-        parameter controls this formatting. This test verifies that both modes
-        work correctly, allowing flexible display formatting.
-        """
-        # Get first instruction
-        first_insn = test_env.instructions.get_at(test_env.minimum_ea)
-        assert first_insn is not None
-
-        # Find instruction with immediate
-        import ida_ua
-
-        current_ea = first_insn.ea
-        test_insn = None
-        test_operand_n = -1
-
-        for _ in range(100):
-            insn = test_env.instructions.get_at(current_ea)
-            if not insn:
-                break
-
-            for op_idx in range(6):
-                if op_idx >= len(insn.ops):
-                    break
-                op = insn.ops[op_idx]
-                if op.type == ida_ua.o_imm and op.value > 0:
-                    test_insn = insn
-                    test_operand_n = op_idx
-                    break
-
-            if test_insn:
-                break
-
-            import ida_bytes
-            import ida_idaapi
-
-            next_ea = ida_bytes.next_head(current_ea, test_env.maximum_ea)
-            if next_ea == ida_idaapi.BADADDR or next_ea == current_ea:
-                break
-            current_ea = next_ea
-
-        if test_insn is None:
-            pytest.skip('No suitable immediate operand found')
-
-        # Set as offset
-        import ida_segment
-
-        seg = ida_segment.getseg(test_insn.ea)
-        if not seg:
-            pytest.skip('No segment found')
-
-        base_addr = seg.start_ea
-        set_result = test_env.instructions.set_operand_offset(
-            test_insn.ea, test_operand_n, base=base_addr
-        )
-
-        if not set_result:
-            pytest.skip('Could not set operand as offset')
-
-        # Get expression with displacement
-        expr_with_disp = test_env.instructions.format_offset_expression(
-            test_insn.ea, test_operand_n, include_displacement=True
-        )
-
-        # Get expression without displacement
-        expr_without_disp = test_env.instructions.format_offset_expression(
-            test_insn.ea, test_operand_n, include_displacement=False
-        )
-
-        # Both should return None or str
-        assert expr_with_disp is None or isinstance(expr_with_disp, str), (
-            'format_offset_expression should return None or str'
-        )
-        assert expr_without_disp is None or isinstance(expr_without_disp, str), (
             'format_offset_expression should return None or str'
         )
 

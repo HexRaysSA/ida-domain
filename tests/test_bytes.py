@@ -1223,10 +1223,11 @@ class TestBytesSearchMethods:
 
             result = db.bytes.find_text_between(test_string, flags=SearchFlags.DOWN)
 
-            # Should find the string
-            assert result is not None or result is None  # Either finds it or doesn't
-            if result is not None:
-                assert db.is_valid_ea(result)
+            # We found this string in the binary, so find_text_between should find it too
+            assert result is not None, f'find_text_between should find "{test_string}" in binary'
+            assert db.is_valid_ea(result), f'Result 0x{result:x} should be a valid address'
+        else:
+            pytest.skip('No suitable string found in binary to test with')
 
     def test_find_text_between_with_invalid_text_raises_error(self, test_env):
         """

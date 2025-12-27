@@ -17,22 +17,23 @@ def imports_test_setup():
     Setup for imports tests.
 
     RATIONALE: We need a real binary with import tables to test the Imports entity.
-    The tiny_asm.bin and tiny_c.bin in the existing test resources are minimal
-    binaries without imports. For comprehensive import testing, we need a binary
-    that uses external library functions (e.g., from libc or Windows DLLs).
+    The test_imports.bin binary is specifically designed for this purpose - it's a
+    dynamically linked x86_64 Linux ELF that imports many libc functions including:
+    printf, fprintf, malloc, free, calloc, realloc, memset, memcpy, memcmp,
+    strlen, strcpy, strcat, strcmp, strncmp, strstr, strchr, open, read, close,
+    stat, getenv, getpid, getuid, atoi, puts, snprintf.
 
-    This fixture will use tiny_c.bin as a temporary solution, and if it doesn't
-    have imports, tests will be skipped with appropriate warnings.
+    Uses pre-analyzed .i64 database for faster test execution.
     """
-    idb_path = os.path.join(tempfile.gettempdir(), 'api_tests_work_dir', 'imports_test.bin')
+    idb_path = os.path.join(tempfile.gettempdir(), 'api_tests_work_dir', 'test_imports.bin.i64')
     os.makedirs(os.path.dirname(idb_path), exist_ok=True)
 
-    # Copy test binary
+    # Copy pre-analyzed database
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    src_path = os.path.join(current_dir, 'resources', 'tiny_c.bin')
+    src_path = os.path.join(current_dir, 'resources', 'test_imports.bin.i64')
 
     if not os.path.exists(src_path):
-        pytest.skip('Test binary not found')
+        pytest.skip('Pre-analyzed database not found. Run: python tests/resources/create_idbs.py')
 
     shutil.copy(src_path, idb_path)
     return idb_path
@@ -43,12 +44,13 @@ def imports_db(imports_test_setup):
     """
     Open database for imports testing.
 
-    RATIONALE: Each test needs a fresh database instance to ensure test isolation.
-    We open the database with auto-analysis enabled to ensure import tables are
-    properly parsed and populated by IDA.
+    Note: Function scope is required for IDA databases because the IDA kernel
+    maintains global state that can be affected by other database instances.
+    Module-scoped fixtures cause test pollution when other tests open databases.
+    Uses pre-analyzed database for fast loading (no auto-analysis needed).
     """
     idb_path = imports_test_setup
-    ida_options = IdaCommandOptions(new_database=True, auto_analysis=True)
+    ida_options = IdaCommandOptions(new_database=False, auto_analysis=False)
     db = ida_domain.Database.open(path=idb_path, args=ida_options, save_on_close=False)
     yield db
     if db.is_open():
@@ -63,22 +65,12 @@ def test_imports_module_count(imports_db):
     which internally calls ida_nalt.get_import_module_qty(). This is a fundamental
     operation that all other import operations depend on.
 
-    The test binary (tiny_c.bin) is a minimal C program that should have at least
-    one import module (typically libc or msvcrt depending on platform). If the
-    binary has no imports, we skip the test rather than fail, as this indicates
-    a limitation of the test binary, not a bug in the implementation.
+    The test_imports.bin binary is dynamically linked against libc, so it will
+    have at least one import module.
     """
     count = len(imports_db.imports)
 
-    # tiny_c.bin might not have imports if it's statically linked
-    # Real-world binaries will have imports
-    assert count >= 0, 'Import count should be non-negative'
-
-    # If no imports, skip remaining assertions
-    if count == 0:
-        pytest.skip('Test binary has no imports (statically linked?)')
-
-    # If we have imports, verify they're accessible
+    # test_imports.bin is dynamically linked and must have imports
     assert count > 0, 'Expected test binary to have at least one import module'
 
 
@@ -99,9 +91,7 @@ def test_imports_module_iteration(imports_db):
     for consistency with the legacy IDA API.
     """
     modules = list(imports_db.imports)
-
-    if len(modules) == 0:
-        pytest.skip('Test binary has no imports')
+    assert len(modules) > 0, 'test_imports.bin must have import modules'
 
     # Verify basic properties
     for idx, module in enumerate(modules):
@@ -128,7 +118,7 @@ def test_imports_get_module_by_index(imports_db):
     count = len(imports_db.imports)
 
     if count == 0:
-        pytest.skip('Test binary has no imports')
+        pytest.fail('test_imports.bin must have imports')
 
     # Test valid index
     module = imports_db.imports.get_module(0)
@@ -171,7 +161,7 @@ def test_imports_get_module_by_name(imports_db):
     count = len(imports_db.imports)
 
     if count == 0:
-        pytest.skip('Test binary has no imports')
+        pytest.fail('test_imports.bin must have imports')
 
     # Get first module to test with
     first_module = imports_db.imports.get_module(0)
@@ -217,7 +207,7 @@ def test_imports_module_entries(imports_db):
     count = len(imports_db.imports)
 
     if count == 0:
-        pytest.skip('Test binary has no imports')
+        pytest.fail('test_imports.bin must have imports')
 
     # Get first module
     module = imports_db.imports.get_module(0)
@@ -233,7 +223,7 @@ def test_imports_module_entries(imports_db):
 
     if len(entries) == 0:
         # Module exists but has no imports (unusual but valid)
-        pytest.skip('Module has no import entries')
+        pytest.fail('Module in test_imports.bin must have import entries')
 
     # Verify each entry's properties
     for entry in entries:
@@ -281,7 +271,7 @@ def test_imports_get_entries_by_module(imports_db):
     count = len(imports_db.imports)
 
     if count == 0:
-        pytest.skip('Test binary has no imports')
+        pytest.fail('test_imports.bin must have imports')
 
     # Test valid module index
     entries_direct = list(imports_db.imports.get_entries_by_module(0))
@@ -323,7 +313,7 @@ def test_imports_get_all_entries(imports_db):
     count = len(imports_db.imports)
 
     if count == 0:
-        pytest.skip('Test binary has no imports')
+        pytest.fail('test_imports.bin must have imports')
 
     # Get all entries (flattened)
     all_entries = list(imports_db.imports.get_all_entries())
@@ -337,7 +327,7 @@ def test_imports_get_all_entries(imports_db):
     )
 
     if len(all_entries) == 0:
-        pytest.skip('No import entries found')
+        pytest.fail('test_imports.bin must have import entries')
 
     # Verify each entry
     for entry in all_entries:
@@ -370,7 +360,7 @@ def test_imports_get_at(imports_db):
     count = len(imports_db.imports)
 
     if count == 0:
-        pytest.skip('Test binary has no imports')
+        pytest.fail('test_imports.bin must have imports')
 
     # Get first import entry to test with
     first_module = imports_db.imports.get_module(0)
@@ -378,7 +368,7 @@ def test_imports_get_at(imports_db):
 
     first_entries = list(first_module.imports)
     if len(first_entries) == 0:
-        pytest.skip('First module has no entries')
+        pytest.fail('First module in test_imports.bin must have entries')
 
     first_entry = first_entries[0]
 
@@ -422,7 +412,7 @@ def test_imports_find_by_name(imports_db):
     count = len(imports_db.imports)
 
     if count == 0:
-        pytest.skip('Test binary has no imports')
+        pytest.fail('test_imports.bin must have imports')
 
     # Get a known import name to test with
     first_module = imports_db.imports.get_module(0)
@@ -430,7 +420,7 @@ def test_imports_find_by_name(imports_db):
 
     first_entries = list(first_module.imports)
     if len(first_entries) == 0:
-        pytest.skip('First module has no entries')
+        pytest.fail('First module in test_imports.bin must have entries')
 
     # Find a named import (skip ordinal imports)
     test_entry = None
@@ -440,7 +430,7 @@ def test_imports_find_by_name(imports_db):
             break
 
     if test_entry is None:
-        pytest.skip('No named imports found in first module')
+        pytest.fail('First module in test_imports.bin must have named imports')
 
     # Test finding by name (no module filter)
     found_entry = imports_db.imports.find_by_name(test_entry.name)
@@ -480,7 +470,7 @@ def test_imports_find_by_name_case_insensitive_module(imports_db):
     count = len(imports_db.imports)
 
     if count == 0:
-        pytest.skip('Test binary has no imports')
+        pytest.fail('test_imports.bin must have imports')
 
     # Get a known import
     first_module = imports_db.imports.get_module(0)
@@ -488,7 +478,7 @@ def test_imports_find_by_name_case_insensitive_module(imports_db):
 
     first_entries = list(first_module.imports)
     if len(first_entries) == 0:
-        pytest.skip('First module has no entries')
+        pytest.fail('First module in test_imports.bin must have entries')
 
     # Find a named import
     test_entry = None
@@ -498,7 +488,7 @@ def test_imports_find_by_name_case_insensitive_module(imports_db):
             break
 
     if test_entry is None:
-        pytest.skip('No named imports found')
+        pytest.fail('test_imports.bin must have named imports')
 
     # Test with different case variations of module name
     module_lower = test_entry.module_name.lower()
@@ -537,7 +527,7 @@ def test_imports_get_module_names(imports_db):
     count = len(imports_db.imports)
 
     if count == 0:
-        pytest.skip('Test binary has no imports')
+        pytest.fail('test_imports.bin must have imports')
 
     # Get module names
     names = imports_db.imports.get_module_names()
@@ -623,14 +613,14 @@ def test_imports_find_all_by_name(imports_db):
     - Can detect duplicates if they exist in the test binary
     """
     if len(imports_db.imports) == 0:
-        pytest.skip('Test binary has no imports')
+        pytest.fail('test_imports.bin must have imports')
 
     # Get first import to use as test case
     first_module = next(iter(imports_db.imports))
     entries_from_module = list(first_module.imports)
 
     if len(entries_from_module) == 0:
-        pytest.skip('First module has no imports')
+        pytest.fail('First module in test_imports.bin must have imports')
 
     # Find first named import
     test_entry = None
@@ -640,7 +630,7 @@ def test_imports_find_all_by_name(imports_db):
             break
 
     if not test_entry:
-        pytest.skip('No named imports in first module')
+        pytest.fail('First module in test_imports.bin must have named imports')
 
     # Test: find all by name (should find at least the test entry)
     results = list(imports_db.imports.find_all_by_name(test_entry.name))
@@ -678,12 +668,12 @@ def test_imports_filter_entries(imports_db):
     - Returns empty when no matches
     """
     if len(imports_db.imports) == 0:
-        pytest.skip('Test binary has no imports')
+        pytest.fail('test_imports.bin must have imports')
 
     # Get all entries to establish ground truth
     all_entries = list(imports_db.imports.get_all_entries())
     if len(all_entries) == 0:
-        pytest.skip('Test binary has no import entries')
+        pytest.fail('test_imports.bin must have import entries')
 
     # Test: filter for first module only
     first_module = next(iter(imports_db.imports))
@@ -730,12 +720,12 @@ def test_imports_search_by_pattern(imports_db):
     - Handles invalid regex patterns gracefully
     """
     if len(imports_db.imports) == 0:
-        pytest.skip('Test binary has no imports')
+        pytest.fail('test_imports.bin must have imports')
 
     # Get sample import name to test with
     all_entries = list(imports_db.imports.get_all_entries())
     if len(all_entries) == 0:
-        pytest.skip('Test binary has no import entries')
+        pytest.fail('test_imports.bin must have import entries')
 
     # Find first named import
     test_entry = None
@@ -745,7 +735,7 @@ def test_imports_search_by_pattern(imports_db):
             break
 
     if not test_entry:
-        pytest.skip('No suitable named import found')
+        pytest.fail('test_imports.bin must have suitable named imports')
 
     # Test: search by exact name (should find at least one)
     exact_results = list(imports_db.imports.search_by_pattern(f'^{test_entry.name}$'))
@@ -845,12 +835,12 @@ def test_imports_is_import(imports_db):
     - Handles edge cases (BADADDR, segment boundaries)
     """
     if len(imports_db.imports) == 0:
-        pytest.skip('Test binary has no imports')
+        pytest.fail('test_imports.bin must have imports')
 
     # Get a known import address
     all_entries = list(imports_db.imports.get_all_entries())
     if len(all_entries) == 0:
-        pytest.skip('Test binary has no import entries')
+        pytest.fail('test_imports.bin must have import entries')
 
     test_entry = all_entries[0]
 
@@ -897,7 +887,7 @@ def test_imports_get_statistics(imports_db):
     - most_imported_module is correctly identified
     """
     if len(imports_db.imports) == 0:
-        pytest.skip('Test binary has no imports')
+        pytest.fail('test_imports.bin must have imports')
 
     stats = imports_db.imports.get_statistics()
 
@@ -957,7 +947,7 @@ def test_imports_get_entries_by_module_variants(imports_db):
     - Proper error handling for invalid inputs
     """
     if len(imports_db.imports) == 0:
-        pytest.skip('Test binary has no imports')
+        pytest.fail('test_imports.bin must have imports')
 
     first_module = next(iter(imports_db.imports))
 
