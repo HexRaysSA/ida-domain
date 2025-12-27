@@ -79,9 +79,11 @@ def test_next_undefined_finds_address(search_db):
     result = search_db.search.next_undefined(start_ea)
 
     # Result can be None if everything is defined, or an address
-    assert result is None or (isinstance(result, int) and search_db.is_valid_ea(result)), (
-        'next_undefined should return None or a valid address'
-    )
+    if result is not None:
+        # CRITICAL: Verify it's actually undefined
+        assert search_db.bytes.is_unknown_at(result), (
+            f"Address {hex(result)} from next_undefined() should be undefined"
+        )
 
 
 def test_next_defined_finds_address(search_db):
@@ -100,7 +102,11 @@ def test_next_defined_finds_address(search_db):
 
     # With auto-analysis, we should find at least some defined addresses
     assert result is not None, 'Should find defined addresses in analyzed binary'
-    assert search_db.is_valid_ea(result), 'Result should be a valid address'
+
+    # CRITICAL: Verify it's actually defined
+    assert not search_db.bytes.is_unknown_at(result), (
+        f"Address {hex(result)} from next_defined() should be defined"
+    )
 
 
 def test_all_undefined_iterator(search_db):
@@ -123,8 +129,11 @@ def test_all_undefined_iterator(search_db):
     # Test that it's iterable and addresses are valid
     count = 0
     for ea in search_db.search.all_undefined(start_ea, end_ea):
-        assert search_db.is_valid_ea(ea), f'Undefined address {hex(ea)} should be valid'
         assert start_ea <= ea < end_ea, 'Address should be within range'
+        # CRITICAL: Verify it's actually undefined
+        assert search_db.bytes.is_unknown_at(ea), (
+            f"Address {hex(ea)} from all_undefined() should be undefined"
+        )
         count += 1
         if count >= 10:  # Limit to prevent infinite loops in tests
             break
@@ -152,8 +161,11 @@ def test_all_defined_iterator(search_db):
     # Test that it's iterable and addresses are valid
     count = 0
     for ea in search_db.search.all_defined(start_ea, end_ea):
-        assert search_db.is_valid_ea(ea), f'Defined address {hex(ea)} should be valid'
         assert start_ea <= ea < end_ea, 'Address should be within range'
+        # CRITICAL: Verify it's actually defined
+        assert not search_db.bytes.is_unknown_at(ea), (
+            f"Address {hex(ea)} from all_defined() should be defined"
+        )
         count += 1
         if count >= 10:  # Limit for test performance
             break
@@ -183,8 +195,18 @@ def test_next_code_finds_instruction(search_db):
     start_ea = search_db.minimum_ea
     result = search_db.search.next_code(start_ea)
 
-    assert result is not None, 'Should find code in binary with entry point'
-    assert search_db.is_valid_ea(result), 'Code address should be valid'
+    # Should find code in analyzed binary
+    assert result is not None, 'Should find code in analyzed binary'
+
+    # CRITICAL: Verify it's actually code
+    assert search_db.bytes.is_code_at(result), (
+        f"Address {hex(result)} from next_code() should be code"
+    )
+
+    # Verify it's >= start address (searching forward)
+    assert result >= start_ea, (
+        f"Result {hex(result)} should be >= start {hex(start_ea)}"
+    )
 
 
 def test_next_data_finds_data_item(search_db):
@@ -200,9 +222,11 @@ def test_next_data_finds_data_item(search_db):
     result = search_db.search.next_data(start_ea)
 
     # Result can be None if binary has no data sections
-    assert result is None or (isinstance(result, int) and search_db.is_valid_ea(result)), (
-        'next_data should return None or valid data address'
-    )
+    if result is not None:
+        # CRITICAL: Verify it's actually data
+        assert search_db.bytes.is_data_at(result), (
+            f"Address {hex(result)} from next_data() should be data"
+        )
 
 
 def test_search_direction_up(search_db):
@@ -247,7 +271,10 @@ def test_all_code_iterator(search_db):
 
     count = 0
     for ea in search_db.search.all_code(start_ea, end_ea):
-        assert search_db.is_valid_ea(ea), f'Code address {hex(ea)} should be valid'
+        # CRITICAL: Verify it's actually code
+        assert search_db.bytes.is_code_at(ea), (
+            f"Address {hex(ea)} from all_code() should be code"
+        )
         count += 1
         if count >= 20:  # Test first 20 code locations
             break
@@ -268,8 +295,11 @@ def test_all_data_iterator(search_db):
 
     count = 0
     for ea in search_db.search.all_data(start_ea, end_ea):
-        assert search_db.is_valid_ea(ea), f'Data address {hex(ea)} should be valid'
         assert start_ea <= ea < end_ea, 'Address should be within range'
+        # CRITICAL: Verify it's actually data
+        assert search_db.bytes.is_data_at(ea), (
+            f"Address {hex(ea)} from all_data() should be data"
+        )
         count += 1
         if count >= 10:
             break
@@ -294,9 +324,14 @@ def test_next_code_outside_function(search_db):
     result = search_db.search.next_code_outside_function(start_ea)
 
     # Can be None if all code is in functions (good analysis)
-    assert result is None or (isinstance(result, int) and search_db.is_valid_ea(result)), (
-        'Should return None or valid address'
-    )
+    if result is not None:
+        # CRITICAL: Verify it's code AND not in a function
+        assert search_db.bytes.is_code_at(result), (
+            f"Address {hex(result)} from next_code_outside_function() should be code"
+        )
+        assert not search_db.functions.get_at(result), (
+            f"Address {hex(result)} should not be in a function"
+        )
 
 
 def test_all_code_outside_functions_iterator(search_db):
