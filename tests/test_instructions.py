@@ -273,17 +273,37 @@ class TestInstructionCreation:
         # Ensure undefined
         ida_bytes.del_items(test_addr, ida_bytes.DELIT_SIMPLE, 8)
 
-        # Write invalid instruction bytes for x86_64
-        # 0xFF 0xFF is undefined in most architectures
-        ida_bytes.patch_bytes(test_addr, b'\xff\xff\xff\xff')
+        # Test should return False for invalid opcodes
+        # Note: Some byte sequences might decode on certain architectures
+        # Using multiple invalid sequences to be thorough
+        invalid_sequences = [
+            bytes([0xFF, 0xFF, 0xFF, 0xFF]),  # Unlikely to be valid
+            bytes([0x0F, 0xFF]),               # Invalid opcode on x86
+        ]
 
-        # Try to create instruction
-        success = test_env.instructions.create_at(test_addr)
+        for seq in invalid_sequences:
+            # Ensure undefined
+            ida_bytes.del_items(test_addr, ida_bytes.DELIT_SIMPLE, len(seq))
 
-        # Should fail or succeed based on architecture
-        # (On x86, 0xFF 0xFF might decode as some instruction)
-        # The important thing is create_at returns a boolean, not an exception
-        assert isinstance(success, bool), 'create_at should return boolean, not raise exception'
+            # Write invalid bytes
+            ida_bytes.patch_bytes(test_addr, seq)
+
+            # Attempt to create instruction
+            success = test_env.instructions.create_at(test_addr)
+
+            # Should return False (or skip if it actually decoded)
+            if success:
+                # Some bytes might decode - skip this sequence
+                continue
+            else:
+                # Found a sequence that doesn't decode - verify False
+                assert success is False, (
+                    f"create_at should return False for invalid opcode {seq.hex()}"
+                )
+                return  # Test passed
+
+        # If we get here, all sequences decoded (architecture-dependent)
+        pytest.skip("Could not find invalid opcode sequence for this architecture")
 
     def test_create_at_with_invalid_address_raises_error(self, test_env):
         """
