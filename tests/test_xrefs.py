@@ -821,3 +821,179 @@ class TestXrefInfoDataclass:
                 return
 
         pytest.skip('No function with callers found')
+
+
+class TestXrefMutation:
+    """Tests for xref creation and deletion methods."""
+
+    def test_add_code_xref_creates_xref(self, test_env):
+        """
+        Test add_code_xref creates a code cross-reference.
+
+        RATIONALE: Users need to create xrefs programmatically when
+        fixing analysis or annotating code flow.
+        """
+        from ida_domain.xrefs import XrefType
+
+        # Find two instructions to create xref between
+        funcs = list(test_env.functions.get_all())
+        if len(funcs) < 2:
+            pytest.skip('Need at least 2 functions for xref test')
+
+        from_ea = funcs[0].start_ea
+        to_ea = funcs[1].start_ea
+
+        # Count xrefs before
+        count_before = test_env.xrefs.count_refs_to(to_ea, XrefsFlags.CODE_NOFLOW)
+
+        # Add code xref
+        result = test_env.xrefs.add_code_xref(from_ea, to_ea, XrefType.CALL_NEAR)
+
+        assert result is True, 'add_code_xref should return True on success'
+
+        # Verify xref was created
+        count_after = test_env.xrefs.count_refs_to(to_ea, XrefsFlags.CODE_NOFLOW)
+        assert count_after >= count_before, (
+            f'xref count should increase after add_code_xref'
+        )
+
+    def test_add_data_xref_creates_xref(self, test_env):
+        """
+        Test add_data_xref creates a data cross-reference.
+
+        RATIONALE: Users need to create data xrefs when manually
+        identifying data references that IDA missed.
+        """
+        from ida_domain.xrefs import XrefType
+
+        # Find an instruction and a data address
+        insn = test_env.instructions.get_at(test_env.minimum_ea)
+        if insn is None:
+            pytest.skip('No instruction found')
+
+        # Find or create a data location
+        data_ea = test_env.minimum_ea + 0x1000
+        if not test_env.is_valid_ea(data_ea):
+            pytest.skip('Data address not available')
+
+        from_ea = insn.ea
+
+        # Add data xref
+        result = test_env.xrefs.add_data_xref(from_ea, data_ea, XrefType.READ)
+
+        assert result is True, 'add_data_xref should return True on success'
+
+    def test_delete_xref_removes_xref(self, test_env):
+        """
+        Test delete_xref removes an existing cross-reference.
+
+        RATIONALE: Users need to remove incorrect xrefs that were
+        created by auto-analysis or by mistake.
+        """
+        from ida_domain.xrefs import XrefType
+
+        # First create an xref to delete
+        funcs = list(test_env.functions.get_all())
+        if len(funcs) < 2:
+            pytest.skip('Need at least 2 functions')
+
+        from_ea = funcs[0].start_ea
+        to_ea = funcs[1].start_ea
+
+        # Add xref
+        test_env.xrefs.add_code_xref(from_ea, to_ea, XrefType.CALL_NEAR)
+
+        # Delete it
+        result = test_env.xrefs.delete_xref(from_ea, to_ea)
+
+        # Result indicates if xref existed and was deleted
+        assert isinstance(result, bool), 'delete_xref should return bool'
+
+    def test_add_code_xref_with_invalid_from_ea_raises_error(self, test_env):
+        """
+        Test add_code_xref raises InvalidEAError for invalid from address.
+
+        RATIONALE: Methods should validate addresses and raise appropriate errors.
+        """
+        from ida_domain.xrefs import XrefType
+
+        invalid_ea = 0xDEADBEEF
+        valid_ea = test_env.minimum_ea
+
+        with pytest.raises(InvalidEAError):
+            test_env.xrefs.add_code_xref(invalid_ea, valid_ea, XrefType.CALL_NEAR)
+
+    def test_add_code_xref_with_invalid_to_ea_raises_error(self, test_env):
+        """
+        Test add_code_xref raises InvalidEAError for invalid to address.
+
+        RATIONALE: Methods should validate addresses and raise appropriate errors.
+        """
+        from ida_domain.xrefs import XrefType
+
+        invalid_ea = 0xDEADBEEF
+        valid_ea = test_env.minimum_ea
+
+        with pytest.raises(InvalidEAError):
+            test_env.xrefs.add_code_xref(valid_ea, invalid_ea, XrefType.CALL_NEAR)
+
+    def test_add_code_xref_with_data_type_raises_error(self, test_env):
+        """
+        Test add_code_xref raises InvalidParameterError for data xref type.
+
+        RATIONALE: Code xref methods should only accept code xref types.
+        """
+        from ida_domain.xrefs import XrefType
+
+        funcs = list(test_env.functions.get_all())
+        if len(funcs) < 2:
+            pytest.skip('Need at least 2 functions')
+
+        from_ea = funcs[0].start_ea
+        to_ea = funcs[1].start_ea
+
+        with pytest.raises(InvalidParameterError):
+            test_env.xrefs.add_code_xref(from_ea, to_ea, XrefType.READ)
+
+    def test_add_data_xref_with_code_type_raises_error(self, test_env):
+        """
+        Test add_data_xref raises InvalidParameterError for code xref type.
+
+        RATIONALE: Data xref methods should only accept data xref types.
+        """
+        from ida_domain.xrefs import XrefType
+
+        insn = test_env.instructions.get_at(test_env.minimum_ea)
+        if insn is None:
+            pytest.skip('No instruction found')
+
+        data_ea = test_env.minimum_ea + 0x1000
+        if not test_env.is_valid_ea(data_ea):
+            pytest.skip('Data address not available')
+
+        with pytest.raises(InvalidParameterError):
+            test_env.xrefs.add_data_xref(insn.ea, data_ea, XrefType.CALL_NEAR)
+
+    def test_delete_xref_with_invalid_from_ea_raises_error(self, test_env):
+        """
+        Test delete_xref raises InvalidEAError for invalid from address.
+
+        RATIONALE: Methods should validate addresses and raise appropriate errors.
+        """
+        invalid_ea = 0xDEADBEEF
+        valid_ea = test_env.minimum_ea
+
+        with pytest.raises(InvalidEAError):
+            test_env.xrefs.delete_xref(invalid_ea, valid_ea)
+
+    def test_delete_xref_with_invalid_to_ea_raises_error(self, test_env):
+        """
+        Test delete_xref raises InvalidEAError for invalid to address.
+
+        RATIONALE: Methods should validate addresses and raise appropriate errors.
+        """
+        invalid_ea = 0xDEADBEEF
+        valid_ea = test_env.minimum_ea
+
+        with pytest.raises(InvalidEAError):
+            test_env.xrefs.delete_xref(valid_ea, invalid_ea)

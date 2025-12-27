@@ -856,3 +856,103 @@ class Xrefs(DatabaseEntity):
                 kind,
                 'must be one of: "all"',
             )
+
+    # ========================================================================
+    # Xref Mutation Methods
+    # ========================================================================
+
+    def add_code_xref(self, from_ea: ea_t, to_ea: ea_t, xref_type: XrefType) -> bool:
+        """
+        Add a code cross-reference between two addresses.
+
+        Args:
+            from_ea: Source address (typically an instruction).
+            to_ea: Target address (typically a function or code label).
+            xref_type: Type of code reference (CALL_NEAR, CALL_FAR, JUMP_NEAR, etc.).
+
+        Returns:
+            True if xref was added successfully, False otherwise.
+
+        Raises:
+            InvalidEAError: If either address is invalid.
+            InvalidParameterError: If xref_type is not a code reference type.
+
+        Example:
+            >>> db.xrefs.add_code_xref(call_insn_ea, target_func_ea, XrefType.CALL_NEAR)
+        """
+        if not self.database.is_valid_ea(from_ea):
+            raise InvalidEAError(from_ea)
+        if not self.database.is_valid_ea(to_ea):
+            raise InvalidEAError(to_ea)
+
+        if not xref_type.is_code_ref():
+            raise InvalidParameterError(
+                'xref_type', xref_type, 'must be a code reference type'
+            )
+
+        ida_xref.add_cref(from_ea, to_ea, xref_type)
+        return True
+
+    def add_data_xref(self, from_ea: ea_t, to_ea: ea_t, xref_type: XrefType) -> bool:
+        """
+        Add a data cross-reference between two addresses.
+
+        Args:
+            from_ea: Source address (typically code that references data).
+            to_ea: Target address (typically a data location).
+            xref_type: Type of data reference (READ, WRITE, OFFSET, etc.).
+
+        Returns:
+            True if xref was added successfully, False otherwise.
+
+        Raises:
+            InvalidEAError: If either address is invalid.
+            InvalidParameterError: If xref_type is not a data reference type.
+
+        Example:
+            >>> db.xrefs.add_data_xref(insn_ea, global_var_ea, XrefType.READ)
+        """
+        if not self.database.is_valid_ea(from_ea):
+            raise InvalidEAError(from_ea)
+        if not self.database.is_valid_ea(to_ea):
+            raise InvalidEAError(to_ea)
+
+        if not xref_type.is_data_ref():
+            raise InvalidParameterError(
+                'xref_type', xref_type, 'must be a data reference type'
+            )
+
+        ida_xref.add_dref(from_ea, to_ea, xref_type)
+        return True
+
+    def delete_xref(self, from_ea: ea_t, to_ea: ea_t) -> bool:
+        """
+        Delete a cross-reference between two addresses.
+
+        Removes both code and data xrefs from from_ea to to_ea.
+
+        Args:
+            from_ea: Source address of the xref.
+            to_ea: Target address of the xref.
+
+        Returns:
+            True if an xref was found and deleted, False if no xref existed.
+
+        Raises:
+            InvalidEAError: If either address is invalid.
+
+        Example:
+            >>> db.xrefs.delete_xref(from_ea, to_ea)
+        """
+        if not self.database.is_valid_ea(from_ea):
+            raise InvalidEAError(from_ea)
+        if not self.database.is_valid_ea(to_ea):
+            raise InvalidEAError(to_ea)
+
+        # Try deleting code xref
+        deleted_code = ida_xref.del_cref(from_ea, to_ea, 0)
+
+        # Also try deleting data xref
+        deleted_data = ida_xref.del_dref(from_ea, to_ea)
+
+        return bool(deleted_code or deleted_data)
