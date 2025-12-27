@@ -1260,17 +1260,22 @@ class TestBytesSearchMethods:
             # Find unused space in database
             test_addr = db.minimum_ea + 0x1000
 
-            # Find actually valid address
-            while not db.is_valid_ea(test_addr) and test_addr < db.maximum_ea:
+            test_string_bytes = b"TEST\x00"
+            required_bytes = len(test_string_bytes)
+
+            # Find actually valid address with enough consecutive bytes
+            while (not db.is_valid_ea(test_addr) or
+                   not all(db.is_valid_ea(test_addr + i) for i in range(required_bytes))) and \
+                   test_addr < db.maximum_ea:
                 test_addr += 0x100
 
             if db.is_valid_ea(test_addr):
                 # Create a simple string "TEST" at this location
-                test_string_bytes = b"TEST\x00"
                 for i, byte in enumerate(test_string_bytes):
-                    db.bytes.patch_byte(test_addr + i, byte)
+                    db.bytes.patch_byte_at(test_addr + i, byte)
 
                 test_string = "TEST"
+                assert test_string is not None, 'Should have found or created test string'
 
         # Now try to find this string
         from ida_domain.bytes import SearchFlags
