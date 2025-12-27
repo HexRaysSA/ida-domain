@@ -1275,7 +1275,12 @@ class TestBytesSearchMethods:
                     db.bytes.patch_byte_at(test_addr + i, byte)
 
                 test_string = "TEST"
-                assert test_string is not None, 'Should have found or created test string'
+
+            # Verify we found or created a test string
+            assert test_string is not None, (
+                'Could not find existing string or create test string. '
+                f'Binary range: 0x{db.minimum_ea:x}-0x{db.maximum_ea:x}'
+            )
 
         # Now try to find this string
         from ida_domain.bytes import SearchFlags
