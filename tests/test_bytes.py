@@ -79,17 +79,19 @@ class TestBytesItemNavigation:
         calling get_item_head_at on any byte within the item (including tail bytes)
         correctly returns the address of the head.
         """
-        # Find a location with enough space to create a dword
-        test_addr = test_env.minimum_ea + 0x100
+        # Find first valid address with enough space for a dword (4 bytes)
+        test_addr = None
+        for offset in [0x100, 0x200, 0x50, 0x20, 0x10, 0]:
+            candidate = test_env.minimum_ea + offset
+            if test_env.is_valid_ea(candidate) and test_env.is_valid_ea(candidate + 3):
+                test_addr = candidate
+                break
 
-        # Ensure we're at a valid location
-        if not test_env.is_valid_ea(test_addr):
-            pytest.skip('Test address not mapped in database')
+        assert test_addr is not None, 'Should find valid address in any binary'
 
-        # Create a dword (4 bytes) at test_addr
+        # Force create dword - this should succeed since we verified the range
         success = test_env.bytes.create_dword_at(test_addr, count=1, force=True)
-        if not success:
-            pytest.skip('Could not create dword at test address')
+        assert success, f'create_dword_at should succeed at validated address 0x{test_addr:x}'
 
         # The head should be at test_addr
         head = test_env.bytes.get_item_head_at(test_addr)
