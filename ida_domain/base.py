@@ -18,8 +18,8 @@ The ida-domain API follows these return conventions:
 - May raise exceptions for invalid parameters
 
 **set_* methods:**
-- Most return `None` (raise exceptions on failure)
-- Some return `bool` for operations that may fail without exception
+- Most return `bool` - True on success, False on failure
+- Some return `None` (rely on exceptions for failure)
 
 **has_* / is_* methods:**
 - Return `bool` - True if condition is met, False otherwise
