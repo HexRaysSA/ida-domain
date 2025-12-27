@@ -111,11 +111,15 @@ def test_analyze_method_is_alias_for_analyze_range(analysis_db):
     analysis_db.analysis.wait()
 
     # Get a valid range for analysis
-    start_ea = analysis_db.minimum_ea + 0x1000
-    end_ea = min(start_ea + 0x100, analysis_db.maximum_ea)
+    # Use a range that definitely exists in any binary
+    start_ea = analysis_db.minimum_ea
+    # Use first 0x100 bytes or less if binary is smaller
+    range_size = min(0x100, (analysis_db.maximum_ea - analysis_db.minimum_ea) // 2)
+    end_ea = start_ea + range_size
 
-    if not analysis_db.is_valid_ea(start_ea) or not analysis_db.is_valid_ea(end_ea - 1):
-        pytest.skip('Test range not valid in this binary')
+    # This should never skip now since we're using actual bounds
+    assert analysis_db.is_valid_ea(start_ea), 'minimum_ea should always be valid'
+    assert analysis_db.is_valid_ea(end_ea - 1), 'calculated end_ea should be valid'
 
     # Count defined items before analysis
     defined_before = sum(
