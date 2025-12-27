@@ -234,25 +234,21 @@ class TestFunctionsDelete:
         RATIONALE: The delete() method should provide identical behavior
         to remove() for consistency with common programming patterns.
         """
-        # Find a suitable address to test with (after last function)
+        # Find an existing function to test with
         all_funcs = list(test_env.functions.get_all())
-        if not all_funcs:
-            pytest.skip('Need at least one function for testing')
+        assert len(all_funcs) > 0, 'Test binary should have at least one function'
 
-        # Use address after last function
-        last_func = all_funcs[-1]
-        test_ea = last_func.end_ea + 0x10
+        # Use the last function as our test candidate
+        test_func = all_funcs[-1]
+        test_ea = test_func.start_ea
 
-        # Ensure it's valid and not already a function
-        if not test_env.is_valid_ea(test_ea):
-            pytest.skip('Test address not valid')
-        if test_env.functions.exists_at(test_ea):
-            pytest.skip('Test address already has function')
+        # Remove the existing function so we can re-create it
+        removed = test_env.functions.remove(test_ea)
+        assert removed, 'Should be able to remove existing function'
 
-        # Create a function at test address
+        # Re-create the function
         created = test_env.functions.create(test_ea)
-        if not created:
-            pytest.skip('Could not create test function')
+        assert created, 'Should be able to re-create function at same address'
 
         # Verify function exists
         assert test_env.functions.exists_at(test_ea), (
