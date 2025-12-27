@@ -1384,3 +1384,161 @@ class TestBytesSearchMethods:
 
         # Should return None or valid address
         assert result is None or db.is_valid_ea(result)
+
+
+class TestWildcardPatternSearch:
+    """Tests for wildcard byte pattern search."""
+
+    def test_find_pattern_with_wildcards_finds_match(self, test_env):
+        """
+        Test find_pattern finds bytes matching wildcard pattern.
+
+        RATIONALE: Wildcard patterns like "CC ?? 90" are essential for
+        signature-based searching where some bytes vary.
+        """
+        # Find a known byte sequence in the binary
+        start_ea = test_env.minimum_ea
+
+        # Read first few bytes and create a pattern with wildcard
+        first_bytes = test_env.bytes.get_bytes_at(start_ea, 4)
+        if first_bytes is None or len(first_bytes) < 4:
+            pytest.skip('Cannot read bytes for pattern test')
+
+        # Create pattern: first byte, wildcard, third byte, fourth byte
+        pattern = f"{first_bytes[0]:02X} ?? {first_bytes[2]:02X} {first_bytes[3]:02X}"
+
+        result = test_env.bytes.find_pattern(pattern, start_ea)
+
+        assert result is not None, f'find_pattern should find pattern "{pattern}"'
+        assert result == start_ea, (
+            f'find_pattern should find pattern at 0x{start_ea:x}, got 0x{result:x}'
+        )
+
+    def test_find_pattern_with_no_match_returns_none(self, test_env):
+        """
+        Test find_pattern returns None when pattern not found.
+
+        RATIONALE: Method should return None for patterns that don't exist
+        in the binary, not raise an exception.
+        """
+        # Use a pattern unlikely to exist
+        pattern = "DE AD BE EF CA FE BA BE"
+
+        result = test_env.bytes.find_pattern(pattern)
+
+        assert result is None, 'find_pattern should return None for non-existent pattern'
+
+    def test_find_pattern_all_returns_multiple_matches(self, test_env):
+        """
+        Test find_pattern_all returns all occurrences of pattern.
+
+        RATIONALE: Some patterns occur multiple times; the _all variant
+        should return all matches, not just the first.
+        """
+        # Find a common single byte and search for it
+        common_byte = test_env.bytes.get_byte_at(test_env.minimum_ea)
+        pattern = f"{common_byte:02X}"
+
+        results = test_env.bytes.find_pattern_all(pattern)
+
+        assert isinstance(results, list), 'find_pattern_all should return a list'
+        assert len(results) >= 1, 'find_pattern_all should find at least one match'
+
+    def test_find_pattern_with_invalid_pattern_raises_error(self, test_env):
+        """
+        Test find_pattern raises InvalidParameterError for invalid patterns.
+
+        RATIONALE: Invalid pattern syntax should raise clear errors.
+        """
+        with pytest.raises(InvalidParameterError):
+            test_env.bytes.find_pattern("ZZ XX YY")  # Invalid hex
+
+    def test_find_pattern_with_empty_pattern_raises_error(self, test_env):
+        """
+        Test find_pattern raises InvalidParameterError for empty patterns.
+
+        RATIONALE: Empty patterns are invalid and should be rejected.
+        """
+        with pytest.raises(InvalidParameterError):
+            test_env.bytes.find_pattern("")
+
+        with pytest.raises(InvalidParameterError):
+            test_env.bytes.find_pattern("   ")  # Whitespace only
+
+    def test_find_pattern_with_non_string_raises_error(self, test_env):
+        """
+        Test find_pattern raises InvalidParameterError for non-string input.
+
+        RATIONALE: Pattern must be a string, not bytes or other types.
+        """
+        with pytest.raises(InvalidParameterError):
+            test_env.bytes.find_pattern(bytes([0xCC, 0x90]))
+
+        with pytest.raises(InvalidParameterError):
+            test_env.bytes.find_pattern(123)
+
+    def test_find_pattern_with_invalid_ea_raises_error(self, test_env):
+        """
+        Test find_pattern raises InvalidEAError for invalid addresses.
+
+        RATIONALE: Both start_ea and end_ea should be validated.
+        """
+        with pytest.raises(InvalidEAError):
+            test_env.bytes.find_pattern("CC 90", start_ea=0xFFFFFFFFFFFFFFFF)
+
+        with pytest.raises(InvalidEAError):
+            test_env.bytes.find_pattern("CC 90", end_ea=0xFFFFFFFFFFFFFFFF)
+
+    def test_find_pattern_with_start_ge_end_raises_error(self, test_env):
+        """
+        Test find_pattern raises InvalidParameterError when start >= end.
+
+        RATIONALE: Search range must be valid (start < end).
+        """
+        start = test_env.minimum_ea + 100
+        end = test_env.minimum_ea + 50
+
+        with pytest.raises(InvalidParameterError):
+            test_env.bytes.find_pattern("CC", start_ea=start, end_ea=end)
+
+    def test_find_pattern_with_single_wildcard_syntax(self, test_env):
+        """
+        Test find_pattern accepts single '?' as wildcard.
+
+        RATIONALE: Both '?' and '??' should work as wildcards for
+        user convenience.
+        """
+        start_ea = test_env.minimum_ea
+
+        # Read first few bytes
+        first_bytes = test_env.bytes.get_bytes_at(start_ea, 3)
+        if first_bytes is None or len(first_bytes) < 3:
+            pytest.skip('Cannot read bytes for pattern test')
+
+        # Create pattern with single ? wildcard
+        pattern = f"{first_bytes[0]:02X} ? {first_bytes[2]:02X}"
+
+        result = test_env.bytes.find_pattern(pattern, start_ea)
+
+        assert result is not None, f'find_pattern should accept single ? wildcard'
+
+    def test_find_pattern_all_with_range_limits_search(self, test_env):
+        """
+        Test find_pattern_all respects start_ea and end_ea boundaries.
+
+        RATIONALE: Range-limited searches are essential for performance
+        and accuracy when analyzing specific sections.
+        """
+        # Get a limited range
+        start = test_env.minimum_ea
+        end = min(start + 0x100, test_env.maximum_ea)
+
+        # Find a byte that exists and search for it
+        first_byte = test_env.bytes.get_byte_at(start)
+        pattern = f"{first_byte:02X}"
+
+        results = test_env.bytes.find_pattern_all(pattern, start_ea=start, end_ea=end)
+
+        # All results should be within range
+        for ea in results:
+            assert start <= ea < end, f'Result 0x{ea:x} should be within range'

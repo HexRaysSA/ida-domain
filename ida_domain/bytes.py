@@ -2196,6 +2196,186 @@ class Bytes(DatabaseEntity):
             ea = ida_bytes.find_bytes(pattern, ea + 1, None, end_ea)
         return results
 
+    def find_pattern(
+        self, pattern: str, start_ea: ea_t = None, end_ea: ea_t = None
+    ) -> Optional[ea_t]:
+        """
+        Find first occurrence of a byte pattern with wildcard support.
+
+        Supports IDA-style patterns like "CC ?? 90 ??" where ?? matches any byte.
+
+        Args:
+            pattern: Hex string pattern with optional ?? wildcards.
+                     Example: "48 89 ?? ?? 48 8B" or "CC ?? 90"
+            start_ea: Search start address; defaults to database minimum ea if None.
+            end_ea: Search end address; defaults to database maximum ea if None.
+
+        Returns:
+            Address where pattern was found, or None if not found.
+
+        Raises:
+            InvalidParameterError: If pattern is invalid.
+            InvalidEAError: If start_ea or end_ea are specified but invalid.
+        """
+        if not isinstance(pattern, str):
+            raise InvalidParameterError('pattern', type(pattern), 'must be string')
+
+        if len(pattern.strip()) == 0:
+            raise InvalidParameterError('pattern', pattern, 'cannot be empty')
+
+        if start_ea is None:
+            start_ea = self.database.minimum_ea
+        elif not self.database.is_valid_ea(start_ea, strict_check=False):
+            raise InvalidEAError(start_ea)
+
+        if end_ea is None:
+            end_ea = self.database.maximum_ea
+        elif not self.database.is_valid_ea(end_ea, strict_check=False):
+            raise InvalidEAError(end_ea)
+
+        if start_ea >= end_ea:
+            raise InvalidParameterError('start_ea', start_ea, 'must be less than end_ea')
+
+        try:
+            pattern_bytes, mask = self._parse_wildcard_pattern(pattern)
+        except ValueError as e:
+            raise InvalidParameterError('pattern', pattern, str(e))
+
+        return self._find_pattern_with_mask(pattern_bytes, mask, start_ea, end_ea)
+
+    def find_pattern_all(
+        self, pattern: str, start_ea: ea_t = None, end_ea: ea_t = None
+    ) -> List[ea_t]:
+        """
+        Find all occurrences of a byte pattern with wildcard support.
+
+        Args:
+            pattern: Hex string pattern with optional ?? wildcards.
+            start_ea: Search start address; defaults to database minimum ea if None.
+            end_ea: Search end address; defaults to database maximum ea if None.
+
+        Returns:
+            List of addresses where pattern was found.
+
+        Raises:
+            InvalidParameterError: If pattern is invalid.
+            InvalidEAError: If start_ea or end_ea are specified but invalid.
+        """
+        if not isinstance(pattern, str):
+            raise InvalidParameterError('pattern', type(pattern), 'must be string')
+
+        if len(pattern.strip()) == 0:
+            raise InvalidParameterError('pattern', pattern, 'cannot be empty')
+
+        if start_ea is None:
+            start_ea = self.database.minimum_ea
+        elif not self.database.is_valid_ea(start_ea, strict_check=False):
+            raise InvalidEAError(start_ea)
+
+        if end_ea is None:
+            end_ea = self.database.maximum_ea
+        elif not self.database.is_valid_ea(end_ea, strict_check=False):
+            raise InvalidEAError(end_ea)
+
+        if start_ea >= end_ea:
+            raise InvalidParameterError('start_ea', start_ea, 'must be less than end_ea')
+
+        results: List[ea_t] = []
+
+        try:
+            pattern_bytes, mask = self._parse_wildcard_pattern(pattern)
+        except ValueError as e:
+            raise InvalidParameterError('pattern', pattern, str(e))
+
+        current_ea = start_ea
+        while current_ea < end_ea:
+            found_ea = self._find_pattern_with_mask(pattern_bytes, mask, current_ea, end_ea)
+            if found_ea is None:
+                break
+            results.append(found_ea)
+            current_ea = found_ea + 1
+
+        return results
+
+    def _parse_wildcard_pattern(self, pattern: str) -> tuple:
+        """
+        Parse a hex pattern string with wildcards into bytes and mask.
+
+        Args:
+            pattern: Hex string like "48 89 ?? ?? 48"
+
+        Returns:
+            Tuple of (pattern_bytes, mask_bytes) where mask is 0xFF for
+            literal bytes and 0x00 for wildcards.
+
+        Raises:
+            ValueError: If pattern contains invalid hex values.
+        """
+        pattern_bytes = []
+        mask_bytes = []
+
+        tokens = pattern.strip().split()
+
+        for token in tokens:
+            token = token.strip()
+            if not token:
+                continue
+
+            if token in ('??', '?'):
+                pattern_bytes.append(0)
+                mask_bytes.append(0)
+            else:
+                if len(token) != 2:
+                    raise ValueError(f'invalid hex byte: {token}')
+                try:
+                    byte_val = int(token, 16)
+                    pattern_bytes.append(byte_val)
+                    mask_bytes.append(0xFF)
+                except ValueError:
+                    raise ValueError(f'invalid hex byte: {token}')
+
+        if not pattern_bytes:
+            raise ValueError('pattern is empty')
+
+        return bytes(pattern_bytes), bytes(mask_bytes)
+
+    def _find_pattern_with_mask(
+        self, pattern: bytes, mask: bytes, start_ea: ea_t, end_ea: ea_t
+    ) -> Optional[ea_t]:
+        """
+        Find pattern with mask in memory range.
+
+        Args:
+            pattern: Bytes to search for.
+            mask: Mask bytes (0xFF = must match, 0x00 = wildcard).
+            start_ea: Start address.
+            end_ea: End address.
+
+        Returns:
+            Address of first match, or None if not found.
+        """
+        pattern_len = len(pattern)
+        current_ea = start_ea
+
+        while current_ea + pattern_len <= end_ea:
+            data = ida_bytes.get_bytes(current_ea, pattern_len)
+            if data is None:
+                current_ea += 1
+                continue
+
+            match = True
+            for i in range(pattern_len):
+                if mask[i] != 0 and data[i] != pattern[i]:
+                    match = False
+                    break
+
+            if match:
+                return current_ea
+
+            current_ea += 1
+
+        return None
+
     def get_microcode_between(
         self, start_ea: ea_t, end_ea: ea_t, remove_tags: bool = True
     ) -> List[str]:
