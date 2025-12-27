@@ -78,6 +78,13 @@ class XrefInfo:
         """Check if this is ordinary flow reference."""
         return self.type == XrefType.ORDINARY_FLOW
 
+    def __repr__(self) -> str:
+        """Return a readable representation with hex addresses."""
+        return (
+            f"XrefInfo(0x{self.from_ea:x} -> 0x{self.to_ea:x}, "
+            f"{self.type.name}, {'code' if self.is_code else 'data'})"
+        )
+
 
 @dataclass
 class CallerInfo:

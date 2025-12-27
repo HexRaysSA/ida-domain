@@ -762,3 +762,35 @@ class TestLLMFriendlyAPI:
         expected = test_env.xrefs.has_any_refs_from(call_ea)
 
         assert result == expected
+
+
+class TestXrefInfoDataclass:
+    """Tests for XrefInfo dataclass representation."""
+
+    def test_xrefinfo_repr_contains_addresses(self, test_env):
+        """
+        Test XrefInfo __repr__ includes hex addresses.
+
+        RATIONALE: Dataclass repr should show hex addresses and type name
+        for easy debugging in IDA's Python console.
+        """
+        # Find any xref
+        func = next(test_env.functions.get_all())
+        xrefs = list(test_env.xrefs.to_ea(func.start_ea))
+
+        if not xrefs:
+            pytest.skip('No xrefs found for testing')
+
+        xref = xrefs[0]
+        repr_str = repr(xref)
+
+        # Should contain hex addresses
+        assert f'0x{xref.from_ea:x}' in repr_str.lower(), (
+            f'XrefInfo repr should contain from_ea in hex, got: {repr_str}'
+        )
+        assert f'0x{xref.to_ea:x}' in repr_str.lower(), (
+            f'XrefInfo repr should contain to_ea in hex, got: {repr_str}'
+        )
+        assert xref.type.name in repr_str, (
+            f'XrefInfo repr should contain type name, got: {repr_str}'
+        )
