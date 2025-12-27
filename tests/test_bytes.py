@@ -1149,13 +1149,11 @@ class TestBytesSearchMethods:
         end_range = min(db.minimum_ea + 0x1000, db.maximum_ea)
         results = db.bytes.find_binary_sequence(pattern, start_ea=db.minimum_ea, end_ea=end_range)
 
-        # Should return a list
+        # Should return a list (empty if not found, non-empty if found)
         assert isinstance(results, list)
 
-        # Should find at least some occurrences in the first 4KB
-        # (most binaries have null bytes in various places)
         # Don't assert exact count as it varies by binary
-        assert len(results) >= 0  # At minimum, should return empty list if none found
+        # The fact that it returns a list validates the method works
 
     def test_find_binary_sequence_returns_empty_list_when_not_found(self, test_env):
         """
@@ -1177,7 +1175,7 @@ class TestBytesSearchMethods:
 
         # Should return an empty list
         assert isinstance(results, list)
-        assert len(results) >= 0
+        assert len(results) == 0, "Should return empty list when pattern not found"
 
     def test_find_binary_sequence_with_invalid_pattern_raises_error(self, test_env):
         """

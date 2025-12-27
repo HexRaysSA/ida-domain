@@ -576,12 +576,11 @@ def test_multiple_searches_on_same_database(search_db):
     # Should get same result (deterministic)
     assert code1 == code2, 'Multiple searches should give consistent results'
 
-    # Try different search types
+    # Try different search types (should not interfere with each other)
     data1 = search_db.search.next_data(search_db.minimum_ea)
     undefined1 = search_db.search.next_undefined(search_db.minimum_ea)
 
-    # Should not interfere with each other
-    assert True, 'Multiple different search types should work'
+    # No assertion needed - if they don't crash, test passes
 
 
 # =============================================================================
