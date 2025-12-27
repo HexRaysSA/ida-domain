@@ -941,10 +941,23 @@ class Xrefs(DatabaseEntity):
         if not self.database.is_valid_ea(to_ea):
             raise InvalidEAError(to_ea)
 
+        # Check if any xref exists before deletion
+        had_xref = any(
+            xref.from_ea == from_ea
+            for xref in self.to_ea(to_ea)
+        )
+
         # Try deleting code xref
-        deleted_code = ida_xref.del_cref(from_ea, to_ea, 0)
+        ida_xref.del_cref(from_ea, to_ea, 0)
 
         # Also try deleting data xref
-        deleted_data = ida_xref.del_dref(from_ea, to_ea)
+        ida_xref.del_dref(from_ea, to_ea)
 
-        return bool(deleted_code or deleted_data)
+        # Check if xref still exists after deletion
+        still_has_xref = any(
+            xref.from_ea == from_ea
+            for xref in self.to_ea(to_ea)
+        )
+
+        # Return True if we had an xref and it's now gone
+        return had_xref and not still_has_xref
