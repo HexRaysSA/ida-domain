@@ -837,7 +837,11 @@ class Bytes(DatabaseEntity):
             raise InvalidParameterError('start_ea', start_ea, 'must be less than end_ea')
 
         ea = ida_search.find_text(start_ea, 0, 0, text, flags)
-        return ea if ea != BADADDR else None
+
+        # Check if result is within the specified range
+        if ea != BADADDR and start_ea <= ea < end_ea:
+            return ea
+        return None
 
     def find_immediate_between(
         self, value: int, start_ea: ea_t = None, end_ea: ea_t = None
@@ -877,7 +881,9 @@ class Bytes(DatabaseEntity):
         # find_imm returns a tuple (address, operand_number) or None
         if result and isinstance(result, tuple) and len(result) >= 1:
             ea = result[0]
-            return ea if ea != BADADDR else None
+            # Check if result is within the specified range
+            if ea != BADADDR and start_ea <= ea < end_ea:
+                return ea
         return None
 
     def create_byte_at(self, ea: ea_t, count: int = 1, force: bool = False) -> bool:
@@ -1758,11 +1764,18 @@ class Bytes(DatabaseEntity):
                 'max_length', max_length, 'must be positive when specified'
             )
 
+        # Check if this address is actually a string literal
+        flags = ida_bytes.get_full_flags(ea)
+        if not ida_bytes.is_strlit(flags) and max_length is None:
+            # Not a defined string literal, only read if max_length is explicitly provided
+            return None
+
         if max_length is None:
             # Try to get string length from IDA's analysis
             str_len = ida_bytes.get_max_strlit_length(ea, ida_nalt.STRTYPE_C)
             if str_len <= 0:
-                str_len = 256  # Default max length
+                # No string defined at this address
+                return None
         else:
             str_len = max_length
 
