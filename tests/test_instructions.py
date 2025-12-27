@@ -42,6 +42,42 @@ def test_env(instructions_test_setup):
 class TestInstructionValidation:
     """Tests for instruction validation methods (can_decode)."""
 
+    def _find_valid_test_address(self, test_env, size_needed=4, avoid_code=False):
+        """
+        Helper to find a valid address for testing.
+
+        Args:
+            test_env: Test environment
+            size_needed: Bytes needed at address
+            avoid_code: If True, prefer non-code areas
+
+        Returns:
+            Valid address or raises assertion
+        """
+        # Try multiple strategies
+        candidates = [
+            test_env.minimum_ea + 0x100,
+            test_env.minimum_ea + 0x200,
+            test_env.minimum_ea + 0x50,
+            test_env.minimum_ea,
+            test_env.maximum_ea - size_needed - 0x100,
+        ]
+
+        for candidate in candidates:
+            # Check if address and required range are valid
+            if not test_env.is_valid_ea(candidate):
+                continue
+            if not test_env.is_valid_ea(candidate + size_needed - 1):
+                continue
+
+            return candidate
+
+        # Should always find something
+        raise AssertionError(
+            f'Could not find valid address with {size_needed} bytes. '
+            f'Binary range: 0x{test_env.minimum_ea:x}-0x{test_env.maximum_ea:x}'
+        )
+
     def test_can_decode_with_valid_instruction_address(self, test_env):
         """
         Test that can_decode returns True for an address containing a valid instruction.
@@ -74,18 +110,22 @@ class TestInstructionValidation:
         This test creates a data item (dword) at a known location and verifies that
         can_decode correctly identifies it as not containing a valid instruction.
         """
-        # Find a suitable location in the data section
-        # We'll create a dword at an address beyond the code section
-        test_addr = test_env.minimum_ea + 0x2000
+        # Find a suitable location using helper
+        test_addr = self._find_valid_test_address(test_env)
 
-        # Skip if address is not valid in database
-        if not test_env.is_valid_ea(test_addr):
-            pytest.skip('Test address not available in this database')
+        # Patch bytes to make them invalid as instructions, then create data
+        import ida_bytes
 
-        # Ensure this is data, not code (create dword, which undefines any instruction)
+        # Ensure undefined first
+        ida_bytes.del_items(test_addr, ida_bytes.DELIT_SIMPLE, 4)
+
+        # Write bytes that are unlikely to decode (all zeros often don't decode on many architectures)
+        ida_bytes.patch_bytes(test_addr, bytes([0x00, 0x00, 0x00, 0x00]))
+
+        # Create dword to mark it as data
         test_env.bytes.create_dword_at(test_addr, count=1, force=True)
 
-        # can_decode should return False for data
+        # can_decode should return False for data with invalid instruction bytes
         assert not test_env.instructions.can_decode(test_addr), (
             f'can_decode should return False for data address at 0x{test_addr:x}'
         )
@@ -101,18 +141,18 @@ class TestInstructionValidation:
         This test finds or creates undefined bytes and verifies that can_decode
         correctly identifies them as not containing valid instructions.
         """
-        # Try to find or create undefined bytes
-        test_addr = test_env.minimum_ea + 0x3000
-
-        if not test_env.is_valid_ea(test_addr):
-            pytest.skip('Test address not available in database')
+        # Find a suitable location using helper
+        test_addr = self._find_valid_test_address(test_env)
 
         # Undefine the bytes to ensure they're truly undefined
         import ida_bytes
 
-        ida_bytes.del_items(test_addr, ida_bytes.DELIT_SIMPLE, 1)
+        ida_bytes.del_items(test_addr, ida_bytes.DELIT_SIMPLE, 4)
 
-        # can_decode should return False for undefined bytes
+        # Write bytes that cannot decode as valid instructions
+        ida_bytes.patch_bytes(test_addr, bytes([0x00, 0x00, 0x00, 0x00]))
+
+        # can_decode should return False for bytes that don't form valid instructions
         result = test_env.instructions.can_decode(test_addr)
         assert not result, f'can_decode should return False for undefined bytes at 0x{test_addr:x}'
 
@@ -136,6 +176,42 @@ class TestInstructionValidation:
 class TestInstructionCreation:
     """Tests for instruction creation methods (create_at)."""
 
+    def _find_valid_test_address(self, test_env, size_needed=4, avoid_code=False):
+        """
+        Helper to find a valid address for testing.
+
+        Args:
+            test_env: Test environment
+            size_needed: Bytes needed at address
+            avoid_code: If True, prefer non-code areas
+
+        Returns:
+            Valid address or raises assertion
+        """
+        # Try multiple strategies
+        candidates = [
+            test_env.minimum_ea + 0x100,
+            test_env.minimum_ea + 0x200,
+            test_env.minimum_ea + 0x50,
+            test_env.minimum_ea,
+            test_env.maximum_ea - size_needed - 0x100,
+        ]
+
+        for candidate in candidates:
+            # Check if address and required range are valid
+            if not test_env.is_valid_ea(candidate):
+                continue
+            if not test_env.is_valid_ea(candidate + size_needed - 1):
+                continue
+
+            return candidate
+
+        # Should always find something
+        raise AssertionError(
+            f'Could not find valid address with {size_needed} bytes. '
+            f'Binary range: 0x{test_env.minimum_ea:x}-0x{test_env.maximum_ea:x}'
+        )
+
     def test_create_at_converts_undefined_bytes_to_instruction(self, test_env):
         """
         Test that create_at successfully creates an instruction from undefined bytes.
@@ -151,11 +227,8 @@ class TestInstructionCreation:
         This test verifies that create_at can convert undefined bytes into a valid
         instruction when the bytes form valid opcodes.
         """
-        # Find an address with undefined bytes or create some
-        test_addr = test_env.minimum_ea + 0x4000
-
-        if not test_env.is_valid_ea(test_addr):
-            pytest.skip('Test address not available')
+        # Find a suitable location using helper
+        test_addr = self._find_valid_test_address(test_env, size_needed=8)
 
         # Ensure bytes are undefined
         import ida_bytes
@@ -222,10 +295,8 @@ class TestInstructionCreation:
         This test verifies that create_at can override data items and create
         instructions when appropriate.
         """
-        test_addr = test_env.minimum_ea + 0x5000
-
-        if not test_env.is_valid_ea(test_addr):
-            pytest.skip('Test address not available')
+        # Find a suitable location using helper
+        test_addr = self._find_valid_test_address(test_env, size_needed=8)
 
         # Create a data item
         import ida_bytes
@@ -263,10 +334,8 @@ class TestInstructionCreation:
 
         This test verifies proper error handling for invalid opcode bytes.
         """
-        test_addr = test_env.minimum_ea + 0x6000
-
-        if not test_env.is_valid_ea(test_addr):
-            pytest.skip('Test address not available')
+        # Find a suitable location using helper
+        test_addr = self._find_valid_test_address(test_env, size_needed=8)
 
         import ida_bytes
 
@@ -335,10 +404,8 @@ class TestInstructionCreation:
         This is a realistic workflow for binary analysis tools that need to
         fix or supplement IDA's automatic analysis.
         """
-        test_addr = test_env.minimum_ea + 0x7000
-
-        if not test_env.is_valid_ea(test_addr):
-            pytest.skip('Test address not available')
+        # Find a suitable location using helper
+        test_addr = self._find_valid_test_address(test_env, size_needed=8)
 
         import ida_bytes
 
