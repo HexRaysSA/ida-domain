@@ -1479,23 +1479,27 @@ class TestCrossReferenceManagement:
         # Test different reference types
         import ida_xref
 
-        # Test near call reference
-        test_env.instructions.add_code_reference(
-            from_ea=first_insn.ea, to_ea=second_ea, reference_type=ida_xref.fl_CN
-        )
+        # Test each reference type
+        test_cases = [
+            (first_insn.ea, second_ea, ida_xref.fl_CN, 'call'),
+            (first_insn.ea, third_ea, ida_xref.fl_JN, 'jump'),
+            (second_ea, third_ea, ida_xref.fl_F, 'flow')
+        ]
 
-        # Test near jump reference
-        test_env.instructions.add_code_reference(
-            from_ea=first_insn.ea, to_ea=third_ea, reference_type=ida_xref.fl_JN
-        )
+        for from_ea, to_ea, ref_type, type_name in test_cases:
+            # Add reference
+            test_env.instructions.add_code_reference(
+                from_ea=from_ea, to_ea=to_ea, reference_type=ref_type
+            )
 
-        # Test ordinary flow
-        test_env.instructions.add_code_reference(
-            from_ea=second_ea, to_ea=third_ea, reference_type=ida_xref.fl_F
-        )
+            # Verify it was created
+            xrefs = list(test_env.xrefs.from_ea(from_ea))
+            assert len(xrefs) > 0, f"Should have created {type_name} xref"
 
-        # All operations should complete without error
-        # Verification would require checking xref details which is beyond scope
+            # Verify at least one xref points to the target
+            assert any(xref.to_ea == to_ea for xref in xrefs), (
+                f"{type_name} xref should point to {hex(to_ea)}"
+            )
 
     def test_add_data_reference_with_different_reference_types(self, test_env):
         """
