@@ -803,7 +803,7 @@ def test_find_all_with_data_type(search_db):
 
 def test_find_all_with_code_outside_function_type(search_db):
     """
-    Test that find_all(start, end, "code_outside_function") works like all_code_outside_functions().
+    Test find_all with "code_outside_function" matches all_code_outside_functions.
     """
     start_ea = search_db.minimum_ea
     end_ea = search_db.maximum_ea

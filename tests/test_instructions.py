@@ -119,7 +119,7 @@ class TestInstructionValidation:
         # Ensure undefined first
         ida_bytes.del_items(test_addr, ida_bytes.DELIT_SIMPLE, 4)
 
-        # Write bytes that are unlikely to decode (all zeros often don't decode on many architectures)
+        # Write bytes unlikely to decode (all zeros often fail on many archs)
         ida_bytes.patch_bytes(test_addr, bytes([0x00, 0x00, 0x00, 0x00]))
 
         # Create dword to mark it as data
@@ -587,7 +587,9 @@ class TestOperandOffsetOperations:
             assert result is True, "set_operand_offset should return True"
 
             # Verify the offset was actually set
-            retrieved_base = test_env.instructions.get_operand_offset_base(test_insn.ea, test_operand_n)
+            retrieved_base = test_env.instructions.get_operand_offset_base(
+                test_insn.ea, test_operand_n
+            )
             assert retrieved_base is not None, (
                 f"Operand should have offset base after set_operand_offset"
             )

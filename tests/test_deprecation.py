@@ -1,6 +1,9 @@
 import warnings
+
 import pytest
+
 from ida_domain.base import deprecated
+
 
 def test_deprecated_decorator_warns():
     @deprecated("Use new_func instead")

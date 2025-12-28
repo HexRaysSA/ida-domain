@@ -404,8 +404,9 @@ class TestBytesOperandManipulation:
                                 # Get operand text after formatting
                                 after_text = _get_operand_text(test_env, head, op_num)
 
-                                # Verify format changed to decimal (no 0x prefix, only digits 0-9)
-                                if after_text and '0x' not in after_text.lower() and after_text.replace('-', '').isdigit():
+                                # Verify format changed to decimal (no 0x prefix, digits only)
+                                is_decimal = after_text.replace('-', '').isdigit()
+                                if after_text and '0x' not in after_text.lower() and is_decimal:
                                     found_addr = head
                                     found_op_num = op_num
                                     break

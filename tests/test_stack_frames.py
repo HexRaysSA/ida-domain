@@ -51,7 +51,8 @@ def tiny_c_setup(global_setup):
     Uses pre-analyzed .i64 database for faster test execution.
     """
     global tiny_c_idb_path
-    tiny_c_idb_path = os.path.join(tempfile.gettempdir(), 'api_tests_work_dir', 'test_stack_frames.bin.i64')
+    work_dir = os.path.join(tempfile.gettempdir(), 'api_tests_work_dir')
+    tiny_c_idb_path = os.path.join(work_dir, 'test_stack_frames.bin.i64')
     current_dir = os.path.dirname(os.path.abspath(__file__))
     src = os.path.join(current_dir, 'resources', 'test_stack_frames.bin.i64')
 
@@ -129,7 +130,7 @@ class TestStackFramesBasics:
                 func_ea = func.start_ea
                 break
 
-        assert func_ea is not None, 'complex_assignments function not found in test_stack_frames.bin'
+        assert func_ea is not None, 'complex_assignments not found in test_stack_frames.bin'
 
         # Get stack frame
         frame = db.stack_frames.get_at(func_ea)

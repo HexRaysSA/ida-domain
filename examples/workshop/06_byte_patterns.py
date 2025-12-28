@@ -81,7 +81,8 @@ def main():
                                 func_name = func.name if func else "(not in function)"
 
                                 print(
-                                    f"  0x{current_ea:08x}: immediate = 0x{imm_value:08x} [{func_name}]"
+                                    f"  0x{current_ea:08x}: immediate = "
+                                    f"0x{imm_value:08x} [{func_name}]"
                                 )
                                 found = True
                 except Exception:

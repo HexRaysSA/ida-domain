@@ -875,7 +875,8 @@ class TestXrefMutation:
         # Verify xref was created - count must increase
         count_after = test_env.xrefs.count_refs_to(to_ea, XrefsFlags.CODE_NOFLOW)
         assert count_after > count_before, (
-            f'xref count should increase after add_code_xref: before={count_before}, after={count_after}'
+            f'xref count should increase after add_code_xref: '
+            f'before={count_before}, after={count_after}'
         )
 
     def test_add_data_xref_creates_xref(self, test_env):
@@ -906,7 +907,8 @@ class TestXrefMutation:
         # Verify xref was created - count must increase
         count_after = test_env.xrefs.count_refs_to(data_ea, XrefsFlags.DATA)
         assert count_after > count_before, (
-            f'xref count should increase after add_data_xref: before={count_before}, after={count_after}'
+            f'xref count should increase after add_data_xref: '
+            f'before={count_before}, after={count_after}'
         )
 
     def test_delete_xref_removes_xref(self, test_env):
