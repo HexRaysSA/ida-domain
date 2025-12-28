@@ -5,7 +5,6 @@ import pytest
 import ida_domain
 from ida_domain.database import IdaCommandOptions
 
-
 # imports_test_setup fixture is provided by conftest.py
 
 

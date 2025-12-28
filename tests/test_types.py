@@ -28,7 +28,6 @@ import ida_domain
 from ida_domain.base import InvalidEAError, InvalidParameterError
 from ida_domain.database import IdaCommandOptions
 
-
 # types_test_setup fixture is provided by conftest.py
 
 

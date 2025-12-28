@@ -6,7 +6,6 @@ import ida_domain
 from ida_domain.database import IdaCommandOptions
 from ida_domain.switches import SwitchFlags, SwitchInfo
 
-
 # switches_test_setup fixture is provided by conftest.py
 
 

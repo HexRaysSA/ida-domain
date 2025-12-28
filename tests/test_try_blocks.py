@@ -14,7 +14,6 @@ from ida_domain.try_blocks import (
     TryBlockKind,
 )
 
-
 # try_blocks_test_setup fixture is provided by conftest.py
 
 

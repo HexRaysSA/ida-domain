@@ -123,7 +123,7 @@ def setup_test_databases():
             fail_count += 1
 
     print('=' * 60)
-    print(f'Database setup complete: {success_count} created, {skip_count} skipped, {fail_count} failed')
+    print(f'Database setup: {success_count} created, {skip_count} skipped, {fail_count} failed')
     print('=' * 60 + '\n')
 
     if fail_count > 0:

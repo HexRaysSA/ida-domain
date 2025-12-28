@@ -13,7 +13,6 @@ from ida_domain import Database, StackFrameInstance
 from ida_domain.base import InvalidEAError
 from ida_domain.database import IdaCommandOptions
 
-
 # stack_frames_test_setup fixture is provided by conftest.py
 
 
