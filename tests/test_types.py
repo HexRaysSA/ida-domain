@@ -22,9 +22,6 @@ Test Strategy:
 - Tests core functionality with real IDA analysis data
 """
 
-import os
-import tempfile
-
 import pytest
 
 import ida_domain
@@ -32,28 +29,7 @@ from ida_domain.base import InvalidEAError, InvalidParameterError
 from ida_domain.database import IdaCommandOptions
 
 
-@pytest.fixture(scope='module')
-def types_test_setup():
-    """
-    Setup for Types tests - prepares test_types.bin.i64 database.
-
-    Uses pre-analyzed .i64 database for faster test execution.
-    """
-    idb_path = os.path.join(tempfile.gettempdir(), 'api_tests_work_dir', 'test_types.bin.i64')
-    os.makedirs(os.path.dirname(idb_path), exist_ok=True)
-
-    # Copy pre-analyzed database to temp location
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    src = os.path.join(current_dir, 'resources', 'test_types.bin.i64')
-
-    if not os.path.exists(src):
-        pytest.skip('Pre-analyzed database not found. Run: python tests/resources/create_idbs.py')
-
-    with open(src, 'rb') as f_in:
-        with open(idb_path, 'wb') as f_out:
-            f_out.write(f_in.read())
-
-    yield idb_path
+# types_test_setup fixture is provided by conftest.py
 
 
 @pytest.fixture(scope='function')

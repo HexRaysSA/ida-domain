@@ -7,70 +7,18 @@ struct_local (with struct locals and multiple arguments), many_arguments (8 args
 large_array (256-element local array), and more.
 """
 
-import os
-import tempfile
-
 import pytest
 
-import ida_domain
 from ida_domain import Database, StackFrameInstance
 from ida_domain.base import InvalidEAError
-
-# Module-level variable to store IDB path
-tiny_c_idb_path = None
+from ida_domain.database import IdaCommandOptions
 
 
-@pytest.fixture(scope='module', autouse=True)
-def global_setup():
-    """Initialize test environment."""
-    print(f'\nAPI Version: {ida_domain.__version__}')
-    print(f'\nKernel Version: {ida_domain.__ida_version__}')
-    os.environ['IDA_NO_HISTORY'] = '1'
-
-
-@pytest.fixture(scope='module')
-def tiny_c_setup(global_setup):
-    """
-    Setup for stack frames tests - copies test_stack_frames.bin.i64 to work directory.
-
-    RATIONALE: The test_stack_frames.bin contains functions with various stack
-    frame layouts specifically designed to test the StackFrames entity:
-    - simple_locals: basic function with few local variables
-    - many_arguments: function with 8 arguments (some on stack)
-    - large_array: function with large local array (256 ints)
-    - mixed_types: function with various integer and float types
-    - struct_local: function with struct local variable
-    - nested_struct_local: function with nested struct locals
-    - pointer_args: function with pointer arguments
-    - array_of_structs: function with array of structs
-    - factorial: recursive function
-    - deep_nesting: deeply nested recursive calls
-    - leaf_function: function with no calls
-    - many_registers: function using many registers
-
-    Uses pre-analyzed .i64 database for faster test execution.
-    """
-    global tiny_c_idb_path
-    work_dir = os.path.join(tempfile.gettempdir(), 'api_tests_work_dir')
-    tiny_c_idb_path = os.path.join(work_dir, 'test_stack_frames.bin.i64')
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    src = os.path.join(current_dir, 'resources', 'test_stack_frames.bin.i64')
-
-    # Create temp directory if needed
-    os.makedirs(os.path.dirname(tiny_c_idb_path), exist_ok=True)
-
-    # Copy pre-analyzed database to temp location
-    import shutil
-
-    if not os.path.exists(src):
-        pytest.skip('Pre-analyzed database not found. Run: python tests/resources/create_idbs.py')
-
-    shutil.copy2(src, tiny_c_idb_path)
-    print(f'\nCopied {src} to {tiny_c_idb_path}')
+# stack_frames_test_setup fixture is provided by conftest.py
 
 
 @pytest.fixture(scope='function')
-def db_readonly(tiny_c_setup):
+def db_readonly(stack_frames_test_setup):
     """
     Opens database for read-only tests.
 
@@ -79,16 +27,14 @@ def db_readonly(tiny_c_setup):
     Module-scoped fixtures cause test pollution when mutation tests run.
     Uses pre-analyzed database for fast loading (no auto-analysis needed).
     """
-    from ida_domain.database import IdaCommandOptions
-
     ida_options = IdaCommandOptions(new_database=False, auto_analysis=False)
-    db = Database.open(path=tiny_c_idb_path, args=ida_options, save_on_close=False)
+    db = Database.open(path=stack_frames_test_setup, args=ida_options, save_on_close=False)
     yield db
     db.close()
 
 
 @pytest.fixture(scope='function')
-def db_mutable(tiny_c_setup):
+def db_mutable(stack_frames_test_setup):
     """
     Opens database for mutation tests (fresh per test).
 
@@ -97,10 +43,8 @@ def db_mutable(tiny_c_setup):
     interference. Each test starts with a clean database state.
     Uses pre-analyzed database for fast loading (no auto-analysis needed).
     """
-    from ida_domain.database import IdaCommandOptions
-
     ida_options = IdaCommandOptions(new_database=False, auto_analysis=False)
-    db = Database.open(path=tiny_c_idb_path, args=ida_options, save_on_close=False)
+    db = Database.open(path=stack_frames_test_setup, args=ida_options, save_on_close=False)
     yield db
     db.close()
 

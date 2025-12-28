@@ -1,9 +1,5 @@
 """Tests for Switches entity."""
 
-import os
-import shutil
-import tempfile
-
 import pytest
 
 import ida_domain
@@ -11,38 +7,7 @@ from ida_domain.database import IdaCommandOptions
 from ida_domain.switches import SwitchFlags, SwitchInfo
 
 
-@pytest.fixture(scope='module')
-def switches_test_setup():
-    """
-    Setup for switches tests.
-
-    RATIONALE: We need a binary containing switch statements to properly test
-    the Switches entity. The test_switches.bin binary is specifically designed
-    for this purpose - it contains 9 different switch statement patterns:
-    - dense_switch: consecutive cases 0-7
-    - dense_switch_offset: cases 10-15
-    - sparse_switch: non-consecutive cases (1, 5, 10, 50, 100, 500)
-    - fallthrough_switch: cases with fall-through behavior
-    - no_default_switch: switch without default case
-    - nested_switch: nested switch statements
-    - char_switch: switch on char values
-    - negative_switch: cases with negative values (-3 to 2)
-    - large_switch: 20 consecutive cases for guaranteed jump table
-
-    Uses pre-analyzed .i64 database for faster test execution.
-    """
-    idb_path = os.path.join(tempfile.gettempdir(), 'api_tests_work_dir', 'test_switches.bin.i64')
-    os.makedirs(os.path.dirname(idb_path), exist_ok=True)
-
-    # Copy pre-analyzed database
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    src_path = os.path.join(current_dir, 'resources', 'test_switches.bin.i64')
-
-    if not os.path.exists(src_path):
-        pytest.skip('Pre-analyzed database not found. Run: python tests/resources/create_idbs.py')
-
-    shutil.copy(src_path, idb_path)
-    return idb_path
+# switches_test_setup fixture is provided by conftest.py
 
 
 @pytest.fixture(scope='function')

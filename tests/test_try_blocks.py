@@ -1,9 +1,5 @@
 """Tests for TryBlocks entity."""
 
-import os
-import shutil
-import tempfile
-
 import pytest
 
 import ida_domain
@@ -19,38 +15,7 @@ from ida_domain.try_blocks import (
 )
 
 
-@pytest.fixture(scope='module')
-def try_blocks_test_setup():
-    """
-    Setup for try blocks tests.
-
-    RATIONALE: We need a test environment to validate the TryBlocks entity.
-    The test_try_blocks.bin binary is specifically designed for this purpose -
-    it's a C++ binary with various exception handling patterns:
-    - simple_try_catch: basic try/catch with single handler
-    - multiple_catch: multiple catch handlers for different exception types
-    - catch_all: catch(...) handler
-    - nested_try: nested try-catch blocks
-    - rethrow_example: exception rethrow pattern
-    - exception_with_cleanup: RAII cleanup during exception unwinding
-    - custom_exception_hierarchy: catching derived exception classes
-    - catch_from_callee: catching exceptions thrown by called functions
-    - call_noexcept: noexcept function interaction
-
-    Uses pre-analyzed .i64 database for faster test execution.
-    """
-    idb_path = os.path.join(tempfile.gettempdir(), 'api_tests_work_dir', 'test_try_blocks.bin.i64')
-    os.makedirs(os.path.dirname(idb_path), exist_ok=True)
-
-    # Copy pre-analyzed database
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    src_path = os.path.join(current_dir, 'resources', 'test_try_blocks.bin.i64')
-
-    if not os.path.exists(src_path):
-        pytest.skip('Pre-analyzed database not found. Run: python tests/resources/create_idbs.py')
-
-    shutil.copy(src_path, idb_path)
-    return idb_path
+# try_blocks_test_setup fixture is provided by conftest.py
 
 
 @pytest.fixture(scope='function')

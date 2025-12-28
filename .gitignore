@@ -138,3 +138,11 @@ dmypy.json
 # OS
 .DS_Store
 Thumbs.db
+
+# IDA Pro databases (version-specific, should be generated dynamically)
+*.i64
+*.idb
+*.id0
+*.id1
+*.id2
+*.nam
