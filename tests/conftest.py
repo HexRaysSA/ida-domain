@@ -36,18 +36,25 @@ TEST_BINARIES = [
 ]
 
 
-def _create_idb(bin_path: str, i64_path: str) -> bool:
+def _create_idb(src_bin_path: str, work_dir: str) -> bool:
     """
-    Open a binary in IDA, run auto-analysis, and save as .i64.
+    Copy binary to work directory, open in IDA, run auto-analysis, and save as .i64.
 
     Args:
-        bin_path: Path to the source binary file
-        i64_path: Path where the .i64 database should be saved
+        src_bin_path: Path to the source binary file
+        work_dir: Directory where the binary should be copied and analyzed
 
     Returns:
         True if successful, False otherwise
     """
-    print(f'  Creating: {os.path.basename(i64_path)}')
+    bin_name = os.path.basename(src_bin_path)
+    work_bin_path = os.path.join(work_dir, bin_name)
+    i64_path = work_bin_path + '.i64'
+
+    print(f'  Creating: {bin_name}.i64')
+
+    # Copy binary to work directory
+    shutil.copy2(src_bin_path, work_bin_path)
 
     # Remove existing .i64 if present
     if os.path.exists(i64_path):
@@ -61,7 +68,7 @@ def _create_idb(bin_path: str, i64_path: str) -> bool:
         )
 
         db = ida_domain.Database.open(
-            path=bin_path,
+            path=work_bin_path,
             args=ida_options,
             save_on_close=True,
         )
@@ -110,14 +117,13 @@ def setup_test_databases():
 
     for bin_name in TEST_BINARIES:
         bin_path = os.path.join(RESOURCES_DIR, bin_name)
-        i64_path = os.path.join(WORK_DIR, bin_name + '.i64')
 
         if not os.path.exists(bin_path):
             print(f'  SKIP: {bin_name} (source binary not found)')
             skip_count += 1
             continue
 
-        if _create_idb(bin_path, i64_path):
+        if _create_idb(bin_path, WORK_DIR):
             success_count += 1
         else:
             fail_count += 1
