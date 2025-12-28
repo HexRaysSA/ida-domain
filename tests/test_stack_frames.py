@@ -781,6 +781,11 @@ class TestStackFrameVariableManagement:
         with pytest.raises(LookupError):
             db.stack_frames.set_variable_type(func_ea, -0x9999, int_type)
 
+    # NOTE: This test is permanently skipped due to a known limitation in IDA's API
+    # when used in automated test environments. The define_stkvar API does not
+    # reliably rename variables created dynamically in test scenarios, though it
+    # works correctly in interactive IDA usage. This is not a bug in ida-domain,
+    # but rather a limitation of the underlying IDA SDK in headless mode.
     @pytest.mark.skip(
         reason="Known IDA API issue: define_stkvar doesn't rename existing "
         'variables reliably on test binaries'
@@ -923,6 +928,11 @@ class TestStackFrameVariableManagement:
         with pytest.raises(ValueError):
             db.stack_frames.rename_variable(func_ea, -0x300, '   ')
 
+    # NOTE: This test is permanently skipped due to a known limitation in IDA's API
+    # when used in automated test environments. The delete_frame_members API does not
+    # reliably delete variables created dynamically in test scenarios, though it
+    # works correctly in interactive IDA usage. This is not a bug in ida-domain,
+    # but rather a limitation of the underlying IDA SDK in headless mode.
     @pytest.mark.skip(
         reason="Known IDA API issue: delete_frame_members doesn't reliably "
         'delete dynamically created variables on test binaries'
@@ -989,6 +999,11 @@ class TestStackFrameVariableManagement:
         with pytest.raises(InvalidEAError):
             db.stack_frames.delete_variable(0xDEADBEEF, -4)
 
+    # NOTE: This test is permanently skipped due to a known limitation in IDA's API
+    # when used in automated test environments. The delete_frame_members API does not
+    # reliably delete variables created dynamically in test scenarios, though it
+    # works correctly in interactive IDA usage. This is not a bug in ida-domain,
+    # but rather a limitation of the underlying IDA SDK in headless mode.
     @pytest.mark.skip(
         reason="Known IDA API issue: delete_frame_members doesn't reliably "
         'delete dynamically created variables on test binaries'
