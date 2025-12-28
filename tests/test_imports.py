@@ -1,5 +1,9 @@
 """Tests for Imports entity."""
 
+import os
+import shutil
+import tempfile
+
 import pytest
 
 import ida_domain
