@@ -384,7 +384,14 @@ class TestBytesOperandManipulation:
 
         # Search more thoroughly - try all instructions, all operands
         for func in test_env.functions.get_all():
-            for head in test_env.bytes.iterate_heads(func.start_ea, func.end_ea):
+            # Iterate through heads in function range
+            head = func.start_ea
+            while head < func.end_ea:
+                next_head = test_env.bytes.get_next_head(head)
+                if next_head is None or next_head >= func.end_ea:
+                    break
+
+                head = next_head
                 if test_env.instructions.can_decode(head):
                     # Try all operands (0-5)
                     for op_num in range(6):
@@ -1257,19 +1264,20 @@ class TestBytesSearchMethods:
 
         if not found_test_string or not test_string:
             # Create a test string in a safe location
-            # Find unused space in database
-            test_addr = db.minimum_ea + 0x1000
-
+            # Find unused space in database - try progressively smaller offsets for small binaries
             test_string_bytes = b"TEST\x00"
             required_bytes = len(test_string_bytes)
 
-            # Find actually valid address with enough consecutive bytes
-            while (not db.is_valid_ea(test_addr) or
-                   not all(db.is_valid_ea(test_addr + i) for i in range(required_bytes))) and \
-                   test_addr < db.maximum_ea:
-                test_addr += 0x100
+            test_addr = None
+            for offset in [0x1000, 0x200, 0x100, 0x50, 0x20, 0x10, 0]:
+                candidate = db.minimum_ea + offset
+                # Check if we have enough consecutive valid bytes
+                if (db.is_valid_ea(candidate) and
+                    all(db.is_valid_ea(candidate + i) for i in range(required_bytes))):
+                    test_addr = candidate
+                    break
 
-            if db.is_valid_ea(test_addr):
+            if test_addr is not None:
                 # Create a simple string "TEST" at this location
                 for i, byte in enumerate(test_string_bytes):
                     db.bytes.patch_byte_at(test_addr + i, byte)
