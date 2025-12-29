@@ -124,6 +124,59 @@ class Instructions(DatabaseEntity):
         """
         return self.get_between(self.database.minimum_ea, self.database.maximum_ea)
 
+    def get_page(self, offset: int = 0, limit: int = 100) -> List[insn_t]:
+        """
+        Get a page of instructions for random access patterns.
+
+        Unlike get_all() which returns an iterator, this returns a list
+        suitable for indexing and length checks. Useful for pagination in UIs.
+
+        Args:
+            offset: Number of instructions to skip (default: 0).
+            limit: Maximum number of instructions to return (default: 100).
+
+        Returns:
+            List of instructions, may be shorter than limit if fewer remain.
+
+        Example:
+            >>> # Display page 3 of instructions (25 per page)
+            >>> page = db.instructions.get_page(offset=50, limit=25)
+            >>> for insn in page:
+            ...     print(db.instructions.get_disassembly(insn))
+        """
+        import itertools
+
+        return list(itertools.islice(self.get_all(), offset, offset + limit))
+
+    def get_chunked(self, chunk_size: int = 1000) -> Iterator[List[insn_t]]:
+        """
+        Yield instructions in chunks for batch processing.
+
+        Useful for processing large numbers of instructions with periodic
+        progress updates or commits.
+
+        Args:
+            chunk_size: Maximum instructions per chunk (default: 1000).
+
+        Yields:
+            Lists of instructions, each at most chunk_size items.
+
+        Example:
+            >>> # Process in batches with progress
+            >>> for i, chunk in enumerate(db.instructions.get_chunked(100)):
+            ...     print(f"Processing batch {i+1}: {len(chunk)} instructions")
+            ...     for insn in chunk:
+            ...         process(insn)
+        """
+        chunk: List[insn_t] = []
+        for insn in self.get_all():
+            chunk.append(insn)
+            if len(chunk) >= chunk_size:
+                yield chunk
+                chunk = []
+        if chunk:
+            yield chunk
+
     def get_between(self, start: ea_t, end: ea_t) -> Iterator[insn_t]:
         """
         Retrieves instructions between the specified addresses.

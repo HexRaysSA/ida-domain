@@ -651,6 +651,59 @@ class Functions(DatabaseEntity):
         """
         return self.get_between(self.database.minimum_ea, self.database.maximum_ea)
 
+    def get_page(self, offset: int = 0, limit: int = 100) -> List[func_t]:
+        """
+        Get a page of functions for random access patterns.
+
+        Unlike get_all() which returns an iterator, this returns a list
+        suitable for indexing and length checks. Useful for pagination in UIs.
+
+        Args:
+            offset: Number of functions to skip (default: 0).
+            limit: Maximum number of functions to return (default: 100).
+
+        Returns:
+            List of functions, may be shorter than limit if fewer remain.
+
+        Example:
+            >>> # Display page 3 of functions (25 per page)
+            >>> page = db.functions.get_page(offset=50, limit=25)
+            >>> for func in page:
+            ...     print(db.functions.get_name(func))
+        """
+        import itertools
+
+        return list(itertools.islice(self.get_all(), offset, offset + limit))
+
+    def get_chunked(self, chunk_size: int = 1000) -> Iterator[List[func_t]]:
+        """
+        Yield functions in chunks for batch processing.
+
+        Useful for processing large numbers of functions with periodic
+        progress updates or commits.
+
+        Args:
+            chunk_size: Maximum functions per chunk (default: 1000).
+
+        Yields:
+            Lists of functions, each at most chunk_size items.
+
+        Example:
+            >>> # Process in batches with progress
+            >>> for i, chunk in enumerate(db.functions.get_chunked(100)):
+            ...     print(f"Processing batch {i+1}: {len(chunk)} functions")
+            ...     for func in chunk:
+            ...         process(func)
+        """
+        chunk: List[func_t] = []
+        for func in self.get_all():
+            chunk.append(func)
+            if len(chunk) >= chunk_size:
+                yield chunk
+                chunk = []
+        if chunk:
+            yield chunk
+
     def get_at(self, ea: ea_t) -> Optional[func_t]:
         """
         Retrieves the function that contains the given address.

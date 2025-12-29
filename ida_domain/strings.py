@@ -8,7 +8,7 @@ import ida_bytes
 import ida_nalt
 import ida_strlist
 from ida_idaapi import ea_t
-from typing_extensions import TYPE_CHECKING, Iterator, Optional, Tuple, Union, cast
+from typing_extensions import TYPE_CHECKING, Iterator, List, Optional, Tuple, Union, cast
 
 from .base import (
     DatabaseEntity,
@@ -177,6 +177,59 @@ class Strings(DatabaseEntity):
             An iterator over all strings.
         """
         return (self.get_at_index(index) for index in range(0, ida_strlist.get_strlist_qty()))
+
+    def get_page(self, offset: int = 0, limit: int = 100) -> List[StringItem]:
+        """
+        Get a page of strings for random access patterns.
+
+        Unlike get_all() which returns an iterator, this returns a list
+        suitable for indexing and length checks. Useful for pagination in UIs.
+
+        Args:
+            offset: Number of strings to skip (default: 0).
+            limit: Maximum number of strings to return (default: 100).
+
+        Returns:
+            List of strings, may be shorter than limit if fewer remain.
+
+        Example:
+            >>> # Display page 3 of strings (25 per page)
+            >>> page = db.strings.get_page(offset=50, limit=25)
+            >>> for s in page:
+            ...     print(str(s))
+        """
+        import itertools
+
+        return list(itertools.islice(self.get_all(), offset, offset + limit))
+
+    def get_chunked(self, chunk_size: int = 1000) -> Iterator[List[StringItem]]:
+        """
+        Yield strings in chunks for batch processing.
+
+        Useful for processing large numbers of strings with periodic
+        progress updates or commits.
+
+        Args:
+            chunk_size: Maximum strings per chunk (default: 1000).
+
+        Yields:
+            Lists of strings, each at most chunk_size items.
+
+        Example:
+            >>> # Process in batches with progress
+            >>> for i, chunk in enumerate(db.strings.get_chunked(100)):
+            ...     print(f"Processing batch {i+1}: {len(chunk)} strings")
+            ...     for s in chunk:
+            ...         process(s)
+        """
+        chunk: List[StringItem] = []
+        for s in self.get_all():
+            chunk.append(s)
+            if len(chunk) >= chunk_size:
+                yield chunk
+                chunk = []
+        if chunk:
+            yield chunk
 
     def get_between(self, start_ea: ea_t, end_ea: ea_t) -> Iterator[StringItem]:
         """

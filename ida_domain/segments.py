@@ -8,7 +8,7 @@ import ida_segment
 import idautils
 from ida_idaapi import ea_t
 from ida_segment import segment_t
-from typing_extensions import TYPE_CHECKING, Iterator, Optional, cast
+from typing_extensions import TYPE_CHECKING, Iterator, List, Optional, cast
 
 from .base import DatabaseEntity, InvalidEAError, check_db_open, decorate_all_methods
 
@@ -175,6 +175,59 @@ class Segments(DatabaseEntity):
             seg = ida_segment.getnseg(current_index)
             if seg:
                 yield seg
+
+    def get_page(self, offset: int = 0, limit: int = 100) -> List[segment_t]:
+        """
+        Get a page of segments for random access patterns.
+
+        Unlike get_all() which returns an iterator, this returns a list
+        suitable for indexing and length checks. Useful for pagination in UIs.
+
+        Args:
+            offset: Number of segments to skip (default: 0).
+            limit: Maximum number of segments to return (default: 100).
+
+        Returns:
+            List of segments, may be shorter than limit if fewer remain.
+
+        Example:
+            >>> # Display page 3 of segments (25 per page)
+            >>> page = db.segments.get_page(offset=50, limit=25)
+            >>> for seg in page:
+            ...     print(db.segments.get_name(seg))
+        """
+        import itertools
+
+        return list(itertools.islice(self.get_all(), offset, offset + limit))
+
+    def get_chunked(self, chunk_size: int = 1000) -> Iterator[List[segment_t]]:
+        """
+        Yield segments in chunks for batch processing.
+
+        Useful for processing large numbers of segments with periodic
+        progress updates or commits.
+
+        Args:
+            chunk_size: Maximum segments per chunk (default: 1000).
+
+        Yields:
+            Lists of segments, each at most chunk_size items.
+
+        Example:
+            >>> # Process in batches with progress
+            >>> for i, chunk in enumerate(db.segments.get_chunked(100)):
+            ...     print(f"Processing batch {i+1}: {len(chunk)} segments")
+            ...     for seg in chunk:
+            ...         process(seg)
+        """
+        chunk: List[segment_t] = []
+        for seg in self.get_all():
+            chunk.append(seg)
+            if len(chunk) >= chunk_size:
+                yield chunk
+                chunk = []
+        if chunk:
+            yield chunk
 
     def get_by_name(self, name: str) -> Optional[segment_t]:
         """Find segment by name.

@@ -271,3 +271,40 @@ class TestFunctionsDelete:
         assert result_delete == result_remove, (
             "delete() and remove() should return same result for non-existent function"
         )
+
+
+class TestPagination:
+    """Tests for pagination methods."""
+
+    def test_get_page_returns_list(self, test_env):
+        """Test that get_page returns a list, not an iterator."""
+        page = test_env.functions.get_page(offset=0, limit=5)
+        assert isinstance(page, list), "get_page should return a list"
+
+    def test_get_page_respects_limit(self, test_env):
+        """Test that get_page returns at most limit items."""
+        page = test_env.functions.get_page(offset=0, limit=2)
+        assert len(page) <= 2, "get_page should respect limit"
+
+    def test_get_page_respects_offset(self, test_env):
+        """Test that get_page skips offset items."""
+        all_funcs = list(test_env.functions.get_all())
+        if len(all_funcs) < 3:
+            pytest.skip("Need at least 3 functions for offset test")
+
+        page_0 = test_env.functions.get_page(offset=0, limit=2)
+        page_1 = test_env.functions.get_page(offset=1, limit=2)
+
+        # Second item of page_0 should be first item of page_1
+        assert page_0[1].start_ea == page_1[0].start_ea
+
+    def test_get_chunked_yields_lists(self, test_env):
+        """Test that get_chunked yields lists."""
+        chunks = list(test_env.functions.get_chunked(chunk_size=2))
+        for chunk in chunks:
+            assert isinstance(chunk, list), "Each chunk should be a list"
+
+    def test_get_chunked_respects_chunk_size(self, test_env):
+        """Test that chunks are at most chunk_size items."""
+        for chunk in test_env.functions.get_chunked(chunk_size=3):
+            assert len(chunk) <= 3, "Chunk should not exceed chunk_size"
