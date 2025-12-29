@@ -794,6 +794,29 @@ class Bytes(DatabaseEntity):
         ea = ida_bytes.find_bytes(pattern, start_ea, None, end_ea)
         return ea if ea != BADADDR else None
 
+    def find_bytes_in_range(
+        self, pattern: bytes, start_ea: ea_t = None, end_ea: ea_t = None
+    ) -> Optional[ea_t]:
+        """
+        Finds a byte pattern in a memory range.
+
+        This is an alias for :meth:`find_bytes_between` following the ``*_in_range``
+        naming convention.
+
+        Args:
+            pattern: Byte pattern to search for.
+            start_ea: Search start address; defaults to database minimum ea if None
+            end_ea: Search end address; defaults to database maximum ea if None
+
+        Returns:
+            Address where pattern was found, or None if not found.
+
+        Raises:
+            InvalidParameterError: If pattern or interval are invalid.
+            InvalidEAError: If start_ea or end_ea are specified but invalid.
+        """
+        return self.find_bytes_between(pattern, start_ea, end_ea)
+
     def find_text_between(
         self,
         text: str,

@@ -21,6 +21,7 @@ from .base import (
     InvalidParameterError,
     check_db_open,
     decorate_all_methods,
+    deprecated,
 )
 
 if TYPE_CHECKING:
@@ -335,9 +336,42 @@ class Switches(DatabaseEntity):
         except Exception:
             return False
 
-    def remove(self, ea: ea_t) -> bool:
+    def delete(self, ea: ea_t) -> bool:
         """
         Deletes switch statement information at the specified address.
+
+        Args:
+            ea: Address of switch info to delete
+
+        Returns:
+            True if switch was successfully deleted, False if no switch existed
+
+        Raises:
+            InvalidEAError: If the effective address is invalid
+
+        Example:
+            >>> db = Database.open_current()
+            >>> if db.switches.delete(0x401000):
+            ...     print("Switch deleted")
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        # Check if switch exists before attempting deletion
+        if not self.exists_at(ea):
+            return False
+
+        # Delete switch info from IDA database
+        ida_nalt.del_switch_info(ea)
+        return True
+
+    @deprecated("Use delete() instead")
+    def remove(self, ea: ea_t) -> bool:
+        """
+        Remove switch statement information at the specified address.
+
+        .. deprecated::
+            Use :meth:`delete` instead.
 
         Args:
             ea: Address of switch info to delete
@@ -353,16 +387,7 @@ class Switches(DatabaseEntity):
             >>> if db.switches.remove(0x401000):
             ...     print("Switch deleted")
         """
-        if not self.database.is_valid_ea(ea):
-            raise InvalidEAError(ea)
-
-        # Check if switch exists before attempting deletion
-        if not self.exists_at(ea):
-            return False
-
-        # Delete switch info from IDA database
-        ida_nalt.del_switch_info(ea)
-        return True
+        return self.delete(ea)
 
     # ========================================================================
     # Update Operations

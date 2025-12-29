@@ -22,6 +22,7 @@ from .base import (
     InvalidParameterError,
     check_db_open,
     decorate_all_methods,
+    deprecated,
 )
 
 if TYPE_CHECKING:
@@ -462,9 +463,38 @@ class Problems(DatabaseEntity):
 
         ida_problems.remember_problem(problem_type, ea, description)
 
+    def delete(self, ea: ea_t, problem_type: ProblemType) -> bool:
+        """
+        Delete a problem from the list.
+
+        Args:
+            ea: Linear address.
+            problem_type: Type of problem to delete.
+
+        Returns:
+            True if problem was deleted, False if it didn't exist.
+
+        Raises:
+            InvalidEAError: If address is invalid.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Delete a resolved problem
+            >>> if db.problems.delete(0x401000, ProblemType.DISASM):
+            ...     print("Deleted disassembly problem at 0x401000")
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        return cast(bool, ida_problems.forget_problem(problem_type, ea))
+
+    @deprecated("Use delete() instead")
     def remove(self, ea: ea_t, problem_type: ProblemType) -> bool:
         """
         Remove a problem from the list.
+
+        .. deprecated::
+            Use :meth:`delete` instead.
 
         Args:
             ea: Linear address.
@@ -482,10 +512,7 @@ class Problems(DatabaseEntity):
             >>> if db.problems.remove(0x401000, ProblemType.DISASM):
             ...     print("Removed disassembly problem at 0x401000")
         """
-        if not self.database.is_valid_ea(ea):
-            raise InvalidEAError(ea)
-
-        return cast(bool, ida_problems.forget_problem(problem_type, ea))
+        return self.delete(ea, problem_type)
 
     def remove_at(self, ea: ea_t) -> int:
         """

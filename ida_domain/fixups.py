@@ -21,6 +21,7 @@ from .base import (
     InvalidParameterError,
     check_db_open,
     decorate_all_methods,
+    deprecated,
 )
 
 if TYPE_CHECKING:
@@ -412,9 +413,47 @@ class Fixups(DatabaseEntity):
         except Exception:
             return False
 
+    def delete(self, address: ea_t) -> bool:
+        """
+        Delete the fixup at the specified address.
+
+        Args:
+            address: Address where fixup is located.
+
+        Returns:
+            True if fixup was deleted, False if no fixup existed.
+
+        Raises:
+            InvalidEAError: If address is invalid.
+
+        Example:
+            >>> # Delete a fixup
+            >>> if db.fixups.delete(0x401000):
+            ...     print("Fixup deleted")
+            >>> else:
+            ...     print("No fixup at address")
+        """
+        if not self.database.is_valid_ea(address):
+            raise InvalidEAError(address)
+
+        # Check if fixup exists
+        if not ida_fixup.exists_fixup(address):
+            return False
+
+        # Delete fixup
+        try:
+            ida_fixup.del_fixup(address)
+            return True
+        except Exception:
+            return False
+
+    @deprecated("Use delete() instead")
     def remove(self, address: ea_t) -> bool:
         """
         Remove the fixup at the specified address.
+
+        .. deprecated::
+            Use :meth:`delete` instead.
 
         Args:
             address: Address where fixup is located.
@@ -432,19 +471,7 @@ class Fixups(DatabaseEntity):
             >>> else:
             ...     print("No fixup at address")
         """
-        if not self.database.is_valid_ea(address):
-            raise InvalidEAError(address)
-
-        # Check if fixup exists
-        if not ida_fixup.exists_fixup(address):
-            return False
-
-        # Delete fixup
-        try:
-            ida_fixup.del_fixup(address)
-            return True
-        except Exception:
-            return False
+        return self.delete(address)
 
     def patch_value(self, address: ea_t) -> bool:
         """
