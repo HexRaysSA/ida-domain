@@ -13,6 +13,7 @@ from __future__ import annotations
 
 # Import Bytes class from the renamed _bytes module
 from .._bytes import Bytes
+from ..strings import StringType
 from .exceptions import NoValueError, UnsupportedValueError
 from .flags import ByteFlags, SearchFlags
 
@@ -22,4 +23,5 @@ __all__ = [
     'SearchFlags',
     'NoValueError',
     'UnsupportedValueError',
+    'StringType',
 ]
