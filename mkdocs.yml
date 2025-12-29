@@ -23,6 +23,7 @@ nav:
   - API Reference:
       - ref/analysis.md
       - ref/bytes.md
+      - ref/callgraph.md
       - ref/comments.md
       - ref/database.md
       - ref/decompiler.md

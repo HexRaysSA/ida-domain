@@ -40,6 +40,7 @@ if __ida_version__ < 910:
     raise ImportError('IDA Domain requires IDA 9.1.0 or later')
 
 # If we reach this point kernel libraries were successfully loaded
+from .callgraph import CallGraph, CallPath
 from .database import Database
 from .decompiler import Decompiler
 from .exporter import Exporter, ExportFlags, ExportFormat

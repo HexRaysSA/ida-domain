@@ -19,6 +19,7 @@ from typing_extensions import TYPE_CHECKING, List, Literal, Optional, Tuple, Typ
 from .analysis import Analysis
 from .base import InvalidParameterError, check_db_open
 from .bytes import Bytes
+from .callgraph import CallGraph
 from .comments import Comments
 from .decompiler import Decompiler
 from .entries import Entries
@@ -961,6 +962,18 @@ class Database:
     def xrefs(self) -> Xrefs:
         """Handler that provides access to cross-reference (xref) operations."""
         return Xrefs(self)
+
+    @property
+    def callgraph(self) -> CallGraph:
+        """
+        Handler that provides access to call graph traversal operations.
+
+        Returns:
+            CallGraph instance for inter-procedural analysis.
+        """
+        if not hasattr(self, '_callgraph'):
+            self._callgraph = CallGraph(self)
+        return self._callgraph
 
     @property
     def search(self) -> Search:
