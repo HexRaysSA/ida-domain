@@ -18,6 +18,7 @@ nav:
   - Examples: examples.md
   - Usage:
       - Overview: usage.md
+      - Error Handling: error_handling.md
       - llms.txt: llm.md
   - API Reference:
       - ref/analysis.md
