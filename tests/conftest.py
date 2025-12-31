@@ -36,32 +36,54 @@ TEST_BINARIES = [
 ]
 
 
-def _create_idb(src_bin_path: str, work_dir: str) -> bool:
+def _ensure_database_exists(bin_name: str) -> str:
     """
-    Copy binary to work directory, open in IDA, run auto-analysis, and save as .i64.
+    Ensure a database exists for the given binary, creating it if necessary.
+
+    This is a fallback mechanism that creates databases on-demand if the
+    session fixture didn't run or failed silently.
 
     Args:
-        src_bin_path: Path to the source binary file
-        work_dir: Directory where the binary should be copied and analyzed
+        bin_name: Name of the binary (e.g., 'test_types.bin')
 
     Returns:
-        True if successful, False otherwise
+        Path to the .i64 database file
+
+    Raises:
+        pytest.fail if the database cannot be created
     """
-    bin_name = os.path.basename(src_bin_path)
-    work_bin_path = os.path.join(work_dir, bin_name)
+    src_path = os.path.join(RESOURCES_DIR, bin_name)
+    work_bin_path = os.path.join(WORK_DIR, bin_name)
     i64_path = work_bin_path + '.i64'
 
-    print(f'  Creating: {bin_name}.i64')
+    # Check if database already exists
+    if os.path.exists(i64_path) and os.path.getsize(i64_path) > 1024:
+        return i64_path
 
-    # Copy binary to work directory
-    shutil.copy2(src_bin_path, work_bin_path)
+    # Database doesn't exist - need to create it
+    print(f'\n[CREATING DATABASE] {bin_name}.i64 was not pre-created, creating now...')
 
-    # Remove existing .i64 if present
+    if not os.path.exists(src_path):
+        pytest.fail(
+            f'FATAL: Source binary not found: {src_path}\n'
+            f'Cannot create database without source binary.'
+        )
+
+    # Create work directory if needed
+    os.makedirs(WORK_DIR, exist_ok=True)
+
+    # Copy binary
+    if not os.path.exists(work_bin_path):
+        shutil.copy2(src_path, work_bin_path)
+
+    # Remove any corrupted database
     if os.path.exists(i64_path):
         os.remove(i64_path)
 
+    # Create database
     try:
-        # Open with new database and auto-analysis
+        os.environ['IDA_NO_HISTORY'] = '1'
+
         ida_options = IdaCommandOptions(
             new_database=True,
             auto_analysis=True,
@@ -73,179 +95,167 @@ def _create_idb(src_bin_path: str, work_dir: str) -> bool:
             save_on_close=True,
         )
 
-        # Close and save
         db.close(save=True)
 
-        # Verify the file was created
-        if os.path.exists(i64_path):
-            size = os.path.getsize(i64_path)
-            print(f'    Size: {size / 1024:.1f} KB')
-            return True
-        else:
-            print(f'    ERROR: Output file not created!')
-            return False
+        # Verify creation
+        if not os.path.exists(i64_path):
+            pytest.fail(
+                f'FATAL: Failed to create {bin_name}.i64\n'
+                f'IDA did not create the database file at {i64_path}'
+            )
+
+        size = os.path.getsize(i64_path)
+        if size <= 1024:
+            os.remove(i64_path)
+            pytest.fail(
+                f'FATAL: Created {bin_name}.i64 is too small ({size} bytes)\n'
+                f'Database creation may have failed.'
+            )
+
+        print(f'[SUCCESS] Created {bin_name}.i64 ({size / 1024:.1f} KB)')
+        return i64_path
 
     except Exception as e:
-        print(f'    ERROR: {e}')
-        return False
+        if os.path.exists(i64_path):
+            try:
+                os.remove(i64_path)
+            except Exception:
+                pass
+
+        pytest.fail(
+            f'FATAL: Failed to create {bin_name}.i64\n'
+            f'Error: {e}\n'
+            f'Source: {src_path}\n'
+            f'Target: {i64_path}'
+        )
 
 
 @pytest.fixture(scope='session', autouse=True)
 def setup_test_databases():
     """
-    Session-scoped fixture to create all .i64 databases once at test startup.
+    Session-scoped fixture to pre-create all .i64 databases.
 
-    This fixture runs automatically before any tests and creates IDA databases
-    from the test binaries. This ensures the databases are compatible with
-    the current IDA version being used for testing.
+    This runs once at the start of the test session to create all databases
+    in batch, which is much faster than creating them on-demand.
+
+    Note: Individual fixtures use _ensure_database_exists() as a fallback
+    in case this session fixture doesn't run for some reason.
     """
-    print('\n' + '=' * 60)
-    print('Setting up test databases for ida-domain tests')
-    print('=' * 60)
+    print('\n' + '=' * 70)
+    print('PRE-CREATING TEST DATABASES')
+    print('=' * 70)
     print(f'IDA Version: {ida_domain.__ida_version__}')
-    print(f'API Version: {ida_domain.__version__}')
+    print(f'Work directory: {WORK_DIR}')
 
-    # Create work directory
     os.makedirs(WORK_DIR, exist_ok=True)
-
-    # Disable IDA history
     os.environ['IDA_NO_HISTORY'] = '1'
 
-    success_count = 0
-    fail_count = 0
-    skip_count = 0
+    created = 0
+    skipped = 0
+    failed = []
 
     for bin_name in TEST_BINARIES:
-        bin_path = os.path.join(RESOURCES_DIR, bin_name)
+        src_path = os.path.join(RESOURCES_DIR, bin_name)
+        work_bin_path = os.path.join(WORK_DIR, bin_name)
+        i64_path = work_bin_path + '.i64'
 
-        if not os.path.exists(bin_path):
-            print(f'  SKIP: {bin_name} (source binary not found)')
-            skip_count += 1
+        # Skip if source doesn't exist
+        if not os.path.exists(src_path):
+            print(f'  SKIP: {bin_name} (no source)')
+            skipped += 1
             continue
 
-        if _create_idb(bin_path, WORK_DIR):
-            success_count += 1
-        else:
-            fail_count += 1
+        # Skip if valid database already exists
+        if os.path.exists(i64_path) and os.path.getsize(i64_path) > 1024:
+            size_kb = os.path.getsize(i64_path) / 1024
+            print(f'  EXISTING: {bin_name}.i64 ({size_kb:.1f} KB)')
+            created += 1
+            continue
 
-    print('=' * 60)
-    print(f'Database setup: {success_count} created, {skip_count} skipped, {fail_count} failed')
-    print('=' * 60 + '\n')
+        # Create database
+        print(f'  CREATING: {bin_name}.i64 ... ', end='', flush=True)
 
-    if fail_count > 0:
-        pytest.fail(f'Failed to create {fail_count} test database(s)')
+        try:
+            # Copy binary
+            if not os.path.exists(work_bin_path):
+                shutil.copy2(src_path, work_bin_path)
+
+            # Remove stale database
+            if os.path.exists(i64_path):
+                os.remove(i64_path)
+
+            # Create
+            ida_options = IdaCommandOptions(new_database=True, auto_analysis=True)
+            db = ida_domain.Database.open(work_bin_path, args=ida_options, save_on_close=True)
+            db.close(save=True)
+
+            # Verify
+            if os.path.exists(i64_path) and os.path.getsize(i64_path) > 1024:
+                size_kb = os.path.getsize(i64_path) / 1024
+                print(f'OK ({size_kb:.1f} KB)')
+                created += 1
+            else:
+                print('FAILED (file not created or too small)')
+                failed.append(bin_name)
+                if os.path.exists(i64_path):
+                    os.remove(i64_path)
+
+        except Exception as e:
+            print(f'FAILED ({e})')
+            failed.append(bin_name)
+            if os.path.exists(i64_path):
+                try:
+                    os.remove(i64_path)
+                except Exception:
+                    pass
+
+    print('=' * 70)
+    print(f'Result: {created} ready, {skipped} skipped, {len(failed)} failed')
+    if failed:
+        print(f'Failed: {", ".join(failed)}')
+        print('Note: Tests will attempt on-demand creation for failed databases')
+    print('=' * 70 + '\n')
 
     yield
-
-    # Cleanup work directory after all tests complete
-    # Note: We don't delete here to allow inspection of test artifacts if needed
-    # The temp directory will be cleaned up by the OS eventually
 
 
 @pytest.fixture(scope='module')
 def imports_test_setup(setup_test_databases):
-    """
-    Setup for imports tests - provides path to test_imports.bin.i64.
-
-    RATIONALE: The test_imports.bin binary is specifically designed for testing
-    the Imports entity - it's a dynamically linked x86_64 Linux ELF that imports
-    many libc functions including: printf, fprintf, malloc, free, calloc, realloc,
-    memset, memcpy, memcmp, strlen, strcpy, strcat, strcmp, strncmp, strstr,
-    strchr, open, read, close, stat, getenv, getpid, getuid, atoi, puts, snprintf.
-    """
-    idb_path = os.path.join(WORK_DIR, 'test_imports.bin.i64')
-    if not os.path.exists(idb_path):
-        pytest.skip('test_imports.bin.i64 not available')
-    return idb_path
+    """Setup for imports tests - provides path to test_imports.bin.i64."""
+    return _ensure_database_exists('test_imports.bin')
 
 
 @pytest.fixture(scope='module')
 def switches_test_setup(setup_test_databases):
-    """
-    Setup for switches tests - provides path to test_switches.bin.i64.
-
-    RATIONALE: The test_switches.bin binary contains 9 different switch statement
-    patterns: dense_switch (cases 0-7), dense_switch_offset (cases 10-15),
-    sparse_switch (non-consecutive cases), fallthrough_switch, no_default_switch,
-    nested_switch, char_switch, negative_switch (-3 to 2), and large_switch (20 cases).
-    """
-    idb_path = os.path.join(WORK_DIR, 'test_switches.bin.i64')
-    if not os.path.exists(idb_path):
-        pytest.skip('test_switches.bin.i64 not available')
-    return idb_path
+    """Setup for switches tests - provides path to test_switches.bin.i64."""
+    return _ensure_database_exists('test_switches.bin')
 
 
 @pytest.fixture(scope='module')
 def try_blocks_test_setup(setup_test_databases):
-    """
-    Setup for try blocks tests - provides path to test_try_blocks.bin.i64.
-
-    RATIONALE: The test_try_blocks.bin is a C++ binary with various exception
-    handling patterns: simple_try_catch, multiple_catch, catch_all, nested_try,
-    rethrow_example, exception_with_cleanup, custom_exception_hierarchy,
-    catch_from_callee, and call_noexcept.
-    """
-    idb_path = os.path.join(WORK_DIR, 'test_try_blocks.bin.i64')
-    if not os.path.exists(idb_path):
-        pytest.skip('test_try_blocks.bin.i64 not available')
-    return idb_path
+    """Setup for try blocks tests - provides path to test_try_blocks.bin.i64."""
+    return _ensure_database_exists('test_try_blocks.bin')
 
 
 @pytest.fixture(scope='module')
 def stack_frames_test_setup(setup_test_databases):
-    """
-    Setup for stack frames tests - provides path to test_stack_frames.bin.i64.
-
-    RATIONALE: The test_stack_frames.bin contains functions with various stack
-    frame layouts: simple_locals, many_arguments (8 args), large_array (256 ints),
-    mixed_types, struct_local, nested_struct_local, pointer_args, array_of_structs,
-    factorial (recursive), deep_nesting, leaf_function, and many_registers.
-    """
-    idb_path = os.path.join(WORK_DIR, 'test_stack_frames.bin.i64')
-    if not os.path.exists(idb_path):
-        pytest.skip('test_stack_frames.bin.i64 not available')
-    return idb_path
+    """Setup for stack frames tests - provides path to test_stack_frames.bin.i64."""
+    return _ensure_database_exists('test_stack_frames.bin')
 
 
 @pytest.fixture(scope='module')
 def types_test_setup(setup_test_databases):
-    """
-    Setup for types tests - provides path to test_types.bin.i64.
-
-    RATIONALE: The test_types.bin has rich type information including:
-    - Enums: ColorChannel, ProcessState, ErrorCode, ValueType
-    - Structs: Point2D, Record, PaddedStruct, PackedStruct, PhysicsBody, Node, etc.
-    - Unions: FloatBits, DoubleBits, TaggedValue
-    - Bitfields: BitfieldStruct, BitfieldStruct64
-    - Function pointers: VoidFunc, IntFunc, BinaryFunc, AllocFunc, Allocator
-    """
-    idb_path = os.path.join(WORK_DIR, 'test_types.bin.i64')
-    if not os.path.exists(idb_path):
-        pytest.skip('test_types.bin.i64 not available')
-    return idb_path
+    """Setup for types tests - provides path to test_types.bin.i64."""
+    return _ensure_database_exists('test_types.bin')
 
 
 @pytest.fixture(scope='module')
 def tiny_c_setup(setup_test_databases):
-    """
-    Setup for tests using tiny_c.bin - provides path to tiny_c.bin.i64.
-
-    RATIONALE: tiny_c.bin is a minimal C binary used for basic functionality tests.
-    """
-    idb_path = os.path.join(WORK_DIR, 'tiny_c.bin.i64')
-    if not os.path.exists(idb_path):
-        pytest.skip('tiny_c.bin.i64 not available')
-    return idb_path
+    """Setup for tests using tiny_c.bin - provides path to tiny_c.bin.i64."""
+    return _ensure_database_exists('tiny_c.bin')
 
 
 @pytest.fixture(scope='module')
 def tiny_asm_setup(setup_test_databases):
-    """
-    Setup for tests using tiny_asm.bin - provides path to tiny_asm.bin.i64.
-
-    RATIONALE: tiny_asm.bin is a minimal assembly binary used for low-level tests.
-    """
-    idb_path = os.path.join(WORK_DIR, 'tiny_asm.bin.i64')
-    if not os.path.exists(idb_path):
-        pytest.skip('tiny_asm.bin.i64 not available')
-    return idb_path
+    """Setup for tests using tiny_asm.bin - provides path to tiny_asm.bin.i64."""
+    return _ensure_database_exists('tiny_asm.bin')
