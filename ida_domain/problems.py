@@ -514,15 +514,15 @@ class Problems(DatabaseEntity):
         """
         return self.delete(ea, problem_type)
 
-    def remove_at(self, ea: ea_t) -> int:
+    def delete_at(self, ea: ea_t) -> int:
         """
-        Remove all problems at a specific address.
+        Delete all problems at a specific address.
 
         Args:
             ea: Linear address.
 
         Returns:
-            Number of problems removed.
+            Number of problems deleted.
 
         Raises:
             InvalidEAError: If address is invalid.
@@ -530,8 +530,8 @@ class Problems(DatabaseEntity):
         Example:
             >>> db = Database.open_current()
             >>> # Clear all problems at address
-            >>> removed = db.problems.remove_at(0x401000)
-            >>> print(f"Removed {removed} problem(s) at 0x401000")
+            >>> deleted = db.problems.delete_at(0x401000)
+            >>> print(f"Deleted {deleted} problem(s) at 0x401000")
         """
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
@@ -541,6 +541,25 @@ class Problems(DatabaseEntity):
             if ida_problems.forget_problem(ptype, ea):
                 count += 1
         return count
+
+    @deprecated("Use delete_at() instead")
+    def remove_at(self, ea: ea_t) -> int:
+        """
+        Remove all problems at a specific address.
+
+        .. deprecated::
+            Use :meth:`delete_at` instead.
+
+        Args:
+            ea: Linear address.
+
+        Returns:
+            Number of problems removed.
+
+        Raises:
+            InvalidEAError: If address is invalid.
+        """
+        return self.delete_at(ea)
 
     def clear(self, problem_type: ProblemType) -> int:
         """

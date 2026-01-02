@@ -41,6 +41,12 @@ def test_problems_delete_method_exists():
     assert callable(getattr(Problems, 'delete'))
 
 
+def test_problems_delete_at_method_exists():
+    """Test that Problems has a delete_at() method."""
+    assert hasattr(Problems, 'delete_at')
+    assert callable(getattr(Problems, 'delete_at'))
+
+
 def test_bytes_find_bytes_in_range_method_exists():
     """Test that Bytes has a find_bytes_in_range() method."""
     assert hasattr(Bytes, 'find_bytes_in_range')
