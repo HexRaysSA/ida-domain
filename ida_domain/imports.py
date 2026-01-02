@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Callable, Iterator, Optional, Union
+from typing import Callable, Union
+
+from typing_extensions import TYPE_CHECKING, Iterator, List, Optional
 
 import ida_nalt
 from ida_idaapi import ea_t
@@ -255,7 +257,7 @@ class Imports(DatabaseEntity):
 
         return None
 
-    def get_module_names(self) -> list[str]:
+    def get_module_names(self) -> List[str]:
         """
         Retrieves a list of all import module names.
 
@@ -341,7 +343,7 @@ class Imports(DatabaseEntity):
         # Collect entries via callback
         entries = []
 
-        def callback(ea: ea_t, name: str | None, ordinal: int | None) -> int:
+        def callback(ea: ea_t, name: Optional[str], ordinal: Optional[int]) -> int:
             """Callback for ida_nalt.enum_import_names."""
             entry = ImportEntry(
                 address=ea,
@@ -425,7 +427,7 @@ class Imports(DatabaseEntity):
             # Search imports in this module
             result = []
 
-            def callback(import_ea: ea_t, name: str | None, ordinal: int | None) -> int:
+            def callback(import_ea: ea_t, name: Optional[str], ordinal: Optional[int]) -> int:
                 """Callback for enum_import_names."""
                 if import_ea == ea:
                     # Found matching import
@@ -487,7 +489,7 @@ class Imports(DatabaseEntity):
             # Search imports in this module
             result = []
 
-            def callback(import_ea: ea_t, import_name: str | None, ordinal: int | None) -> int:
+            def callback(import_ea: ea_t, import_name: Optional[str], ordinal: Optional[int]) -> int:
                 """Callback for enum_import_names."""
                 if import_name and import_name == name:
                     entry = ImportEntry(
@@ -554,7 +556,7 @@ class Imports(DatabaseEntity):
             # Search imports in this module
             entries = []
 
-            def callback(import_ea: ea_t, import_name: str | None, ordinal: int | None) -> int:
+            def callback(import_ea: ea_t, import_name: Optional[str], ordinal: Optional[int]) -> int:
                 """Callback for enum_import_names."""
                 if import_name and import_name == name:
                     entry = ImportEntry(
@@ -778,7 +780,7 @@ class Imports(DatabaseEntity):
         """
         count = [0]
 
-        def callback(ea: ea_t, name: str | None, ordinal: int | None) -> int:
+        def callback(ea: ea_t, name: Optional[str], ordinal: Optional[int]) -> int:
             """Callback for ida_nalt.enum_import_names."""
             count[0] += 1
             return 1  # Continue enumeration
