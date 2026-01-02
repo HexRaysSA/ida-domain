@@ -10,7 +10,7 @@ from typing_extensions import TYPE_CHECKING, Iterator, Optional, cast
 if TYPE_CHECKING:
     from .database import Database
 
-from .base import DatabaseEntity, check_db_open, decorate_all_methods
+from .base import DatabaseEntity, check_db_open, decorate_all_methods, deprecated
 
 
 @dataclass(frozen=True)
@@ -64,7 +64,10 @@ class Entries(DatabaseEntity):
         return self.get_all()
 
     def __getitem__(self, index: int) -> EntryInfo:
-        return self.get_at_index(index)
+        result = self.get_by_index(index)
+        if result is None:
+            raise IndexError(f'Entry index {index} out of range [0, {self.get_count()})')
+        return result
 
     def __len__(self) -> int:
         """Return the total number of entry points.
@@ -82,20 +85,17 @@ class Entries(DatabaseEntity):
         """
         return cast(int, ida_entry.get_entry_qty())
 
-    def get_at_index(self, index: int) -> EntryInfo:
+    def get_by_index(self, index: int) -> Optional[EntryInfo]:
         """Get entry point by its index in the entry table.
 
         Args:
             index: Internal index (0 to get_count()-1)
 
         Returns:
-            Entry: The entry point at the specified index
-
-        Raises:
-            IndexError: If index is out of range
+            EntryInfo: The entry point at the specified index, or None if out of range.
         """
         if index < 0 or index >= self.get_count():
-            raise IndexError(f'Entry index {index} out of range [0, {self.get_count()})')
+            return None
 
         ordinal = ida_entry.get_entry_ordinal(index)
         address = ida_entry.get_entry(ordinal)
@@ -109,6 +109,17 @@ class Entries(DatabaseEntity):
             forwarder_name=forwarder,
         )
 
+    @deprecated("Use get_by_index() instead")
+    def get_at_index(self, index: int) -> EntryInfo:
+        """Deprecated: Use get_by_index() instead.
+
+        Raises IndexError for compatibility with old behavior.
+        """
+        result = self.get_by_index(index)
+        if result is None:
+            raise IndexError(f'Entry index {index} out of range [0, {self.get_count()})')
+        return result
+
     def get_by_ordinal(self, ordinal: int) -> Optional[EntryInfo]:
         """Get entry point by its ordinal number.
 
@@ -116,7 +127,7 @@ class Entries(DatabaseEntity):
             ordinal: Ordinal number of the entry point
 
         Returns:
-            Entry: The entry point with the specified ordinal, or None if not found
+            EntryInfo: The entry point with the specified ordinal, or None if not found.
         """
         address = ida_entry.get_entry(ordinal)
         if address == ida_idaapi.BADADDR:
@@ -139,7 +150,7 @@ class Entries(DatabaseEntity):
             ea: Linear address to search for
 
         Returns:
-            Entry: The entry point at the specified address, or None if not found
+            EntryInfo: The entry point at the specified address, or None if not found.
         """
         for entry in self.get_all():
             if entry.address == ea:
@@ -150,11 +161,13 @@ class Entries(DatabaseEntity):
         """Get all entry points.
 
         Yields:
-            Entry: Each entry point in the program
+            EntryInfo: Each entry point in the program.
         """
         count = self.get_count()
         for i in range(count):
-            yield self.get_at_index(i)
+            entry = self.get_by_index(i)
+            if entry is not None:
+                yield entry
 
     def add(
         self, address: ea_t, name: str, ordinal: Optional[int] = None, make_code: bool = True
@@ -214,7 +227,7 @@ class Entries(DatabaseEntity):
             name: Name to search for
 
         Returns:
-            Entry: The entry point with the specified name, or None if not found
+            EntryInfo: The entry point with the specified name, or None if not found.
         """
         for entry in self.get_all():
             if entry.name == name:
