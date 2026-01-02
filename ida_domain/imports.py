@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Callable, Iterator, Optional, Union
 import ida_nalt
 from ida_idaapi import ea_t
 
-from .base import DatabaseEntity, InvalidParameterError, check_db_open, decorate_all_methods
+from .base import DatabaseEntity, InvalidParameterError, check_db_open, decorate_all_methods, deprecated
 
 if TYPE_CHECKING:
     from .database import Database
@@ -448,25 +448,25 @@ class Imports(DatabaseEntity):
 
         return None
 
-    def find_by_name(self, name: str, module_name: Optional[str] = None) -> Optional[ImportEntry]:
+    def get_by_name(self, name: str, module_name: Optional[str] = None) -> Optional[ImportEntry]:
         """
-        Finds an import entry by name, optionally filtering by module.
+        Get import entry by name, optionally filtering by module.
 
         Args:
-            name: Import function/symbol name to search for
-            module_name: Optional module name to restrict search (e.g., "kernel32.dll")
+            name: Import function/symbol name to search for.
+            module_name: Optional module name to restrict search (e.g., "kernel32.dll").
 
         Returns:
-            First matching ImportEntry object, or None if no import with that name exists
+            First matching ImportEntry object, or None if no import with that name exists.
 
         Example:
-            >>> # Find import by name across all modules
-            >>> entry = db.imports.find_by_name("VirtualAlloc")
+            >>> # Get import by name across all modules
+            >>> entry = db.imports.get_by_name("VirtualAlloc")
             >>> if entry:
             ...     print(f"Found: {entry.full_name} @ {hex(entry.address)}")
             >>>
-            >>> # Find import in specific module
-            >>> entry = db.imports.find_by_name("CreateFileW", "kernel32.dll")
+            >>> # Get import in specific module
+            >>> entry = db.imports.get_by_name("CreateFileW", "kernel32.dll")
             >>> if entry:
             ...     print(f"Found: {entry.full_name}")
             ... else:
@@ -507,6 +507,11 @@ class Imports(DatabaseEntity):
                 return result[0]
 
         return None
+
+    @deprecated("Use get_by_name() instead")
+    def find_by_name(self, name: str, module_name: Optional[str] = None) -> Optional[ImportEntry]:
+        """Deprecated: Use get_by_name() instead."""
+        return self.get_by_name(name, module_name)
 
     def find_all_by_name(
         self, name: str, module_name: Optional[str] = None
