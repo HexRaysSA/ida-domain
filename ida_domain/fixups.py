@@ -413,7 +413,7 @@ class Fixups(DatabaseEntity):
         except Exception:
             return False
 
-    def delete(self, ea: ea_t) -> bool:
+    def delete_at(self, ea: ea_t) -> bool:
         """
         Delete the fixup at the specified address.
 
@@ -428,7 +428,7 @@ class Fixups(DatabaseEntity):
 
         Example:
             >>> # Delete a fixup
-            >>> if db.fixups.delete(0x401000):
+            >>> if db.fixups.delete_at(0x401000):
             ...     print("Fixup deleted")
             >>> else:
             ...     print("No fixup at address")
@@ -447,13 +447,32 @@ class Fixups(DatabaseEntity):
         except Exception:
             return False
 
-    @deprecated("Use delete() instead")
+    @deprecated("Use delete_at() instead")
+    def delete(self, ea: ea_t) -> bool:
+        """
+        Delete the fixup at the specified address.
+
+        .. deprecated::
+            Use :meth:`delete_at` instead.
+
+        Args:
+            ea: Address where fixup is located.
+
+        Returns:
+            True if fixup was deleted, False if no fixup existed.
+
+        Raises:
+            InvalidEAError: If address is invalid.
+        """
+        return self.delete_at(ea)
+
+    @deprecated("Use delete_at() instead")
     def remove(self, ea: ea_t) -> bool:
         """
         Remove the fixup at the specified address.
 
         .. deprecated::
-            Use :meth:`delete` instead.
+            Use :meth:`delete_at` instead.
 
         Args:
             ea: Address where fixup is located.
@@ -471,7 +490,7 @@ class Fixups(DatabaseEntity):
             >>> else:
             ...     print("No fixup at address")
         """
-        return self.delete(ea)
+        return self.delete_at(ea)
 
     def patch_value(self, ea: ea_t) -> bool:
         """

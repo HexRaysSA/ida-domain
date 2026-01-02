@@ -7,7 +7,7 @@ import ida_name
 from ida_idaapi import BADADDR, ea_t
 from typing_extensions import TYPE_CHECKING, Iterator, Optional, Tuple, Union, cast
 
-from .base import DatabaseEntity, InvalidEAError, check_db_open, decorate_all_methods
+from .base import DatabaseEntity, InvalidEAError, check_db_open, decorate_all_methods, deprecated
 
 if TYPE_CHECKING:
     from .database import Database
@@ -209,7 +209,7 @@ class Names(DatabaseEntity):
             raise InvalidEAError(ea)
         return cast(bool, ida_name.force_name(ea, name, flags))
 
-    def delete(self, ea: ea_t) -> bool:
+    def delete_at(self, ea: ea_t) -> bool:
         """
         Delete name at the specified address.
 
@@ -225,6 +225,25 @@ class Names(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
         return cast(bool, ida_name.del_global_name(ea))
+
+    @deprecated("Use delete_at() instead")
+    def delete(self, ea: ea_t) -> bool:
+        """
+        Delete name at the specified address.
+
+        .. deprecated::
+            Use :meth:`delete_at` instead.
+
+        Args:
+            ea: Linear address.
+
+        Returns:
+            True if successful, False otherwise.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+        """
+        return self.delete_at(ea)
 
     def is_valid_name(self, name: str) -> bool:
         """
