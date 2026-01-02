@@ -62,32 +62,32 @@ def problems_db(problems_test_setup):
 
 def test_count_property_returns_non_negative_integer(problems_db):
     """
-    Test that count property returns a non-negative integer.
+    Test that count method returns a non-negative integer.
 
-    RATIONALE: The count property should always return a valid count,
+    RATIONALE: The count method should always return a valid count,
     even if zero (for databases with no recorded problems). This validates:
-    - The property is accessible
+    - The method is accessible
     - Returns the correct type (int)
     - Returns a sane value (>= 0)
     """
-    count = problems_db.problems.count
+    count = problems_db.problems.count()
 
     assert isinstance(count, int), 'count should return an integer'
     assert count >= 0, 'count should be non-negative'
 
 
-def test_len_matches_count_property(problems_db):
+def test_len_matches_count_method(problems_db):
     """
-    Test that __len__ returns the same value as count property.
+    Test that __len__ returns the same value as count method.
 
-    RATIONALE: The __len__ method should delegate to the count property,
+    RATIONALE: The __len__ method should delegate to the count method,
     providing Pythonic len(db.problems) syntax. These should always match
     for API consistency.
     """
-    count = problems_db.problems.count
+    count = problems_db.problems.count()
     length = len(problems_db.problems)
 
-    assert length == count, '__len__ should match count property'
+    assert length == count, '__len__ should match count method'
 
 
 # =============================================================================
