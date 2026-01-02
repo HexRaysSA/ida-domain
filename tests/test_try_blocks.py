@@ -431,31 +431,31 @@ def test_add_try_block_rejects_cpp_without_catches(db_mutable):
 
 
 # =============================================================================
-# MUTATION METHOD TESTS - remove_in_range
+# MUTATION METHOD TESTS - delete_in_range
 # =============================================================================
 
 
-def test_remove_in_range_returns_false_when_no_try_blocks(db_mutable):
+def test_delete_in_range_returns_false_when_no_try_blocks(db_mutable):
     """
-    Test that remove_in_range returns False when no try blocks to remove.
+    Test that delete_in_range returns False when no try blocks to delete.
 
-    RATIONALE: The remove method should indicate whether anything was removed.
-    When removing from a range that has no try blocks, it should return False
-    (nothing was removed) rather than raising an error.
+    RATIONALE: The delete method should indicate whether anything was deleted.
+    When deleting from a range that has no try blocks, it should return False
+    (nothing was deleted) rather than raising an error.
     """
     start_ea = db_mutable.minimum_ea
     end_ea = db_mutable.maximum_ea
 
-    result = db_mutable.try_blocks.remove_in_range(start_ea, end_ea)
+    result = db_mutable.try_blocks.delete_in_range(start_ea, end_ea)
 
-    assert isinstance(result, bool), 'remove_in_range should return boolean'
+    assert isinstance(result, bool), 'delete_in_range should return boolean'
     # Likely False since test binary probably has no try blocks
     assert result is False or result is True
 
 
-def test_remove_in_range_validates_start_address(db_mutable):
+def test_delete_in_range_validates_start_address(db_mutable):
     """
-    Test that remove_in_range raises InvalidEAError for invalid start address.
+    Test that delete_in_range raises InvalidEAError for invalid start address.
 
     RATIONALE: Deletion operations must validate inputs before modifying
     the database. This tests start address validation.
@@ -464,12 +464,12 @@ def test_remove_in_range_validates_start_address(db_mutable):
     valid_end = db_mutable.maximum_ea
 
     with pytest.raises(InvalidEAError):
-        db_mutable.try_blocks.remove_in_range(invalid_start, valid_end)
+        db_mutable.try_blocks.delete_in_range(invalid_start, valid_end)
 
 
-def test_remove_in_range_validates_end_address(db_mutable):
+def test_delete_in_range_validates_end_address(db_mutable):
     """
-    Test that remove_in_range raises InvalidEAError for invalid end address.
+    Test that delete_in_range raises InvalidEAError for invalid end address.
 
     RATIONALE: Both start and end addresses must be validated for deletion.
     """
@@ -477,12 +477,12 @@ def test_remove_in_range_validates_end_address(db_mutable):
     invalid_end = db_mutable.maximum_ea + 0x10000
 
     with pytest.raises(InvalidEAError):
-        db_mutable.try_blocks.remove_in_range(valid_start, invalid_end)
+        db_mutable.try_blocks.delete_in_range(valid_start, invalid_end)
 
 
-def test_remove_in_range_rejects_reversed_range(db_mutable):
+def test_delete_in_range_rejects_reversed_range(db_mutable):
     """
-    Test that remove_in_range raises error when start >= end.
+    Test that delete_in_range raises error when start >= end.
 
     RATIONALE: Deletion with reversed range is semantically invalid and
     should be rejected early.
@@ -492,7 +492,37 @@ def test_remove_in_range_rejects_reversed_range(db_mutable):
     end_ea = db_mutable.minimum_ea  # end < start
 
     with pytest.raises(InvalidParameterError):
-        db_mutable.try_blocks.remove_in_range(start_ea, end_ea)
+        db_mutable.try_blocks.delete_in_range(start_ea, end_ea)
+
+
+# =============================================================================
+# DEPRECATED METHOD TESTS
+# =============================================================================
+
+
+def test_remove_in_range_deprecated_alias(db_mutable):
+    """
+    Test that deprecated remove_in_range() still works as alias.
+
+    RATIONALE: Deprecated methods should remain functional to maintain
+    backward compatibility. The deprecated alias should delegate to the
+    new method and produce the same result.
+    """
+    import warnings
+
+    start_ea = db_mutable.minimum_ea
+    end_ea = db_mutable.maximum_ea
+
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter('always')
+        result = db_mutable.try_blocks.remove_in_range(start_ea, end_ea)
+
+        # Should produce deprecation warning
+        assert len(w) == 1
+        assert issubclass(w[0].category, DeprecationWarning)
+        assert 'delete_in_range' in str(w[0].message)
+
+    assert isinstance(result, bool), 'Deprecated alias should return boolean'
 
 
 # =============================================================================

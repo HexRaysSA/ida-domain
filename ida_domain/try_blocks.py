@@ -21,6 +21,7 @@ from .base import (
     InvalidParameterError,
     check_db_open,
     decorate_all_methods,
+    deprecated,
 )
 
 if TYPE_CHECKING:
@@ -681,16 +682,16 @@ class TryBlocks(DatabaseEntity):
             msg = error_messages.get(error_code, f'Unknown error {error_code}')
             raise TryBlockError(msg)
 
-    def remove_in_range(self, start_ea: ea_t, end_ea: ea_t) -> bool:
+    def delete_in_range(self, start_ea: ea_t, end_ea: ea_t) -> bool:
         """
-        Remove all try blocks in the specified address range.
+        Delete all try blocks in the specified address range.
 
         Args:
             start_ea: Start of address range
             end_ea: End of address range (exclusive)
 
         Returns:
-            True if any try blocks were removed, False otherwise
+            True if any try blocks were deleted, False otherwise
 
         Raises:
             InvalidEAError: If start_ea or end_ea is invalid
@@ -699,8 +700,8 @@ class TryBlocks(DatabaseEntity):
         Example:
             >>> db = Database.open("binary.i64")
             >>> func = db.functions.get_at(0x401000)
-            >>> if db.try_blocks.remove_in_range(func.start_ea, func.end_ea):
-            ...     print("Removed try blocks from function")
+            >>> if db.try_blocks.delete_in_range(func.start_ea, func.end_ea):
+            ...     print("Deleted try blocks from function")
         """
         if not self.database.is_valid_ea(start_ea):
             raise InvalidEAError(start_ea)
@@ -721,5 +722,26 @@ class TryBlocks(DatabaseEntity):
         # Delete try blocks
         ida_tryblks.del_tryblks(range_obj)
 
-        # Return True if any were removed
+        # Return True if any were deleted
         return bool(count_before > 0)
+
+    @deprecated("Use delete_in_range() instead")
+    def remove_in_range(self, start_ea: ea_t, end_ea: ea_t) -> bool:
+        """
+        Remove all try blocks in the specified address range.
+
+        .. deprecated::
+            Use :meth:`delete_in_range` instead.
+
+        Args:
+            start_ea: Start of address range
+            end_ea: End of address range (exclusive)
+
+        Returns:
+            True if any try blocks were removed, False otherwise
+
+        Raises:
+            InvalidEAError: If start_ea or end_ea is invalid
+            InvalidParameterError: If start_ea >= end_ea
+        """
+        return self.delete_in_range(start_ea, end_ea)
