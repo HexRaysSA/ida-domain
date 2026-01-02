@@ -596,10 +596,11 @@ class StackFrames(DatabaseEntity):
             offset: Frame offset of the variable to delete
 
         Returns:
-            True if successful
+            True if deleted successfully
 
         Raises:
             InvalidEAError: If func_ea is not valid
+            LookupError: If no stack frame exists or no variable at offset
 
         Example:
             >>> db.stack_frames.delete_variable(0x401000, -4)
@@ -611,11 +612,11 @@ class StackFrames(DatabaseEntity):
         # Find the struct offset by iterating through frame members
         frame_type = tinfo_t()
         if not ida_frame.get_func_frame(frame_type, func):
-            return False
+            raise LookupError(f'No stack frame for function at {func_ea:#x}')
 
         udt_data = ida_typeinf.udt_type_data_t()
         if not frame_type.get_udt_details(udt_data):
-            return False
+            raise LookupError(f'No stack frame for function at {func_ea:#x}')
 
         # Search for member at FP offset and get its struct offset
         struct_offset = None
@@ -627,8 +628,7 @@ class StackFrames(DatabaseEntity):
                 break
 
         if struct_offset is None:
-            # No variable at this offset - return False (not an error)
-            return False
+            raise LookupError(f'No variable at offset {offset}')
 
         # Delete single member (end = start + 1)
         return cast(
