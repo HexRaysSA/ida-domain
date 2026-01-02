@@ -989,7 +989,7 @@ class Types(DatabaseEntity):
         Numbered types will be automatically enabled for the external library.
 
         Args:
-            destination: The loaded type library from where to import the type.
+            destination: The loaded type library to export the type to.
             name: The name of the type.
 
         Raises:
@@ -1019,9 +1019,9 @@ class Types(DatabaseEntity):
         Returns:
             The ordinal number of the copied type.
         """
-        result = ida_typeinf.copy_named_type(source, destination, name)
+        result = ida_typeinf.copy_named_type(destination, source, name)
         if result == 0:
-            raise RuntimeError(f'error exporting type {name}')
+            raise RuntimeError(f'error copying type {name}')
         return cast(int, result)
 
     def parse_header_file(
@@ -1102,7 +1102,7 @@ class Types(DatabaseEntity):
 
         return tif
 
-    def get_by_name(self, name: str, library: til_t = None) -> Optional[tinfo_t]:
+    def get_by_name(self, name: str, library: Optional[til_t] = None) -> Optional[tinfo_t]:
         """
         Retrieve a type information object by name.
 
@@ -1140,14 +1140,14 @@ class Types(DatabaseEntity):
         return None
 
     def apply_at(
-        self, type: tinfo_t, ea: ea_t, flags: TypeApplyFlags = TypeApplyFlags.GUESSED
+        self, ea: ea_t, type_info: tinfo_t, flags: TypeApplyFlags = TypeApplyFlags.DEFINITE
     ) -> bool:
         """
-        Applies a named type to the given address.
+        Applies a type to the given address.
 
         Args:
             ea: The effective address.
-            type: The name of the type to apply.
+            type_info: The type information to apply.
             flags: Type apply flags.
 
         Returns:
@@ -1158,7 +1158,7 @@ class Types(DatabaseEntity):
         """
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
-        return cast(bool, ida_typeinf.apply_tinfo(ea, type, flags))
+        return cast(bool, ida_typeinf.apply_tinfo(ea, type_info, flags))
 
     def get_all(
         self, library: Optional[til_t] = None, type_kind: TypeKind = TypeKind.NAMED
@@ -1760,7 +1760,7 @@ class Types(DatabaseEntity):
         elif by_lower == 'decl':
             return self.apply_declaration(ea, str(type_source))
         elif by_lower == 'tinfo':
-            return self.apply_at(cast(tinfo_t, type_source), ea, flags)
+            return self.apply_at(ea, cast(tinfo_t, type_source), flags)
         else:
             raise InvalidParameterError(
                 'by',
