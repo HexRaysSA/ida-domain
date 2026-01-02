@@ -115,7 +115,7 @@ class Comments(DatabaseEntity):
         return CommentInfo(ea, comment, is_repeatable) if comment else None
 
     def set_at(
-        self, ea: int, comment: str, comment_kind: CommentKind = CommentKind.REGULAR
+        self, ea: ea_t, comment: str, comment_kind: CommentKind = CommentKind.REGULAR
     ) -> bool:
         """
         Sets a comment at the specified address.
@@ -137,7 +137,7 @@ class Comments(DatabaseEntity):
         repeatable = comment_kind == CommentKind.REPEATABLE
         return cast(bool, ida_bytes.set_cmt(ea, comment, repeatable))
 
-    def delete_at(self, ea: int, comment_kind: CommentKind = CommentKind.REGULAR) -> None:
+    def delete_at(self, ea: ea_t, comment_kind: CommentKind = CommentKind.REGULAR) -> bool:
         """
         Deletes a comment at the specified address.
 
@@ -148,6 +148,8 @@ class Comments(DatabaseEntity):
         Raises:
             InvalidEAError: If the effective address is invalid.
 
+        Returns:
+            True if the comment was successfully deleted, False otherwise.
         """
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
@@ -159,6 +161,7 @@ class Comments(DatabaseEntity):
         )
         for is_repeatable in comment_types:
             ida_bytes.set_cmt(ea, '', is_repeatable)
+        return True
 
     def get_all(self, comment_kind: CommentKind = CommentKind.REGULAR) -> Iterator[CommentInfo]:
         """
@@ -194,7 +197,7 @@ class Comments(DatabaseEntity):
                 break
             current = next_addr
 
-    def set_extra_at(self, ea: int, index: int, comment: str, kind: ExtraCommentKind) -> bool:
+    def set_extra_at(self, ea: ea_t, index: int, comment: str, kind: ExtraCommentKind) -> bool:
         """
         Sets an extra comment at the specified address and index.
 
@@ -216,7 +219,7 @@ class Comments(DatabaseEntity):
         base_idx = ida_lines.E_PREV if kind == ExtraCommentKind.ANTERIOR else ida_lines.E_NEXT
         return cast(bool, ida_lines.update_extra_cmt(ea, base_idx + index, comment))
 
-    def get_extra_at(self, ea: int, index: int, kind: ExtraCommentKind) -> Optional[str]:
+    def get_extra_at(self, ea: ea_t, index: int, kind: ExtraCommentKind) -> Optional[str]:
         """
         Gets a specific extra comment.
 
@@ -237,7 +240,7 @@ class Comments(DatabaseEntity):
         base_idx = ida_lines.E_PREV if kind == ExtraCommentKind.ANTERIOR else ida_lines.E_NEXT
         return cast(Optional[str], ida_lines.get_extra_cmt(ea, base_idx + index))
 
-    def get_all_extra_at(self, ea: int, kind: ExtraCommentKind) -> Iterator[str]:
+    def get_all_extra_at(self, ea: ea_t, kind: ExtraCommentKind) -> Iterator[str]:
         """
         Gets all extra comments of a specific kind.
 
@@ -263,7 +266,7 @@ class Comments(DatabaseEntity):
             yield comment
             index += 1
 
-    def delete_extra_at(self, ea: int, index: int, kind: ExtraCommentKind) -> bool:
+    def delete_extra_at(self, ea: ea_t, index: int, kind: ExtraCommentKind) -> bool:
         """
         Deletes a specific extra comment.
 
@@ -284,7 +287,7 @@ class Comments(DatabaseEntity):
         base_idx = ida_lines.E_PREV if kind == ExtraCommentKind.ANTERIOR else ida_lines.E_NEXT
         return cast(bool, ida_lines.del_extra_cmt(ea, base_idx + index))
 
-    def delete_all_extra_at(self, ea: int, kind: ExtraCommentKind) -> int:
+    def delete_all_extra_at(self, ea: ea_t, kind: ExtraCommentKind) -> int:
         """
         Delete all extra comments of a specific kind at an address.
 
@@ -321,7 +324,7 @@ class Comments(DatabaseEntity):
         return count
 
     def get_first_free_extra_index(
-        self, ea: int, kind: ExtraCommentKind, start_index: int = 0
+        self, ea: ea_t, kind: ExtraCommentKind, start_index: int = 0
     ) -> int:
         """
         Find the first available (unused) extra comment index at an address.
@@ -356,7 +359,7 @@ class Comments(DatabaseEntity):
                 return index
             index += 1
 
-    def generate_disasm_line(self, ea: int, remove_tags: bool = False) -> str:
+    def generate_disasm_line(self, ea: ea_t, remove_tags: bool = False) -> str:
         """
         Generate a single disassembly line for the specified address.
 
@@ -387,7 +390,7 @@ class Comments(DatabaseEntity):
         return line if line else ''
 
     def generate_disassembly(
-        self, ea: int, max_lines: int, as_stack: bool = False, remove_tags: bool = False
+        self, ea: ea_t, max_lines: int, as_stack: bool = False, remove_tags: bool = False
     ) -> tuple[int, list[str]]:
         """
         Generate multiple disassembly lines with importance ranking.
@@ -577,7 +580,7 @@ class Comments(DatabaseEntity):
             return False
         return cast(bool, ida_lines.requires_color_esc(ord(char)))
 
-    def get_prefix_color(self, ea: int) -> int:
+    def get_prefix_color(self, ea: ea_t) -> int:
         """
         Get the line prefix color for an address.
 
@@ -600,7 +603,7 @@ class Comments(DatabaseEntity):
 
         return cast(int, ida_lines.calc_prefix_color(ea))
 
-    def get_background_color(self, ea: int) -> int:
+    def get_background_color(self, ea: ea_t) -> int:
         """
         Get the background color for an address.
 
@@ -623,7 +626,7 @@ class Comments(DatabaseEntity):
 
         return cast(int, ida_lines.calc_bg_color(ea))
 
-    def add_sourcefile(self, start_ea: int, end_ea: int, filename: str) -> bool:
+    def add_sourcefile(self, start_ea: ea_t, end_ea: ea_t, filename: str) -> bool:
         """
         Map an address range to a source file.
 
@@ -654,7 +657,7 @@ class Comments(DatabaseEntity):
 
         return cast(bool, ida_lines.add_sourcefile(start_ea, end_ea, filename))
 
-    def get_sourcefile(self, ea: int) -> Optional[tuple[str, int, int]]:
+    def get_sourcefile(self, ea: ea_t) -> Optional[tuple[str, int, int]]:
         """
         Get the source file mapping for an address.
 
@@ -687,7 +690,7 @@ class Comments(DatabaseEntity):
         # This is a known limitation of the legacy API
         return (filename, ea, ea)
 
-    def delete_sourcefile(self, ea: int) -> bool:
+    def delete_sourcefile(self, ea: ea_t) -> bool:
         """
         Delete the source file mapping containing the specified address.
 
