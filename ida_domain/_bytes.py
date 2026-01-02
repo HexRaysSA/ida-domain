@@ -289,16 +289,13 @@ class Bytes(DatabaseEntity):
             logger.error(f'Failed to generate disassembly line at address 0x{ea:x}')
             return None
 
-    def set_byte_at(self, ea: ea_t, value: int) -> bool:
+    def set_byte_at(self, ea: ea_t, value: int) -> None:
         """
         Sets a byte value at the specified address.
 
         Args:
             ea: The effective address.
             value: Byte value to set.
-
-        Returns:
-            True if successful, False otherwise.
 
         Raises:
             InvalidEAError: If the effective address is invalid.
@@ -310,7 +307,7 @@ class Bytes(DatabaseEntity):
         if value < 0 or value > 0xFF:
             raise InvalidParameterError('value', value, 'must be between 0 and 0xFF')
 
-        return cast(bool, ida_bytes.put_byte(ea, value))
+        ida_bytes.put_byte(ea, value)
 
     def set_word_at(self, ea: ea_t, value: int) -> None:
         """
@@ -491,7 +488,7 @@ class Bytes(DatabaseEntity):
 
         return cast(bool, ida_bytes.patch_qword(ea, value))
 
-    def patch_bytes_at(self, ea: ea_t, data: bytes) -> None:
+    def patch_bytes_at(self, ea: ea_t, data: bytes) -> bool:
         """
         Patch the specified number of bytes of the program.
         Original values are saved and available with get_original_bytes_at().
@@ -499,6 +496,9 @@ class Bytes(DatabaseEntity):
         Args:
             ea: The effective address.
             data: Bytes to patch.
+
+        Returns:
+            True if the database has been modified, False otherwise.
 
         Raises:
             InvalidEAError: If the effective address is invalid.
@@ -513,7 +513,7 @@ class Bytes(DatabaseEntity):
         if len(data) == 0:
             raise InvalidParameterError('data', len(data), 'cannot be empty')
 
-        ida_bytes.patch_bytes(ea, data)
+        return cast(bool, ida_bytes.patch_bytes(ea, data))
 
     def revert_byte_at(self, ea: ea_t) -> bool:
         """
