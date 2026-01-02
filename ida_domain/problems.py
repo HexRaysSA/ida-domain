@@ -118,12 +118,8 @@ class Problems(DatabaseEntity):
             >>> count = len(db.problems)
             >>> print(f"Total problems: {count}")
         """
-        count = 0
-        for ptype in ProblemType:
-            count += self.count_by_type(ptype)
-        return count
+        return self.count()
 
-    @property
     def count(self) -> int:
         """
         Get the total number of problems across all types.
@@ -133,10 +129,10 @@ class Problems(DatabaseEntity):
 
         Example:
             >>> db = Database.open_current()
-            >>> total = db.problems.count
+            >>> total = db.problems.count()
             >>> print(f"Total problems: {total}")
         """
-        return len(self)
+        return sum(1 for _ in self.get_all())
 
     def get_all(self, problem_type: Optional[ProblemType] = None) -> Iterator[Problem]:
         """
