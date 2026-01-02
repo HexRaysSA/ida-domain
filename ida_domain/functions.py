@@ -25,6 +25,7 @@ from .base import (
     InvalidParameterError,
     check_db_open,
     decorate_all_methods,
+    deprecated,
 )
 from .flowchart import FlowChart, FlowChartFlags
 
@@ -872,7 +873,7 @@ class Functions(DatabaseEntity):
         name = self.database.names.get_at(func.start_ea)
         return name if name is not None else ''
 
-    def create(self, ea: ea_t) -> bool:
+    def create_at(self, ea: ea_t) -> bool:
         """
         Creates a new function at the specified address.
 
@@ -888,6 +889,11 @@ class Functions(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
         return cast(bool, ida_funcs.add_func(ea))
+
+    @deprecated("Use create_at() instead")
+    def create(self, ea: ea_t) -> bool:
+        """Deprecated: Use create_at() instead."""
+        return self.create_at(ea)
 
     def remove(self, ea: ea_t) -> bool:
         """
@@ -928,7 +934,7 @@ class Functions(DatabaseEntity):
         """
         return self.remove(ea)
 
-    def get_next(self, ea: int) -> Optional[func_t]:
+    def get_next(self, ea: ea_t) -> Optional[func_t]:
         """
         Get the next function after the given address.
 
@@ -1004,7 +1010,7 @@ class Functions(DatabaseEntity):
         ida_funcs.reanalyze_function(func, BADADDR, BADADDR, False)
         return True
 
-    def get_chunk_at(self, ea: int) -> Optional[func_t]:
+    def get_chunk_at(self, ea: ea_t) -> Optional[func_t]:
         """
         Get function chunk at exact address.
 
@@ -1374,14 +1380,12 @@ class Functions(DatabaseEntity):
             name: Variable name to search for.
 
         Returns:
-            LocalVariable if found
+            The LocalVariable if found, None otherwise.
 
         Raises:
             RuntimeError: If decompilation fails for the function.
-            KeyError: If the variable is not found
         """
-        lvars = self.get_local_variables(func)
-        for lvar in lvars:
+        for lvar in self.get_local_variables(func):
             if lvar.name == name:
                 return lvar
-        raise KeyError(f'Variable {name} could not be located')
+        return None
