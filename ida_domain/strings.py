@@ -16,6 +16,7 @@ from .base import (
     InvalidParameterError,
     check_db_open,
     decorate_all_methods,
+    deprecated,
 )
 
 if TYPE_CHECKING:
@@ -118,7 +119,10 @@ class Strings(DatabaseEntity):
         return self.get_all()
 
     def __getitem__(self, index: int) -> StringItem:
-        return self.get_at_index(index)
+        result = self.get_by_index(index)
+        if result is None:
+            raise IndexError(f'String index {index} out of range [0, {len(self)})')
+        return result
 
     def __len__(self) -> int:
         """
@@ -126,25 +130,36 @@ class Strings(DatabaseEntity):
         """
         return cast(int, ida_strlist.get_strlist_qty())
 
-    def get_at_index(self, index: int) -> StringItem:
+    def get_by_index(self, index: int) -> Optional[StringItem]:
         """
-        Retrieves the string at the specified index.
+        Get string by index.
 
         Args:
-            index: Index of the string to retrieve.
+            index: The index of the string.
 
         Returns:
-            A StringItem object at the given index.
-            In case of error, returns None.
+            The StringItem if found, None if index is out of range.
         """
-        if 0 <= index < len(self):
-            if ida_strlist.get_strlist_item(self._si, index):
-                return StringItem(
-                    address=self._si.ea,
-                    length=self._si.length,
-                    internal_type=self._si.type,
-                )
-        raise IndexError(f'String index {index} out of range [0, {len(self)})')
+        if index < 0 or index >= len(self):
+            return None
+        if ida_strlist.get_strlist_item(self._si, index):
+            return StringItem(
+                address=self._si.ea,
+                length=self._si.length,
+                internal_type=self._si.type,
+            )
+        return None
+
+    @deprecated("Use get_by_index() instead")
+    def get_at_index(self, index: int) -> StringItem:
+        """Deprecated: Use get_by_index() instead.
+
+        Raises IndexError for compatibility with old behavior.
+        """
+        result = self.get_by_index(index)
+        if result is None:
+            raise IndexError(f'String index {index} out of range [0, {len(self)})')
+        return result
 
     def get_at(self, ea: ea_t) -> Optional[StringItem]:
         """
@@ -176,7 +191,11 @@ class Strings(DatabaseEntity):
         Returns:
             An iterator over all strings.
         """
-        return (self.get_at_index(index) for index in range(0, ida_strlist.get_strlist_qty()))
+        count = ida_strlist.get_strlist_qty()
+        for i in range(count):
+            item = self.get_by_index(i)
+            if item is not None:
+                yield item
 
     def get_page(self, offset: int = 0, limit: int = 100) -> List[StringItem]:
         """
