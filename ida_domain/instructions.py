@@ -177,35 +177,35 @@ class Instructions(DatabaseEntity):
         if chunk:
             yield chunk
 
-    def get_between(self, start: ea_t, end: ea_t) -> Iterator[insn_t]:
+    def get_between(self, start_ea: ea_t, end_ea: ea_t) -> Iterator[insn_t]:
         """
         Retrieves instructions between the specified addresses.
 
         Args:
-            start: Start of the address range.
-            end: End of the address range.
+            start_ea: Start of the address range.
+            end_ea: End of the address range.
 
         Returns:
             An instruction iterator.
 
         Raises:
-            InvalidEAError: If start or end are not within database bounds.
-            InvalidParameterError: If start >= end.
+            InvalidEAError: If start_ea or end_ea are not within database bounds.
+            InvalidParameterError: If start_ea >= end_ea.
         """
-        if not self.database.is_valid_ea(start, strict_check=False):
-            raise InvalidEAError(start)
-        if not self.database.is_valid_ea(end, strict_check=False):
-            raise InvalidEAError(end)
-        if start >= end:
-            raise InvalidParameterError('start', start, 'must be less than end')
+        if not self.database.is_valid_ea(start_ea, strict_check=False):
+            raise InvalidEAError(start_ea)
+        if not self.database.is_valid_ea(end_ea, strict_check=False):
+            raise InvalidEAError(end_ea)
+        if start_ea >= end_ea:
+            raise InvalidParameterError('start_ea', start_ea, 'must be less than end_ea')
 
-        current = start
-        while current < end:
+        current = start_ea
+        while current < end_ea:
             insn = insn_t()
             if ida_ua.decode_insn(insn, current) > 0:
                 yield insn
             # Move to next instruction for next call
-            current = ida_bytes.next_head(current, end)
+            current = ida_bytes.next_head(current, end_ea)
 
     def get_mnemonic(self, insn: insn_t) -> Optional[str]:
         """
@@ -237,7 +237,7 @@ class Instructions(DatabaseEntity):
             count += 1
         return count
 
-    def get_operand(self, insn: insn_t, index: int) -> Optional[Operand] | None:
+    def get_operand(self, insn: insn_t, index: int) -> Optional[Operand]:
         """
         Get a specific operand from the instruction.
 
