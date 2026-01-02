@@ -7,7 +7,7 @@ from typing import Any
 import ida_gdl
 from ida_gdl import qbasic_block_t, qflow_chart_t
 from ida_ua import insn_t
-from typing_extensions import TYPE_CHECKING, Iterator, Optional, cast
+from typing_extensions import TYPE_CHECKING, Iterator, Optional, Tuple, cast
 
 from .base import (
     DatabaseEntity,
@@ -23,6 +23,7 @@ if TYPE_CHECKING:
 
     from .database import Database
 
+__all__ = ['FlowChart', 'BasicBlock', 'FlowChartFlags']
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +77,7 @@ class BasicBlock(ida_gdl.BasicBlock, DatabaseEntity):  # type: ignore[misc]
         """Count the number of predecessor blocks."""
         return sum(1 for _ in self.preds())
 
-    def get_instructions(self) -> Optional[Iterator[insn_t]]:
+    def get_instructions(self) -> Iterator[insn_t]:
         """
         Retrieves all instructions within this basic block.
 
@@ -96,8 +97,8 @@ class FlowChart(ida_gdl.FlowChart, DatabaseEntity):  # type: ignore[misc]
     def __init__(
         self,
         database: Optional[Database],
-        func: func_t = None,
-        bounds: Optional[tuple[ea_t, ea_t]] = None,
+        func: Optional[func_t] = None,
+        bounds: Optional[Tuple[ea_t, ea_t]] = None,
         flags: FlowChartFlags = FlowChartFlags.NONE,
     ) -> None:
         """
