@@ -17,6 +17,8 @@ from .base import (
 if TYPE_CHECKING:
     from .database import Database
 
+__all__ = ['Analysis']
+
 logger = logging.getLogger(__name__)
 
 
@@ -29,7 +31,7 @@ class Analysis(DatabaseEntity):
     analysis execution, and state monitoring.
     """
 
-    def __init__(self, database: Database):
+    def __init__(self, database: Database) -> None:
         """
         Initialize the Analysis entity.
 
@@ -122,7 +124,7 @@ class Analysis(DatabaseEntity):
         """
         return self.wait_for_completion()
 
-    def analyze(self, start: ea_t, end: ea_t, wait: bool = True) -> int:
+    def analyze(self, start_ea: ea_t, end_ea: ea_t, wait: bool = True) -> int:
         """
         Analyze address range (LLM-friendly alias for analyze_range).
 
@@ -131,8 +133,8 @@ class Analysis(DatabaseEntity):
         analyzing a range of addresses.
 
         Args:
-            start: Start address of range to analyze
-            end: End address of range (exclusive)
+            start_ea: Start address of range to analyze
+            end_ea: End address of range (exclusive)
             wait: If True, blocks until analysis completes. If False, schedules
                 analysis and returns immediately.
 
@@ -140,8 +142,8 @@ class Analysis(DatabaseEntity):
             Number of addresses processed
 
         Raises:
-            InvalidEAError: If start or end address is invalid
-            InvalidParameterError: If start >= end
+            InvalidEAError: If start_ea or end_ea address is invalid
+            InvalidParameterError: If start_ea >= end_ea
 
         Example:
             >>> db = Database.open_current()
@@ -155,9 +157,9 @@ class Analysis(DatabaseEntity):
             This method is functionally identical to analyze_range().
             Use whichever name feels more natural for your workflow.
         """
-        return self.analyze_range(start, end, wait)
+        return self.analyze_range(start_ea, end_ea, wait)
 
-    def analyze_range(self, start: ea_t, end: ea_t, wait: bool = True) -> int:
+    def analyze_range(self, start_ea: ea_t, end_ea: ea_t, wait: bool = True) -> int:
         """
         Analyze address range and optionally wait for completion.
 
@@ -166,8 +168,8 @@ class Analysis(DatabaseEntity):
         calling wait_for_completion().
 
         Args:
-            start: Start address of range to analyze
-            end: End address of range (exclusive)
+            start_ea: Start address of range to analyze
+            end_ea: End address of range (exclusive)
             wait: If True, blocks until analysis completes. If False, schedules
                 analysis and returns immediately.
 
@@ -175,8 +177,8 @@ class Analysis(DatabaseEntity):
             Number of addresses processed
 
         Raises:
-            InvalidEAError: If start or end address is invalid
-            InvalidParameterError: If start >= end
+            InvalidEAError: If start_ea or end_ea address is invalid
+            InvalidParameterError: If start_ea >= end_ea
 
         Example:
             >>> db = Database.open_current()
@@ -188,20 +190,20 @@ class Analysis(DatabaseEntity):
             >>> # Continue working while analysis runs in background
         """
         # Validate inputs
-        if not self.database.is_valid_ea(start):
-            raise InvalidEAError(start)
-        if not self.database.is_valid_ea(end):
-            raise InvalidEAError(end)
-        if start >= end:
-            raise InvalidParameterError('start', start, 'must be less than end')
+        if not self.database.is_valid_ea(start_ea):
+            raise InvalidEAError(start_ea)
+        if not self.database.is_valid_ea(end_ea):
+            raise InvalidEAError(end_ea)
+        if start_ea >= end_ea:
+            raise InvalidParameterError('start_ea', start_ea, 'must be less than end_ea')
 
         if wait:
             # plan_and_wait does scheduling + waiting + final pass
             # Returns number of addresses processed
-            return cast(int, ida_auto.plan_and_wait(start, end, final_pass=True))
+            return cast(int, ida_auto.plan_and_wait(start_ea, end_ea, final_pass=True))
         else:
             # Just schedule for reanalysis
-            ida_auto.auto_mark_range(start, end, ida_auto.AU_USED)
+            ida_auto.auto_mark_range(start_ea, end_ea, ida_auto.AU_USED)
             return 0  # Unknown until processed
 
     def set_enabled(self, enabled: bool) -> bool:
@@ -366,7 +368,7 @@ class Analysis(DatabaseEntity):
         # Schedule reanalysis
         ida_auto.plan_ea(ea)
 
-    def cancel(self, start: ea_t, end: ea_t) -> None:
+    def cancel(self, start_ea: ea_t, end_ea: ea_t) -> None:
         """
         Cancel pending analysis for address range (LLM-friendly alias).
 
@@ -375,12 +377,12 @@ class Analysis(DatabaseEntity):
         canceling pending analysis.
 
         Args:
-            start: Start address of range
-            end: End address of range (exclusive)
+            start_ea: Start address of range
+            end_ea: End address of range (exclusive)
 
         Raises:
-            InvalidEAError: If start or end address is invalid
-            InvalidParameterError: If start >= end
+            InvalidEAError: If start_ea or end_ea address is invalid
+            InvalidParameterError: If start_ea >= end_ea
 
         Example:
             >>> db = Database.open_current()
@@ -391,9 +393,9 @@ class Analysis(DatabaseEntity):
             This method is functionally identical to cancel_analysis().
             Use whichever name feels more natural for your workflow.
         """
-        return self.cancel_analysis(start, end)
+        return self.cancel_analysis(start_ea, end_ea)
 
-    def cancel_analysis(self, start: ea_t, end: ea_t) -> None:
+    def cancel_analysis(self, start_ea: ea_t, end_ea: ea_t) -> None:
         """
         Cancel pending analysis for address range.
 
@@ -401,12 +403,12 @@ class Analysis(DatabaseEntity):
         to prevent IDA from analyzing a specific region.
 
         Args:
-            start: Start address of range
-            end: End address of range (exclusive)
+            start_ea: Start address of range
+            end_ea: End address of range (exclusive)
 
         Raises:
-            InvalidEAError: If start or end address is invalid
-            InvalidParameterError: If start >= end
+            InvalidEAError: If start_ea or end_ea address is invalid
+            InvalidParameterError: If start_ea >= end_ea
 
         Example:
             >>> db = Database.open_current()
@@ -414,12 +416,12 @@ class Analysis(DatabaseEntity):
             >>> db.analysis.cancel_analysis(0x403000, 0x404000)
         """
         # Validate inputs
-        if not self.database.is_valid_ea(start):
-            raise InvalidEAError(start)
-        if not self.database.is_valid_ea(end):
-            raise InvalidEAError(end)
-        if start >= end:
-            raise InvalidParameterError('start', start, 'must be less than end')
+        if not self.database.is_valid_ea(start_ea):
+            raise InvalidEAError(start_ea)
+        if not self.database.is_valid_ea(end_ea):
+            raise InvalidEAError(end_ea)
+        if start_ea >= end_ea:
+            raise InvalidParameterError('start_ea', start_ea, 'must be less than end_ea')
 
         # Cancel analysis for range
-        ida_auto.auto_cancel(start, end)
+        ida_auto.auto_cancel(start_ea, end_ea)
