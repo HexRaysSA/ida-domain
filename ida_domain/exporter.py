@@ -106,10 +106,10 @@ class Exporter(DatabaseEntity):
 
     def export(
         self,
-        path: str,
+        output_path: str,
         format: str,
-        start: Optional[ea_t] = None,
-        end: Optional[ea_t] = None,
+        start_ea: Optional[ea_t] = None,
+        end_ea: Optional[ea_t] = None,
     ) -> bool:
         """
         Export database contents to a file (LLM-friendly unified export).
@@ -120,7 +120,7 @@ class Exporter(DatabaseEntity):
         string format parameter.
 
         Args:
-            path: Output file path
+            output_path: Output file path
             format: Export format. One of:
                 - "asm": Assembly file
                 - "lst": Listing file
@@ -128,15 +128,15 @@ class Exporter(DatabaseEntity):
                 - "idc": IDC script
                 - "exe": Reconstructed executable
                 - "diff": Difference file
-            start: Start address (None = database minimum)
-            end: End address (None = database maximum)
+            start_ea: Start address (None = database minimum)
+            end_ea: End address (None = database maximum)
 
         Returns:
             True if export was successful, False otherwise
 
         Raises:
             InvalidParameterError: If format is not a valid option
-            InvalidEAError: If start or end address is invalid
+            InvalidEAError: If start_ea or end_ea address is invalid
             IOError: If file cannot be written
 
         Example:
@@ -153,17 +153,17 @@ class Exporter(DatabaseEntity):
         format_lower = format.lower()
 
         if format_lower == "asm":
-            return self.generate_assembly(path, start, end)
+            return self.generate_assembly(output_path, start_ea, end_ea)
         elif format_lower == "lst":
-            return self.generate_listing(path, start, end)
+            return self.generate_listing(output_path, start_ea, end_ea)
         elif format_lower == "map":
-            return self.generate_map_file(path, start, end)
+            return self.generate_map_file(output_path, start_ea, end_ea)
         elif format_lower == "idc":
-            return self.generate_idc_script(path, start, end)
+            return self.generate_idc_script(output_path, start_ea, end_ea)
         elif format_lower == "exe":
-            return self.generate_executable(path)
+            return self.generate_executable(output_path)
         elif format_lower == "diff":
-            return self.generate_diff(path, start, end)
+            return self.generate_diff(output_path, start_ea, end_ea)
         else:
             raise InvalidParameterError(
                 'format', format,
