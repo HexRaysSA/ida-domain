@@ -45,6 +45,14 @@ from .xrefs import Xrefs
 if TYPE_CHECKING:
     from .instructions import Instructions
 
+__all__ = [
+    'Database',
+    'DatabaseError',
+    'DatabaseMetadata',
+    'CompilerInformation',
+    'ExecutionMode',
+    'IdaCommandOptions',
+]
 
 logger = logging.getLogger(__name__)
 
