@@ -492,22 +492,22 @@ class Switches(DatabaseEntity):
         except Exception:
             return False
 
-    def remove_parent(self, ea: ea_t) -> bool:
+    def delete_parent(self, ea: ea_t) -> bool:
         """
-        Removes the parent switch relationship for the specified address.
+        Delete the switch parent at the specified address.
 
         Args:
-            ea: Address whose parent relationship should be removed
+            ea: The effective address.
 
         Returns:
-            True if relationship was removed, False if no relationship existed
+            True if deleted successfully.
 
         Raises:
             InvalidEAError: If the effective address is invalid
 
         Example:
             >>> db = Database.open_current()
-            >>> if db.switches.remove_parent(0x401050):
+            >>> if db.switches.delete_parent(0x401050):
             ...     print("Parent relationship removed")
         """
         if not self.database.is_valid_ea(ea):
@@ -520,6 +520,11 @@ class Switches(DatabaseEntity):
         # Delete parent relationship
         ida_nalt.del_switch_parent(ea)
         return True
+
+    @deprecated("Use delete_parent() instead")
+    def remove_parent(self, ea: ea_t) -> bool:
+        """Deprecated: Use delete_parent() instead."""
+        return self.delete_parent(ea)
 
     # ========================================================================
     # Switch Analysis
