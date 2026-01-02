@@ -99,10 +99,10 @@ class Names(DatabaseEntity):
     def __init__(self, database: Database) -> None:
         super().__init__(database)
 
-    def __iter__(self) -> Iterator[tuple[ea_t, str]]:
+    def __iter__(self) -> Iterator[Tuple[ea_t, str]]:
         return self.get_all()
 
-    def __getitem__(self, index: int) -> Tuple[ea_t, str] | None:
+    def __getitem__(self, index: int) -> Optional[Tuple[ea_t, str]]:
         return self.get_at_index(index)
 
     def __len__(self) -> int:
@@ -123,7 +123,7 @@ class Names(DatabaseEntity):
         """
         return cast(int, ida_name.get_nlist_size())
 
-    def get_at_index(self, index: int) -> Tuple[ea_t, str] | None:
+    def get_at_index(self, index: int) -> Optional[Tuple[ea_t, str]]:
         """
         Retrieves the named element at the specified index.
 
@@ -407,7 +407,7 @@ class Names(DatabaseEntity):
             return None
         return ea
 
-    def resolve_value(self, name: str, from_ea: ea_t = BADADDR) -> tuple[Optional[int], int]:
+    def resolve_value(self, name: str, from_ea: ea_t = BADADDR) -> Tuple[Optional[int], int]:
         """
         Get the numeric value and type of a name.
 
