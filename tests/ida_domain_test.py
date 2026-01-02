@@ -1517,12 +1517,12 @@ def test_types(test_env):
     assert len(list(db.types)) == 2
 
     tif = db.types.get_by_name('STRUCT_EXAMPLE')
-    assert not db.types.apply_at(tif, 0xB3)
+    assert not db.types.apply_at(0xB3, tif)
 
     type_info = db.types.get_at(0xB3)
     assert type_info is None
 
-    assert db.types.apply_at(tif, 0x330)
+    assert db.types.apply_at(0x330, tif)
     type_info = db.types.get_at(0x330)
     assert type_info
     assert type_info.get_tid() == tif.get_tid()
@@ -1633,7 +1633,7 @@ def test_types(test_env):
     with pytest.raises(InvalidEAError):
         db.types.get_at(0xFFFFFFFF)
     with pytest.raises(InvalidEAError):
-        db.types.apply_at(tif, 0xFFFFFFFF)
+        db.types.apply_at(0xFFFFFFFF, tif)
 
     types_list = list(db.types.get_all(library=None, type_kind=TypeKind.NUMBERED))
     assert len(types_list) == 5
