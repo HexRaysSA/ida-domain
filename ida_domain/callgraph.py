@@ -49,7 +49,7 @@ class CallGraph(DatabaseEntity):
 
     Example:
         >>> # Find all functions that eventually call dangerous_func
-        >>> for caller in db.callgraph.callers_of(dangerous_func_ea, depth=5):
+        >>> for caller in db.callgraph.callers_of(dangerous_func_ea, max_depth=5):
         ...     print(f"Caller: 0x{caller:x}")
         >>>
         >>> # Find call path from main to target
@@ -60,13 +60,13 @@ class CallGraph(DatabaseEntity):
     def __init__(self, database: Database):
         super().__init__(database)
 
-    def callers_of(self, ea: ea_t, depth: int = 1) -> Iterator[ea_t]:
+    def callers_of(self, ea: ea_t, max_depth: int = 1) -> Iterator[ea_t]:
         """
         Get transitive callers of a function.
 
         Args:
             ea: Function address to find callers of.
-            depth: Maximum call depth to traverse (default: 1 = direct callers only).
+            max_depth: Maximum call depth to traverse (default: 1 = direct callers only).
 
         Yields:
             Function start addresses that (transitively) call this function.
@@ -82,7 +82,7 @@ class CallGraph(DatabaseEntity):
 
         current_level: Set[ea_t] = {ea}
 
-        for _ in range(depth):
+        for _ in range(max_depth):
             next_level: Set[ea_t] = set()
 
             for func_ea in current_level:
@@ -97,13 +97,13 @@ class CallGraph(DatabaseEntity):
                 break
             current_level = next_level
 
-    def callees_of(self, ea: ea_t, depth: int = 1) -> Iterator[ea_t]:
+    def callees_of(self, ea: ea_t, max_depth: int = 1) -> Iterator[ea_t]:
         """
         Get transitive callees (functions called by) a function.
 
         Args:
             ea: Function address to find callees of.
-            depth: Maximum call depth to traverse (default: 1 = direct callees only).
+            max_depth: Maximum call depth to traverse (default: 1 = direct callees only).
 
         Yields:
             Function start addresses that are (transitively) called.
@@ -123,7 +123,7 @@ class CallGraph(DatabaseEntity):
 
         current_level: Set[ea_t] = {func.start_ea}
 
-        for _ in range(depth):
+        for _ in range(max_depth):
             next_level: Set[ea_t] = set()
 
             for func_ea in current_level:
@@ -145,8 +145,8 @@ class CallGraph(DatabaseEntity):
 
     def paths_between(
         self,
-        src: ea_t,
-        dst: ea_t,
+        src_ea: ea_t,
+        dst_ea: ea_t,
         max_depth: int = 10
     ) -> Iterator[CallPath]:
         """
@@ -155,36 +155,36 @@ class CallGraph(DatabaseEntity):
         Uses BFS to find paths, yielding shorter paths first.
 
         Args:
-            src: Source function address.
-            dst: Destination function address.
+            src_ea: Source function address.
+            dst_ea: Destination function address.
             max_depth: Maximum path length (default: 10).
 
         Yields:
-            CallPath objects representing call chains from src to dst.
+            CallPath objects representing call chains from src_ea to dst_ea.
 
         Raises:
             InvalidEAError: If either address is invalid.
         """
-        if not self.database.is_valid_ea(src):
-            raise InvalidEAError(src)
-        if not self.database.is_valid_ea(dst):
-            raise InvalidEAError(dst)
+        if not self.database.is_valid_ea(src_ea):
+            raise InvalidEAError(src_ea)
+        if not self.database.is_valid_ea(dst_ea):
+            raise InvalidEAError(dst_ea)
 
-        src_func = self.database.functions.get_at(src)
-        dst_func = self.database.functions.get_at(dst)
+        src_func = self.database.functions.get_at(src_ea)
+        dst_func = self.database.functions.get_at(dst_ea)
 
         if src_func is None or dst_func is None:
             return
 
-        src_ea = src_func.start_ea
-        dst_ea = dst_func.start_ea
+        src_start = src_func.start_ea
+        dst_start = dst_func.start_ea
 
-        if src_ea == dst_ea:
-            yield CallPath([src_ea])
+        if src_start == dst_start:
+            yield CallPath([src_start])
             return
 
         queue: deque = deque()
-        queue.append([src_ea])
+        queue.append([src_start])
 
         while queue:
             path = queue.popleft()
@@ -212,7 +212,7 @@ class CallGraph(DatabaseEntity):
 
                     new_path = path + [target_ea]
 
-                    if target_ea == dst_ea:
+                    if target_ea == dst_start:
                         yield CallPath(new_path)
                     elif len(new_path) < max_depth:
                         queue.append(new_path)
@@ -231,7 +231,7 @@ class CallGraph(DatabaseEntity):
         Raises:
             InvalidEAError: If the address is invalid.
         """
-        return set(self.callees_of(ea, depth=max_depth))
+        return set(self.callees_of(ea, max_depth=max_depth))
 
     def reaches(self, ea: ea_t, max_depth: int = 100) -> Set[ea_t]:
         """
@@ -247,4 +247,4 @@ class CallGraph(DatabaseEntity):
         Raises:
             InvalidEAError: If the address is invalid.
         """
-        return set(self.callers_of(ea, depth=max_depth))
+        return set(self.callers_of(ea, max_depth=max_depth))
