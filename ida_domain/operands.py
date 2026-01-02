@@ -92,7 +92,7 @@ class Operand(ABC):
     """Abstract base class for all operand types."""
 
     def __init__(self, database: Database, operand: ida_ua.op_t, instruction_ea: ea_t):
-        self.m_database = database
+        self._database = database
         self._op = operand
         self._instruction_ea = instruction_ea
 
