@@ -435,7 +435,7 @@ def test_add_fixup_basic(fixups_db):
     # Add a fixup
     target = fixups_db.minimum_ea + 0x200
     success = fixups_db.fixups.add(
-        address=test_ea, fixup_type=FixupType.OFF32, target_offset=target
+        ea=test_ea, fixup_type=FixupType.OFF32, target_offset=target
     )
 
     assert isinstance(success, bool), 'add should return boolean'
@@ -457,7 +457,7 @@ def test_add_fixup_raises_on_invalid_address(fixups_db):
 
     with pytest.raises(InvalidEAError):
         fixups_db.fixups.add(
-            address=invalid_ea,
+            ea=invalid_ea,
             fixup_type=FixupType.OFF32,
             target_offset=fixups_db.minimum_ea,
         )

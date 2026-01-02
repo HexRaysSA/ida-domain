@@ -170,12 +170,12 @@ class Fixups(DatabaseEntity):
     # Query Methods
     # ========================================================================
 
-    def get_at(self, address: ea_t) -> Optional[FixupInfo]:
+    def get_at(self, ea: ea_t) -> Optional[FixupInfo]:
         """
         Get fixup information at a specific address.
 
         Args:
-            address: Address to query.
+            ea: Address to query.
 
         Returns:
             FixupInfo if fixup exists at address, None otherwise.
@@ -189,23 +189,23 @@ class Fixups(DatabaseEntity):
             ...     print(f"Fixup type: {fixup.type.name}")
             ...     print(f"Target: {fixup.target:#x}")
         """
-        if not self.database.is_valid_ea(address):
-            raise InvalidEAError(address)
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
 
         # Get fixup data
         fd = ida_fixup.fixup_data_t()
-        if not ida_fixup.get_fixup(fd, address):
+        if not ida_fixup.get_fixup(fd, ea):
             return None
 
         # Convert to FixupInfo
-        return self._fixup_data_to_info(address, fd)
+        return self._fixup_data_to_info(ea, fd)
 
-    def has_fixup(self, address: ea_t) -> bool:
+    def has_fixup(self, ea: ea_t) -> bool:
         """
         Check if a fixup exists at the given address.
 
         Args:
-            address: Address to check.
+            ea: Address to check.
 
         Returns:
             True if fixup exists, False otherwise.
@@ -217,10 +217,10 @@ class Fixups(DatabaseEntity):
             >>> if db.fixups.has_fixup(0x401000):
             ...     print("Address has fixup")
         """
-        if not self.database.is_valid_ea(address):
-            raise InvalidEAError(address)
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
 
-        return cast(bool, ida_fixup.exists_fixup(address))
+        return cast(bool, ida_fixup.exists_fixup(ea))
 
     def get_all(self) -> Iterator[FixupInfo]:
         """
@@ -246,13 +246,13 @@ class Fixups(DatabaseEntity):
             # Move to next
             ea = ida_fixup.get_next_fixup_ea(ea)
 
-    def get_between(self, start_address: ea_t, end_address: ea_t) -> Iterator[FixupInfo]:
+    def get_between(self, start_ea: ea_t, end_ea: ea_t) -> Iterator[FixupInfo]:
         """
         Get all fixups within an address range.
 
         Args:
-            start_address: Start of range (inclusive).
-            end_address: End of range (exclusive).
+            start_ea: Start of range (inclusive).
+            end_ea: End of range (exclusive).
 
         Yields:
             FixupInfo objects in the specified range.
@@ -268,20 +268,20 @@ class Fixups(DatabaseEntity):
             ...     text_fixups = list(db.fixups.get_between(text.start_ea, text.end_ea))
             ...     print(f"Found {len(text_fixups)} fixups in .text")
         """
-        if not self.database.is_valid_ea(start_address, strict_check=False):
-            raise InvalidEAError(start_address)
-        if not self.database.is_valid_ea(end_address, strict_check=False):
-            raise InvalidEAError(end_address)
-        if start_address >= end_address:
+        if not self.database.is_valid_ea(start_ea, strict_check=False):
+            raise InvalidEAError(start_ea)
+        if not self.database.is_valid_ea(end_ea, strict_check=False):
+            raise InvalidEAError(end_ea)
+        if start_ea >= end_ea:
             raise InvalidParameterError(
-                'start_address', start_address, 'must be less than end_address'
+                'start_ea', start_ea, 'must be less than end_ea'
             )
 
         # Iterate and filter
         ea = ida_fixup.get_first_fixup_ea()
         while ea != BADADDR:
             # Check if in range
-            if start_address <= ea < end_address:
+            if start_ea <= ea < end_ea:
                 fd = ida_fixup.fixup_data_t()
                 if ida_fixup.get_fixup(fd, ea):
                     yield self._fixup_data_to_info(ea, fd)
@@ -289,12 +289,12 @@ class Fixups(DatabaseEntity):
             # Move to next
             ea = ida_fixup.get_next_fixup_ea(ea)
 
-    def contains_fixups(self, start_address: ea_t, size: int) -> bool:
+    def contains_fixups(self, start_ea: ea_t, size: int) -> bool:
         """
         Check if an address range contains any fixups.
 
         Args:
-            start_address: Start of range.
+            start_ea: Start of range.
             size: Size of range in bytes.
 
         Returns:
@@ -310,19 +310,19 @@ class Fixups(DatabaseEntity):
             >>> if func and db.fixups.contains_fixups(func.start_ea, func.size()):
             ...     print("Function contains fixups (possibly calls imports)")
         """
-        if not self.database.is_valid_ea(start_address):
-            raise InvalidEAError(start_address)
+        if not self.database.is_valid_ea(start_ea):
+            raise InvalidEAError(start_ea)
         if size <= 0:
             raise InvalidParameterError('size', size, 'must be positive')
 
-        return cast(bool, ida_fixup.contains_fixups(start_address, size))
+        return cast(bool, ida_fixup.contains_fixups(start_ea, size))
 
-    def get_description(self, address: ea_t) -> str:
+    def get_description(self, ea: ea_t) -> str:
         """
         Get a human-readable description of the fixup at address.
 
         Args:
-            address: Address of fixup.
+            ea: Address of fixup.
 
         Returns:
             Text description of fixup, or empty string if no fixup exists.
@@ -335,16 +335,16 @@ class Fixups(DatabaseEntity):
             >>> print(f"Fixup description: {desc}")
             # Example output: "offset __imp_MessageBoxA"
         """
-        if not self.database.is_valid_ea(address):
-            raise InvalidEAError(address)
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
 
         # Get fixup data
         fd = ida_fixup.fixup_data_t()
-        if not ida_fixup.get_fixup(fd, address):
+        if not ida_fixup.get_fixup(fd, ea):
             return ''
 
         # Get description
-        desc = ida_fixup.get_fixup_desc(address, fd)
+        desc = ida_fixup.get_fixup_desc(ea, fd)
         return desc if desc is not None else ''
 
     # ========================================================================
@@ -353,7 +353,7 @@ class Fixups(DatabaseEntity):
 
     def add(
         self,
-        address: ea_t,
+        ea: ea_t,
         fixup_type: FixupType,
         target_offset: ea_t,
         displacement: int = 0,
@@ -364,7 +364,7 @@ class Fixups(DatabaseEntity):
         Add a new fixup at the specified address.
 
         Args:
-            address: Source address where fixup is located.
+            ea: Source address where fixup is located.
             fixup_type: Type of fixup (from FixupType enum).
             target_offset: Target address that fixup points to.
             displacement: Additional displacement from target (default: 0).
@@ -380,7 +380,7 @@ class Fixups(DatabaseEntity):
         Example:
             >>> # Manually add a fixup (advanced use case)
             >>> success = db.fixups.add(
-            ...     address=0x401000,
+            ...     ea=0x401000,
             ...     fixup_type=FixupType.OFF32,
             ...     target_offset=0x405000,
             ...     is_extdef=True
@@ -388,8 +388,8 @@ class Fixups(DatabaseEntity):
             >>> if success:
             ...     print("Fixup added successfully")
         """
-        if not self.database.is_valid_ea(address):
-            raise InvalidEAError(address)
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
 
         # Create fixup data
         fd = ida_fixup.fixup_data_t()
@@ -408,17 +408,17 @@ class Fixups(DatabaseEntity):
 
         # Set fixup
         try:
-            ida_fixup.set_fixup(address, fd)
+            ida_fixup.set_fixup(ea, fd)
             return True
         except Exception:
             return False
 
-    def delete(self, address: ea_t) -> bool:
+    def delete(self, ea: ea_t) -> bool:
         """
         Delete the fixup at the specified address.
 
         Args:
-            address: Address where fixup is located.
+            ea: Address where fixup is located.
 
         Returns:
             True if fixup was deleted, False if no fixup existed.
@@ -433,22 +433,22 @@ class Fixups(DatabaseEntity):
             >>> else:
             ...     print("No fixup at address")
         """
-        if not self.database.is_valid_ea(address):
-            raise InvalidEAError(address)
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
 
         # Check if fixup exists
-        if not ida_fixup.exists_fixup(address):
+        if not ida_fixup.exists_fixup(ea):
             return False
 
         # Delete fixup
         try:
-            ida_fixup.del_fixup(address)
+            ida_fixup.del_fixup(ea)
             return True
         except Exception:
             return False
 
     @deprecated("Use delete() instead")
-    def remove(self, address: ea_t) -> bool:
+    def remove(self, ea: ea_t) -> bool:
         """
         Remove the fixup at the specified address.
 
@@ -456,7 +456,7 @@ class Fixups(DatabaseEntity):
             Use :meth:`delete` instead.
 
         Args:
-            address: Address where fixup is located.
+            ea: Address where fixup is located.
 
         Returns:
             True if fixup was removed, False if no fixup existed.
@@ -471,9 +471,9 @@ class Fixups(DatabaseEntity):
             >>> else:
             ...     print("No fixup at address")
         """
-        return self.delete(address)
+        return self.delete(ea)
 
-    def patch_value(self, address: ea_t) -> bool:
+    def patch_value(self, ea: ea_t) -> bool:
         """
         Apply the fixup at address to the database bytes.
 
@@ -481,7 +481,7 @@ class Fixups(DatabaseEntity):
         value to memory at the fixup location.
 
         Args:
-            address: Address of fixup to apply.
+            ea: Address of fixup to apply.
 
         Returns:
             True if fixup was successfully applied, False otherwise.
@@ -498,16 +498,16 @@ class Fixups(DatabaseEntity):
             This is an advanced operation. Most fixups are automatically
             applied by loaders.
         """
-        if not self.database.is_valid_ea(address):
-            raise InvalidEAError(address)
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
 
         # Get fixup data
         fd = ida_fixup.fixup_data_t()
-        if not ida_fixup.get_fixup(fd, address):
+        if not ida_fixup.get_fixup(fd, ea):
             return False
 
         # Patch fixup value
-        return cast(bool, ida_fixup.patch_fixup_value(address, fd))
+        return cast(bool, ida_fixup.patch_fixup_value(ea, fd))
 
     # ========================================================================
     # Collection Protocol
@@ -543,19 +543,19 @@ class Fixups(DatabaseEntity):
     # Internal Helper Methods
     # ========================================================================
 
-    def _fixup_data_to_info(self, address: ea_t, fd: ida_fixup.fixup_data_t) -> FixupInfo:
+    def _fixup_data_to_info(self, ea: ea_t, fd: ida_fixup.fixup_data_t) -> FixupInfo:
         """
         Convert fixup_data_t to FixupInfo dataclass.
 
         Args:
-            address: Address where fixup is located.
+            ea: Address where fixup is located.
             fd: Fixup data from ida_fixup.
 
         Returns:
             FixupInfo dataclass with all fields populated.
         """
         return FixupInfo(
-            address=address,
+            address=ea,
             type=FixupType(fd.get_type()),
             target_offset=fd.off,
             displacement=fd.displacement,
