@@ -116,7 +116,7 @@ class TestCallersOf:
             pytest.skip('No function with callers found in test binary')
 
         # Get callers using callgraph
-        cg_callers = set(test_env.callgraph.callers_of(func_with_callers.start_ea, depth=1))
+        cg_callers = set(test_env.callgraph.callers_of(func_with_callers.start_ea, max_depth=1))
 
         # Get callers using direct xref query
         xref_callers = set()
@@ -163,10 +163,10 @@ class TestCallersOf:
             pytest.skip('No function with callers found')
 
         # Get callers at depth 1
-        depth1 = set(test_env.callgraph.callers_of(func_with_callers.start_ea, depth=1))
+        depth1 = set(test_env.callgraph.callers_of(func_with_callers.start_ea, max_depth=1))
 
         # Get callers at depth 5 (should include depth 1 plus more)
-        depth5 = set(test_env.callgraph.callers_of(func_with_callers.start_ea, depth=5))
+        depth5 = set(test_env.callgraph.callers_of(func_with_callers.start_ea, max_depth=5))
 
         # Depth 5 should include all of depth 1
         assert depth1.issubset(depth5), (
@@ -219,7 +219,7 @@ class TestCalleesOf:
             pytest.skip('No function with call instructions found')
 
         # Get callees using callgraph
-        callees = list(test_env.callgraph.callees_of(func_with_calls.start_ea, depth=1))
+        callees = list(test_env.callgraph.callees_of(func_with_calls.start_ea, max_depth=1))
 
         # Should have at least one callee
         assert len(callees) > 0, 'Function with calls should have at least one callee'
