@@ -27,6 +27,7 @@ RESOURCES_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # Test binaries to pre-analyze
 TEST_BINARIES = [
+    'test_callgraph.bin',
     'test_imports.bin',
     'test_switches.bin',
     'test_try_blocks.bin',

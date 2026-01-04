@@ -13,15 +13,15 @@ from ida_domain.database import IdaCommandOptions
 
 @pytest.fixture(scope='module')
 def callgraph_test_setup():
-    """Setup for CallGraph tests - prepares tiny_c.bin database."""
-    idb_path = os.path.join(tempfile.gettempdir(), 'api_tests_work_dir', 'tiny_c_callgraph.bin')
+    """Setup for CallGraph tests - prepares test_callgraph.bin database."""
+    idb_path = os.path.join(tempfile.gettempdir(), 'api_tests_work_dir', 'test_callgraph.bin')
     os.makedirs(os.path.dirname(idb_path), exist_ok=True)
 
-    # Copy tiny_c.bin from test resources
+    # Copy test_callgraph.bin from test resources
     import shutil
 
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    src_path = os.path.join(current_dir, 'resources', 'tiny_c.bin')
+    src_path = os.path.join(current_dir, 'resources', 'test_callgraph.bin')
     shutil.copy2(src_path, idb_path)
 
     yield idb_path
