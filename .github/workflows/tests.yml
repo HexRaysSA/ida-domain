@@ -47,8 +47,7 @@ jobs:
         echo "Installing hcli..."
         uv tool install ida-hcli==0.14.2
         echo "Downloading and installing IDA ${{ matrix.ida_version.version }}..."
-        echo "hcli ida install -d ${{ matrix.ida_version.installer_path }} -l 96-2107-957E-73 -i /opt/ida/ -y"
-        hcli ida install -d ${{ matrix.ida_version.installer_path }} -l 96-2107-957E-73 -i /opt/ida/ -y
+        hcli ida install -d ${{ matrix.ida_version.installer_path }} -l ${{ secrets.IDA_LICENSE_ID }} -i /opt/ida/ -y
         echo "Done!"
       env:
         HCLI_API_KEY: ${{ secrets.HCLI_API_KEY }}
