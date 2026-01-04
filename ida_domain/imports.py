@@ -4,12 +4,17 @@ import re
 from dataclasses import dataclass, field
 from typing import Callable, Union
 
-from typing_extensions import TYPE_CHECKING, Iterator, List, Optional
-
 import ida_nalt
 from ida_idaapi import ea_t
+from typing_extensions import TYPE_CHECKING, Iterator, List, Optional
 
-from .base import DatabaseEntity, InvalidParameterError, check_db_open, decorate_all_methods, deprecated
+from .base import (
+    DatabaseEntity,
+    InvalidParameterError,
+    check_db_open,
+    decorate_all_methods,
+    deprecated,
+)
 
 if TYPE_CHECKING:
     from .database import Database
@@ -489,7 +494,9 @@ class Imports(DatabaseEntity):
             # Search imports in this module
             result = []
 
-            def callback(import_ea: ea_t, import_name: Optional[str], ordinal: Optional[int]) -> int:
+            def callback(
+                import_ea: ea_t, import_name: Optional[str], ordinal: Optional[int]
+            ) -> int:
                 """Callback for enum_import_names."""
                 if import_name and import_name == name:
                     entry = ImportEntry(
@@ -556,7 +563,9 @@ class Imports(DatabaseEntity):
             # Search imports in this module
             entries = []
 
-            def callback(import_ea: ea_t, import_name: Optional[str], ordinal: Optional[int]) -> int:
+            def callback(
+                import_ea: ea_t, import_name: Optional[str], ordinal: Optional[int]
+            ) -> int:
                 """Callback for enum_import_names."""
                 if import_name and import_name == name:
                     entry = ImportEntry(
