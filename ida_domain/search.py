@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from enum import IntEnum
-from typing import TYPE_CHECKING, Iterator, Optional
+from enum import Enum, IntEnum
+from typing import TYPE_CHECKING, Iterator, Optional, Union
 
 import ida_ida
 import ida_idaapi
@@ -19,7 +19,7 @@ from .base import (
 if TYPE_CHECKING:
     from .database import Database
 
-__all__ = ['Search', 'SearchDirection']
+__all__ = ['Search', 'SearchDirection', 'SearchTarget']
 
 
 class SearchDirection(IntEnum):
@@ -29,6 +29,86 @@ class SearchDirection(IntEnum):
     """Search towards lower addresses"""
     DOWN = 1
     """Search towards higher addresses"""
+
+
+class SearchTarget(str, Enum):
+    """Type of address to find in search operations."""
+
+    UNDEFINED = "undefined"
+    """Find undefined/unexplored bytes"""
+
+    DEFINED = "defined"
+    """Find defined items (instructions or data)"""
+
+    CODE = "code"
+    """Find code addresses"""
+
+    DATA = "data"
+    """Find data addresses"""
+
+    CODE_OUTSIDE_FUNCTION = "code_outside_function"
+    """Find orphaned code (not in functions)"""
+
+
+def _normalize_direction(direction: Union[SearchDirection, str]) -> SearchDirection:
+    """
+    Normalize direction parameter to SearchDirection enum.
+
+    Args:
+        direction: SearchDirection enum or string ("forward"/"backward")
+
+    Returns:
+        SearchDirection enum value
+
+    Raises:
+        InvalidParameterError: If direction is not valid
+    """
+    if isinstance(direction, SearchDirection):
+        return direction
+
+    if isinstance(direction, str):
+        direction_lower = direction.lower()
+        if direction_lower == "forward":
+            return SearchDirection.DOWN
+        elif direction_lower == "backward":
+            return SearchDirection.UP
+        elif direction_lower == "down":
+            return SearchDirection.DOWN
+        elif direction_lower == "up":
+            return SearchDirection.UP
+
+    raise InvalidParameterError(
+        'direction', direction,
+        'must be SearchDirection enum or one of: "forward", "backward", "up", "down"'
+    )
+
+
+def _normalize_target(what: Union[SearchTarget, str]) -> SearchTarget:
+    """
+    Normalize target parameter to SearchTarget enum.
+
+    Args:
+        what: SearchTarget enum or string value
+
+    Returns:
+        SearchTarget enum value
+
+    Raises:
+        InvalidParameterError: If what is not valid
+    """
+    if isinstance(what, SearchTarget):
+        return what
+
+    if isinstance(what, str):
+        try:
+            return SearchTarget(what.lower())
+        except ValueError:
+            pass
+
+    raise InvalidParameterError(
+        'what', what,
+        f'must be SearchTarget enum or one of: {", ".join(e.value for e in SearchTarget)}'
+    )
 
 
 @decorate_all_methods(check_db_open)
@@ -55,7 +135,10 @@ class Search(DatabaseEntity):
     # ============================================================================
 
     def find_next(
-        self, ea: ea_t, what: str, direction: str = "forward"
+        self,
+        ea: ea_t,
+        what: Union[SearchTarget, str],
+        direction: Union[SearchDirection, str] = SearchDirection.DOWN,
     ) -> Optional[ea_t]:
         """
         Find next address of specified type (LLM-friendly unified search).
@@ -66,15 +149,16 @@ class Search(DatabaseEntity):
 
         Args:
             ea: Starting address for search
-            what: Type of address to find. One of:
-                - "undefined": Find next undefined/unexplored byte
-                - "defined": Find next defined item (instruction or data)
-                - "code": Find next code address
-                - "data": Find next data address
-                - "code_outside_function": Find next orphaned code
-            direction: Search direction. Either:
-                - "forward": Search towards higher addresses (default)
-                - "backward": Search towards lower addresses
+            what: Type of address to find. Use SearchTarget enum:
+                - SearchTarget.UNDEFINED: Find undefined/unexplored bytes
+                - SearchTarget.DEFINED: Find defined items (instructions or data)
+                - SearchTarget.CODE: Find code addresses
+                - SearchTarget.DATA: Find data addresses
+                - SearchTarget.CODE_OUTSIDE_FUNCTION: Find orphaned code
+                String values also accepted for backward compatibility.
+            direction: Search direction. Use SearchDirection enum:
+                - SearchDirection.DOWN (or "forward"): Search towards higher addresses
+                - SearchDirection.UP (or "backward"): Search towards lower addresses
 
         Returns:
             Address of next match, or None if not found
@@ -85,9 +169,12 @@ class Search(DatabaseEntity):
 
         Example:
             >>> db = Database.open_current()
-            >>> # Find next code
+            >>> # Find next code using enum (preferred)
+            >>> ea = db.search.find_next(0x401000, SearchTarget.CODE)
+            >>> # Find next code using string (backward compatible)
             >>> ea = db.search.find_next(0x401000, "code")
             >>> # Find previous data
+            >>> ea = db.search.find_next(0x401000, SearchTarget.DATA, SearchDirection.UP)
             >>> ea = db.search.find_next(0x401000, "data", direction="backward")
 
         Note:
@@ -97,38 +184,30 @@ class Search(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        # Map direction string to enum
-        direction_lower = direction.lower()
-        if direction_lower == "forward":
-            search_dir = SearchDirection.DOWN
-        elif direction_lower == "backward":
-            search_dir = SearchDirection.UP
-        else:
-            raise InvalidParameterError(
-                'direction', direction, 'must be one of: "forward", "backward"'
-            )
+        # Normalize parameters to enums
+        search_dir = _normalize_direction(direction)
+        target = _normalize_target(what)
 
-        # Dispatch to appropriate method based on what
-        what_lower = what.lower()
-        if what_lower == "undefined":
+        # Dispatch to appropriate method based on target
+        if target == SearchTarget.UNDEFINED:
             return self.next_undefined(ea, direction=search_dir)
-        elif what_lower == "defined":
+        elif target == SearchTarget.DEFINED:
             return self.next_defined(ea, direction=search_dir)
-        elif what_lower == "code":
+        elif target == SearchTarget.CODE:
             return self.next_code(ea, direction=search_dir)
-        elif what_lower == "data":
+        elif target == SearchTarget.DATA:
             return self.next_data(ea, direction=search_dir)
-        elif what_lower == "code_outside_function":
+        elif target == SearchTarget.CODE_OUTSIDE_FUNCTION:
             return self.next_code_outside_function(ea, direction=search_dir)
-        else:
-            raise InvalidParameterError(
-                'what', what,
-                'must be one of: "undefined", "defined", "code", "data", '
-                '"code_outside_function"'
-            )
+
+        # Should not reach here due to _normalize_target validation
+        raise InvalidParameterError(
+            'what', what,
+            f'must be SearchTarget enum or one of: {", ".join(e.value for e in SearchTarget)}'
+        )
 
     def find_all(
-        self, start_ea: ea_t, end_ea: ea_t, what: str
+        self, start_ea: ea_t, end_ea: ea_t, what: Union[SearchTarget, str]
     ) -> Iterator[ea_t]:
         """
         Iterate over all addresses of specified type (LLM-friendly unified iterator).
@@ -140,12 +219,13 @@ class Search(DatabaseEntity):
         Args:
             start_ea: Start of range
             end_ea: End of range (exclusive)
-            what: Type of address to find. One of:
-                - "undefined": Find all undefined/unexplored bytes
-                - "defined": Find all defined items (instruction or data)
-                - "code": Find all code addresses
-                - "data": Find all data addresses
-                - "code_outside_function": Find all orphaned code
+            what: Type of address to find. Use SearchTarget enum:
+                - SearchTarget.UNDEFINED: Find undefined/unexplored bytes
+                - SearchTarget.DEFINED: Find defined items (instructions or data)
+                - SearchTarget.CODE: Find code addresses
+                - SearchTarget.DATA: Find data addresses
+                - SearchTarget.CODE_OUTSIDE_FUNCTION: Find orphaned code
+                String values also accepted for backward compatibility.
 
         Yields:
             Addresses of matching type in the specified range
@@ -156,7 +236,10 @@ class Search(DatabaseEntity):
 
         Example:
             >>> db = Database.open_current()
-            >>> # Find all code addresses
+            >>> # Find all code addresses using enum (preferred)
+            >>> for ea in db.search.find_all(0x401000, 0x402000, SearchTarget.CODE):
+            ...     print(hex(ea))
+            >>> # Find all code addresses using string (backward compatible)
             >>> for ea in db.search.find_all(0x401000, 0x402000, "code"):
             ...     print(hex(ea))
 
@@ -172,24 +255,20 @@ class Search(DatabaseEntity):
         if start_ea >= end_ea:
             raise InvalidParameterError('start_ea', start_ea, 'must be less than end_ea')
 
-        # Dispatch to appropriate method based on what
-        what_lower = what.lower()
-        if what_lower == "undefined":
+        # Normalize target to enum
+        target = _normalize_target(what)
+
+        # Dispatch to appropriate method based on target
+        if target == SearchTarget.UNDEFINED:
             yield from self.all_undefined(start_ea, end_ea)
-        elif what_lower == "defined":
+        elif target == SearchTarget.DEFINED:
             yield from self.all_defined(start_ea, end_ea)
-        elif what_lower == "code":
+        elif target == SearchTarget.CODE:
             yield from self.all_code(start_ea, end_ea)
-        elif what_lower == "data":
+        elif target == SearchTarget.DATA:
             yield from self.all_data(start_ea, end_ea)
-        elif what_lower == "code_outside_function":
+        elif target == SearchTarget.CODE_OUTSIDE_FUNCTION:
             yield from self.all_code_outside_functions(start_ea, end_ea)
-        else:
-            raise InvalidParameterError(
-                'what', what,
-                'must be one of: "undefined", "defined", "code", "data", '
-                '"code_outside_function"'
-            )
 
     # ============================================================================
     # STATE-BASED SEARCHES

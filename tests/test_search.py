@@ -8,7 +8,7 @@ import pytest
 
 import ida_domain
 from ida_domain.database import IdaCommandOptions
-from ida_domain.search import SearchDirection
+from ida_domain.search import SearchDirection, SearchTarget
 
 
 @pytest.fixture(scope='module')
@@ -854,3 +854,247 @@ def test_find_all_validates_what_parameter(search_db):
 
     with pytest.raises(InvalidParameterError):
         list(search_db.search.find_all(start_ea, end_ea, ""))
+
+
+# =============================================================================
+# SEARCHTARGET ENUM TESTS
+# =============================================================================
+
+
+def test_find_next_with_search_target_enum(search_db):
+    """
+    Test that find_next() accepts SearchTarget enum values.
+
+    RATIONALE: The primary (preferred) way to call find_next() should be with
+    SearchTarget enum values. This provides better type safety and IDE support.
+    """
+    start_ea = search_db.minimum_ea
+
+    # Test with enum value
+    result = search_db.search.find_next(start_ea, SearchTarget.CODE)
+
+    # Compare with string call (should be equivalent)
+    expected = search_db.search.find_next(start_ea, "code")
+
+    assert result == expected, 'find_next(SearchTarget.CODE) should match find_next("code")'
+
+
+def test_find_next_with_all_search_target_enum_values(search_db):
+    """
+    Test that find_next() works with all SearchTarget enum values.
+
+    RATIONALE: Ensure all enum values are properly handled and dispatch
+    to the correct underlying methods.
+    """
+    start_ea = search_db.minimum_ea
+
+    # Test each SearchTarget enum value
+    for target in SearchTarget:
+        result = search_db.search.find_next(start_ea, target)
+        # Result can be None or valid address - just ensure no exceptions
+        assert result is None or search_db.is_valid_ea(result), (
+            f'find_next with {target} should return None or valid address'
+        )
+
+
+def test_find_next_with_search_direction_enum(search_db):
+    """
+    Test that find_next() accepts SearchDirection enum values.
+
+    RATIONALE: The primary way to specify direction should be with
+    SearchDirection enum values for type safety.
+    """
+    start_ea = search_db.maximum_ea - 1
+
+    # Test with enum value
+    result = search_db.search.find_next(start_ea, SearchTarget.CODE, SearchDirection.UP)
+
+    # Compare with string call
+    expected = search_db.search.find_next(start_ea, "code", direction="backward")
+
+    assert result == expected, (
+        'find_next with SearchDirection.UP should match direction="backward"'
+    )
+
+
+def test_find_next_direction_down_matches_forward(search_db):
+    """
+    Test that SearchDirection.DOWN behaves the same as "forward".
+
+    RATIONALE: Ensure both ways of specifying forward direction give same results.
+    """
+    start_ea = search_db.minimum_ea
+
+    down_result = search_db.search.find_next(start_ea, SearchTarget.CODE, SearchDirection.DOWN)
+    forward_result = search_db.search.find_next(start_ea, "code", direction="forward")
+
+    assert down_result == forward_result, (
+        'SearchDirection.DOWN should match "forward"'
+    )
+
+
+def test_find_all_with_search_target_enum(search_db):
+    """
+    Test that find_all() accepts SearchTarget enum values.
+
+    RATIONALE: The primary way to call find_all() should be with
+    SearchTarget enum values for type safety.
+    """
+    start_ea = search_db.minimum_ea
+    end_ea = search_db.maximum_ea
+
+    # Test with enum value
+    enum_results = list(search_db.search.find_all(start_ea, end_ea, SearchTarget.CODE))
+
+    # Compare with string call
+    string_results = list(search_db.search.find_all(start_ea, end_ea, "code"))
+
+    assert enum_results[:10] == string_results[:10], (
+        'find_all(SearchTarget.CODE) should match find_all("code")'
+    )
+
+
+def test_find_all_with_all_search_target_enum_values(search_db):
+    """
+    Test that find_all() works with all SearchTarget enum values.
+
+    RATIONALE: Ensure all enum values are properly handled.
+    """
+    start_ea = search_db.minimum_ea
+    end_ea = search_db.maximum_ea
+
+    # Test each SearchTarget enum value
+    for target in SearchTarget:
+        results = list(search_db.search.find_all(start_ea, end_ea, target))
+        # Just ensure no exceptions - count can be 0
+        for ea in results[:5]:  # Check first 5
+            assert search_db.is_valid_ea(ea), (
+                f'find_all with {target} should return valid addresses'
+            )
+
+
+# =============================================================================
+# CASE INSENSITIVITY TESTS
+# =============================================================================
+
+
+def test_find_next_case_insensitive_what(search_db):
+    """
+    Test that find_next() handles case-insensitive 'what' parameter.
+
+    RATIONALE: LLMs may generate strings with varying capitalization.
+    We should handle "CODE", "Code", "code" identically.
+    """
+    start_ea = search_db.minimum_ea
+
+    lower_result = search_db.search.find_next(start_ea, "code")
+    upper_result = search_db.search.find_next(start_ea, "CODE")
+    mixed_result = search_db.search.find_next(start_ea, "Code")
+
+    assert lower_result == upper_result == mixed_result, (
+        'find_next should be case-insensitive for what parameter'
+    )
+
+
+def test_find_next_case_insensitive_direction(search_db):
+    """
+    Test that find_next() handles case-insensitive 'direction' parameter.
+
+    RATIONALE: LLMs may generate strings with varying capitalization.
+    """
+    start_ea = search_db.minimum_ea
+
+    lower_result = search_db.search.find_next(start_ea, "code", direction="forward")
+    upper_result = search_db.search.find_next(start_ea, "code", direction="FORWARD")
+    mixed_result = search_db.search.find_next(start_ea, "code", direction="Forward")
+
+    assert lower_result == upper_result == mixed_result, (
+        'find_next should be case-insensitive for direction parameter'
+    )
+
+
+def test_find_next_alternative_direction_strings(search_db):
+    """
+    Test that find_next() accepts alternative direction strings.
+
+    RATIONALE: Accept "up"/"down" as alternatives to "backward"/"forward".
+    """
+    start_ea = search_db.minimum_ea
+
+    forward_result = search_db.search.find_next(start_ea, "code", direction="forward")
+    down_result = search_db.search.find_next(start_ea, "code", direction="down")
+
+    assert forward_result == down_result, '"forward" and "down" should be equivalent'
+
+    # Also test backward/up
+    end_ea = search_db.maximum_ea - 1
+    backward_result = search_db.search.find_next(end_ea, "code", direction="backward")
+    up_result = search_db.search.find_next(end_ea, "code", direction="up")
+
+    assert backward_result == up_result, '"backward" and "up" should be equivalent'
+
+
+def test_find_all_case_insensitive_what(search_db):
+    """
+    Test that find_all() handles case-insensitive 'what' parameter.
+
+    RATIONALE: LLMs may generate strings with varying capitalization.
+    """
+    start_ea = search_db.minimum_ea
+    end_ea = search_db.maximum_ea
+
+    lower_results = list(search_db.search.find_all(start_ea, end_ea, "code"))
+    upper_results = list(search_db.search.find_all(start_ea, end_ea, "CODE"))
+    mixed_results = list(search_db.search.find_all(start_ea, end_ea, "Code"))
+
+    # Compare first 10 results
+    assert lower_results[:10] == upper_results[:10] == mixed_results[:10], (
+        'find_all should be case-insensitive for what parameter'
+    )
+
+
+# =============================================================================
+# SEARCH TARGET ENUM PROPERTIES TESTS
+# =============================================================================
+
+
+def test_search_target_is_string_enum():
+    """
+    Test that SearchTarget is a string enum (str, Enum).
+
+    RATIONALE: SearchTarget should inherit from both str and Enum to enable
+    string comparison and natural serialization.
+    """
+    assert issubclass(SearchTarget, str), 'SearchTarget should be a string enum'
+
+    # Verify string comparison works
+    assert SearchTarget.CODE == "code", 'SearchTarget.CODE should equal "code"'
+    assert SearchTarget.DATA == "data", 'SearchTarget.DATA should equal "data"'
+
+
+def test_search_target_all_values():
+    """
+    Test that SearchTarget has all expected values.
+
+    RATIONALE: Ensure the enum contains all expected search target types.
+    """
+    expected_values = {
+        "undefined", "defined", "code", "data", "code_outside_function"
+    }
+
+    actual_values = {e.value for e in SearchTarget}
+
+    assert actual_values == expected_values, (
+        f'SearchTarget values mismatch. Expected: {expected_values}, Got: {actual_values}'
+    )
+
+
+def test_search_direction_enum_values():
+    """
+    Test SearchDirection enum values.
+
+    RATIONALE: Verify SearchDirection enum has expected UP and DOWN values
+    that map to IDA's SEARCH_UP and SEARCH_DOWN flags.
+    """
+    assert SearchDirection.UP == 0, 'SearchDirection.UP should be 0'
+    assert SearchDirection.DOWN == 1, 'SearchDirection.DOWN should be 1'
