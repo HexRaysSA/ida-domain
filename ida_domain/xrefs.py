@@ -161,6 +161,31 @@ class XrefType(IntEnum):
         return self in self._get_data_refs()
 
 
+class XrefKind(str, Enum):
+    """Filter kind for cross-reference queries."""
+
+    ALL = "all"
+    """All cross-references"""
+
+    CODE = "code"
+    """Code cross-references only"""
+
+    DATA = "data"
+    """Data cross-references only"""
+
+    CALLS = "calls"
+    """Call cross-references only"""
+
+    JUMPS = "jumps"
+    """Jump cross-references only"""
+
+    READS = "reads"
+    """Read cross-references only"""
+
+    WRITES = "writes"
+    """Write cross-references only"""
+
+
 class XrefsFlags(IntFlag):
     """Flags for xref iteration control."""
 
@@ -670,27 +695,27 @@ class Xrefs(DatabaseEntity):
     # ========================================================================
 
     def get_refs_to(
-        self, ea: ea_t, kind: str = "all"
+        self, ea: ea_t, kind: Union[XrefKind, str] = XrefKind.ALL
     ) -> Iterator[Union[XrefInfo, ea_t]]:
         """
         Get cross-references to an address (LLM-friendly unified interface).
 
-        This method provides a simplified interface using string parameters
-        instead of enums, making it more accessible to LLM agents.
+        This method provides a simplified interface for querying cross-references.
 
         Args:
             ea: Target address
-            kind: Type of references to get. Options:
-                - "all": All xrefs (returns XrefInfo objects)
-                - "code": Code xrefs only (returns addresses)
-                - "data": Data xrefs only (returns addresses)
-                - "calls": Call xrefs only (returns addresses)
-                - "jumps": Jump xrefs only (returns addresses)
-                - "reads": Read xrefs only (returns addresses)
-                - "writes": Write xrefs only (returns addresses)
+            kind: Filter for reference type. Use XrefKind enum:
+                - XrefKind.ALL: All references (default, returns XrefInfo objects)
+                - XrefKind.CODE: Code references only (returns addresses)
+                - XrefKind.DATA: Data references only (returns addresses)
+                - XrefKind.CALLS: Call references only (returns addresses)
+                - XrefKind.JUMPS: Jump references only (returns addresses)
+                - XrefKind.READS: Read references only (returns addresses)
+                - XrefKind.WRITES: Write references only (returns addresses)
+                String values also accepted for backward compatibility.
 
         Yields:
-            XrefInfo for "all", otherwise ea_t addresses
+            XrefInfo for XrefKind.ALL, otherwise ea_t addresses
 
         Raises:
             InvalidEAError: If the effective address is invalid
@@ -699,162 +724,198 @@ class Xrefs(DatabaseEntity):
         Example:
             >>> db = Database.open_current()
             >>> # Get all references to a function
-            >>> for ref in db.xrefs.get_refs_to(func_ea, "all"):
+            >>> for ref in db.xrefs.get_refs_to(func_ea, XrefKind.ALL):
             ...     print(f"{ref.from_ea:x} -> {ref.to_ea:x}")
             >>> # Get just call sites
-            >>> for caller_ea in db.xrefs.get_refs_to(func_ea, "calls"):
+            >>> for caller_ea in db.xrefs.get_refs_to(func_ea, XrefKind.CALLS):
             ...     print(f"Called from 0x{caller_ea:x}")
         """
-        kind_lower = kind.lower()
+        # Normalize string to enum
+        if isinstance(kind, str):
+            try:
+                kind = XrefKind(kind.lower())
+            except ValueError:
+                raise InvalidParameterError(
+                    'kind',
+                    kind,
+                    f'must be one of: {", ".join(e.value for e in XrefKind)}',
+                )
 
-        if kind_lower == "all":
+        if kind == XrefKind.ALL:
             yield from self.to_ea(ea)
-        elif kind_lower == "code":
+        elif kind == XrefKind.CODE:
             yield from self.code_refs_to_ea(ea)
-        elif kind_lower == "data":
+        elif kind == XrefKind.DATA:
             yield from self.data_refs_to_ea(ea)
-        elif kind_lower == "calls":
+        elif kind == XrefKind.CALLS:
             yield from self.calls_to_ea(ea)
-        elif kind_lower == "jumps":
+        elif kind == XrefKind.JUMPS:
             yield from self.jumps_to_ea(ea)
-        elif kind_lower == "reads":
+        elif kind == XrefKind.READS:
             yield from self.reads_of_ea(ea)
-        elif kind_lower == "writes":
+        elif kind == XrefKind.WRITES:
             yield from self.writes_to_ea(ea)
-        else:
-            raise InvalidParameterError(
-                'kind',
-                kind,
-                'must be one of: "all", "code", "data", "calls", "jumps", "reads", "writes"',
-            )
 
     def get_refs_from(
-        self, ea: ea_t, kind: str = "all"
+        self, ea: ea_t, kind: Union[XrefKind, str] = XrefKind.ALL
     ) -> Iterator[Union[XrefInfo, ea_t]]:
         """
         Get cross-references from an address (LLM-friendly unified interface).
 
-        This method provides a simplified interface using string parameters
-        instead of enums, making it more accessible to LLM agents.
+        This method provides a simplified interface for querying cross-references.
 
         Args:
             ea: Source address
-            kind: Type of references to get. Options:
-                - "all": All xrefs (returns XrefInfo objects)
-                - "code": Code xrefs only (returns addresses)
-                - "data": Data xrefs only (returns addresses)
-                - "calls": Call xrefs only (returns addresses)
-                - "jumps": Jump xrefs only (returns addresses)
+            kind: Filter for reference type. Use XrefKind enum:
+                - XrefKind.ALL: All references (default, returns XrefInfo objects)
+                - XrefKind.CODE: Code references only (returns addresses)
+                - XrefKind.DATA: Data references only (returns addresses)
+                - XrefKind.CALLS: Call references only (returns addresses)
+                - XrefKind.JUMPS: Jump references only (returns addresses)
+                Note: XrefKind.READS and XrefKind.WRITES are not valid for get_refs_from.
+                String values also accepted for backward compatibility.
 
         Yields:
-            XrefInfo for "all", otherwise ea_t addresses
+            XrefInfo for XrefKind.ALL, otherwise ea_t addresses
 
         Raises:
             InvalidEAError: If the effective address is invalid
-            InvalidParameterError: If kind is not recognized
+            InvalidParameterError: If kind is not recognized or not valid for this method
 
         Example:
             >>> db = Database.open_current()
             >>> # Get all references from an instruction
-            >>> for ref in db.xrefs.get_refs_from(insn_ea, "all"):
+            >>> for ref in db.xrefs.get_refs_from(insn_ea, XrefKind.ALL):
             ...     print(f"{ref.from_ea:x} -> {ref.to_ea:x}")
             >>> # Get just call targets
-            >>> for target_ea in db.xrefs.get_refs_from(insn_ea, "calls"):
+            >>> for target_ea in db.xrefs.get_refs_from(insn_ea, XrefKind.CALLS):
             ...     print(f"Calls 0x{target_ea:x}")
         """
-        kind_lower = kind.lower()
+        # Normalize string to enum
+        if isinstance(kind, str):
+            try:
+                kind = XrefKind(kind.lower())
+            except ValueError:
+                raise InvalidParameterError(
+                    'kind',
+                    kind,
+                    f'must be one of: {", ".join(e.value for e in XrefKind)}',
+                )
 
-        if kind_lower == "all":
+        if kind == XrefKind.ALL:
             yield from self.from_ea(ea)
-        elif kind_lower == "code":
+        elif kind == XrefKind.CODE:
             yield from self.code_refs_from_ea(ea)
-        elif kind_lower == "data":
+        elif kind == XrefKind.DATA:
             yield from self.data_refs_from_ea(ea)
-        elif kind_lower == "calls":
+        elif kind == XrefKind.CALLS:
             yield from self.calls_from_ea(ea)
-        elif kind_lower == "jumps":
+        elif kind == XrefKind.JUMPS:
             yield from self.jumps_from_ea(ea)
         else:
+            # READS and WRITES are not valid for get_refs_from
             raise InvalidParameterError(
                 'kind',
-                kind,
-                'must be one of: "all", "code", "data", "calls", "jumps"',
+                kind.value,
+                'must be one of: all, code, data, calls, jumps',
             )
 
-    def has_refs_to(self, ea: ea_t, kind: str = "all") -> bool:
+    def has_refs_to(self, ea: ea_t, kind: Union[XrefKind, str] = XrefKind.ALL) -> bool:
         """
         Check if references to an address exist (LLM-friendly unified interface).
 
-        This method provides a simplified interface using string parameters
-        instead of enums, making it more accessible to LLM agents.
+        This method provides a simplified interface for checking cross-reference existence.
 
         Args:
             ea: Target address
-            kind: Type of references to check. Options:
-                - "all": Any xrefs
-                - "code": Code xrefs only
-                - "data": Data xrefs only
+            kind: Filter for reference type. Use XrefKind enum:
+                - XrefKind.ALL: Any references (default)
+                - XrefKind.CODE: Code references only
+                - XrefKind.DATA: Data references only
+                Note: XrefKind.CALLS, JUMPS, READS, WRITES are not valid for has_refs_to.
+                String values also accepted for backward compatibility.
 
         Returns:
             True if references of the specified kind exist
 
         Raises:
             InvalidEAError: If the effective address is invalid
-            InvalidParameterError: If kind is not recognized
+            InvalidParameterError: If kind is not recognized or not valid for this method
 
         Example:
             >>> db = Database.open_current()
-            >>> if db.xrefs.has_refs_to(func_ea, "code"):
+            >>> if db.xrefs.has_refs_to(func_ea, XrefKind.CODE):
             ...     print("Function is called")
         """
-        kind_lower = kind.lower()
+        # Normalize string to enum
+        if isinstance(kind, str):
+            try:
+                kind = XrefKind(kind.lower())
+            except ValueError:
+                raise InvalidParameterError(
+                    'kind',
+                    kind,
+                    f'must be one of: {", ".join(e.value for e in XrefKind)}',
+                )
 
-        if kind_lower == "all":
+        if kind == XrefKind.ALL:
             return self.has_any_refs_to(ea)
-        elif kind_lower == "code":
+        elif kind == XrefKind.CODE:
             return self.has_code_refs_to(ea)
-        elif kind_lower == "data":
+        elif kind == XrefKind.DATA:
             return self.has_data_refs_to(ea)
         else:
+            # CALLS, JUMPS, READS, WRITES are not valid for has_refs_to
             raise InvalidParameterError(
                 'kind',
-                kind,
-                'must be one of: "all", "code", "data"',
+                kind.value,
+                'must be one of: all, code, data',
             )
 
-    def has_refs_from(self, ea: ea_t, kind: str = "all") -> bool:
+    def has_refs_from(self, ea: ea_t, kind: Union[XrefKind, str] = XrefKind.ALL) -> bool:
         """
         Check if references from an address exist (LLM-friendly unified interface).
 
-        This method provides a simplified interface using string parameters
-        instead of enums, making it more accessible to LLM agents.
+        This method provides a simplified interface for checking cross-reference existence.
 
         Args:
             ea: Source address
-            kind: Type of references to check. Options:
-                - "all": Any xrefs
+            kind: Filter for reference type. Use XrefKind enum:
+                - XrefKind.ALL: Any references (default)
+                Note: Only XrefKind.ALL is currently supported for has_refs_from.
+                String values also accepted for backward compatibility.
 
         Returns:
             True if references of the specified kind exist
 
         Raises:
             InvalidEAError: If the effective address is invalid
-            InvalidParameterError: If kind is not recognized
+            InvalidParameterError: If kind is not recognized or not valid for this method
 
         Example:
             >>> db = Database.open_current()
-            >>> if db.xrefs.has_refs_from(insn_ea, "all"):
+            >>> if db.xrefs.has_refs_from(insn_ea, XrefKind.ALL):
             ...     print("Instruction has outgoing references")
         """
-        kind_lower = kind.lower()
+        # Normalize string to enum
+        if isinstance(kind, str):
+            try:
+                kind = XrefKind(kind.lower())
+            except ValueError:
+                raise InvalidParameterError(
+                    'kind',
+                    kind,
+                    f'must be one of: {", ".join(e.value for e in XrefKind)}',
+                )
 
-        if kind_lower == "all":
+        if kind == XrefKind.ALL:
             return self.has_any_refs_from(ea)
         else:
+            # Only ALL is valid for has_refs_from
             raise InvalidParameterError(
                 'kind',
-                kind,
-                'must be one of: "all"',
+                kind.value,
+                'must be one of: all',
             )
 
     # ========================================================================

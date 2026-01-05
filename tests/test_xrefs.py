@@ -8,7 +8,7 @@ import pytest
 import ida_domain
 from ida_domain.base import InvalidEAError, InvalidParameterError
 from ida_domain.database import IdaCommandOptions
-from ida_domain.xrefs import XrefsFlags, XrefType
+from ida_domain.xrefs import XrefKind, XrefsFlags, XrefType
 
 
 @pytest.fixture(scope='module')
@@ -787,6 +787,206 @@ class TestLLMFriendlyAPI:
         expected = test_env.xrefs.has_any_refs_from(call_ea)
 
         assert result == expected
+
+    # ========================================================================
+    # Tests for XrefKind enum usage
+    # ========================================================================
+
+    def test_get_refs_to_with_xrefkind_enum(self, test_env):
+        """
+        Test get_refs_to works with XrefKind enum values.
+
+        RATIONALE: The API should accept XrefKind enum values as the
+        primary way to specify the kind parameter, with strings as fallback.
+        """
+        # Find a function with callers
+        func_with_refs = None
+        for func in test_env.functions.get_all():
+            for _ in test_env.xrefs.to_ea(func.start_ea, XrefsFlags.CODE_NOFLOW):
+                func_with_refs = func
+                break
+            if func_with_refs:
+                break
+
+        if func_with_refs is None:
+            pytest.skip('No function with refs found')
+
+        func_ea = func_with_refs.start_ea
+
+        # Test with enum value
+        refs_enum = list(test_env.xrefs.get_refs_to(func_ea, XrefKind.ALL))
+        refs_string = list(test_env.xrefs.get_refs_to(func_ea, "all"))
+
+        assert len(refs_enum) == len(refs_string)
+
+    def test_get_refs_to_with_xrefkind_code_enum(self, test_env):
+        """
+        Test get_refs_to with XrefKind.CODE enum.
+
+        RATIONALE: XrefKind.CODE should work identically to "code" string.
+        """
+        func_with_refs = None
+        for func in test_env.functions.get_all():
+            for _ in test_env.xrefs.code_refs_to_ea(func.start_ea, flow=False):
+                func_with_refs = func
+                break
+            if func_with_refs:
+                break
+
+        if func_with_refs is None:
+            pytest.skip('No function with code refs found')
+
+        func_ea = func_with_refs.start_ea
+
+        refs_enum = list(test_env.xrefs.get_refs_to(func_ea, XrefKind.CODE))
+        refs_string = list(test_env.xrefs.get_refs_to(func_ea, "code"))
+
+        assert len(refs_enum) == len(refs_string)
+
+    def test_get_refs_from_with_xrefkind_enum(self, test_env):
+        """
+        Test get_refs_from works with XrefKind enum values.
+
+        RATIONALE: The API should accept XrefKind enum values for get_refs_from.
+        """
+        # Find a call instruction
+        call_ea = None
+        for func in test_env.functions.get_all():
+            ea = func.start_ea
+            while ea < func.end_ea:
+                insn = test_env.instructions.get_at(ea)
+                if insn and test_env.instructions.is_call_instruction(insn):
+                    call_ea = ea
+                    break
+                if insn:
+                    ea = insn.ea + insn.size
+                else:
+                    break
+            if call_ea:
+                break
+
+        if call_ea is None:
+            pytest.skip('No call instruction found')
+
+        refs_enum = list(test_env.xrefs.get_refs_from(call_ea, XrefKind.ALL))
+        refs_string = list(test_env.xrefs.get_refs_from(call_ea, "all"))
+
+        assert len(refs_enum) == len(refs_string)
+
+    def test_get_refs_from_rejects_reads_kind(self, test_env):
+        """
+        Test get_refs_from raises error for XrefKind.READS.
+
+        RATIONALE: READS is only valid for get_refs_to (incoming references),
+        not get_refs_from (outgoing references).
+        """
+        func_ea = next(test_env.functions.get_all()).start_ea
+
+        with pytest.raises(InvalidParameterError):
+            list(test_env.xrefs.get_refs_from(func_ea, XrefKind.READS))
+
+    def test_get_refs_from_rejects_writes_kind(self, test_env):
+        """
+        Test get_refs_from raises error for XrefKind.WRITES.
+
+        RATIONALE: WRITES is only valid for get_refs_to (incoming references),
+        not get_refs_from (outgoing references).
+        """
+        func_ea = next(test_env.functions.get_all()).start_ea
+
+        with pytest.raises(InvalidParameterError):
+            list(test_env.xrefs.get_refs_from(func_ea, XrefKind.WRITES))
+
+    def test_has_refs_to_with_xrefkind_enum(self, test_env):
+        """
+        Test has_refs_to works with XrefKind enum values.
+
+        RATIONALE: has_refs_to should accept XrefKind enum values.
+        """
+        func_with_refs = None
+        for func in test_env.functions.get_all():
+            if test_env.xrefs.has_any_refs_to(func.start_ea):
+                func_with_refs = func
+                break
+
+        if func_with_refs is None:
+            pytest.skip('No function with refs found')
+
+        func_ea = func_with_refs.start_ea
+
+        result_enum = test_env.xrefs.has_refs_to(func_ea, XrefKind.ALL)
+        result_string = test_env.xrefs.has_refs_to(func_ea, "all")
+
+        assert result_enum == result_string
+
+    def test_has_refs_to_rejects_calls_kind(self, test_env):
+        """
+        Test has_refs_to raises error for XrefKind.CALLS.
+
+        RATIONALE: has_refs_to only supports ALL, CODE, DATA kinds.
+        """
+        func_ea = next(test_env.functions.get_all()).start_ea
+
+        with pytest.raises(InvalidParameterError):
+            test_env.xrefs.has_refs_to(func_ea, XrefKind.CALLS)
+
+    def test_has_refs_from_with_xrefkind_enum(self, test_env):
+        """
+        Test has_refs_from works with XrefKind enum values.
+
+        RATIONALE: has_refs_from should accept XrefKind enum values.
+        """
+        # Find a call instruction
+        call_ea = None
+        for func in test_env.functions.get_all():
+            ea = func.start_ea
+            while ea < func.end_ea:
+                insn = test_env.instructions.get_at(ea)
+                if insn and test_env.instructions.is_call_instruction(insn):
+                    call_ea = ea
+                    break
+                if insn:
+                    ea = insn.ea + insn.size
+                else:
+                    break
+            if call_ea:
+                break
+
+        if call_ea is None:
+            pytest.skip('No call instruction found')
+
+        result_enum = test_env.xrefs.has_refs_from(call_ea, XrefKind.ALL)
+        result_string = test_env.xrefs.has_refs_from(call_ea, "all")
+
+        assert result_enum == result_string
+
+    def test_has_refs_from_rejects_code_kind(self, test_env):
+        """
+        Test has_refs_from raises error for XrefKind.CODE.
+
+        RATIONALE: has_refs_from only supports ALL kind.
+        """
+        func_ea = next(test_env.functions.get_all()).start_ea
+
+        with pytest.raises(InvalidParameterError):
+            test_env.xrefs.has_refs_from(func_ea, XrefKind.CODE)
+
+    def test_get_refs_to_string_case_insensitivity_mixed(self, test_env):
+        """
+        Test get_refs_to accepts mixed case strings.
+
+        RATIONALE: LLM-friendly API should handle mixed case like "Code", "DATA".
+        """
+        func_ea = next(test_env.functions.get_all()).start_ea
+
+        # These should all work without raising errors
+        refs_code = list(test_env.xrefs.get_refs_to(func_ea, "Code"))
+        refs_CODE = list(test_env.xrefs.get_refs_to(func_ea, "CODE"))
+        refs_data = list(test_env.xrefs.get_refs_to(func_ea, "DaTa"))
+
+        assert isinstance(refs_code, list)
+        assert isinstance(refs_CODE, list)
+        assert isinstance(refs_data, list)
 
 
 class TestXrefInfoDataclass:
