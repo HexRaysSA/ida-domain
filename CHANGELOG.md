@@ -44,6 +44,7 @@ The following methods have been renamed for API consistency. Deprecated aliases 
 | `TryBlocks` | `remove_in_range(...)` | `delete_in_range(...)` | Consistent `delete_*()` for deletions |
 
 **Migration example:**
+
 ```python
 # Before
 lines = db.decompiler.decompile_at(0x401000)
@@ -68,6 +69,7 @@ item_size = db.heads.get_size(ea)
 | `StackFrames` | `delete_variable()` | Raises `LookupError` instead of returning `False` | Catch `LookupError` for non-existent variables |
 
 **Migration example for `Types.apply_at()`:**
+
 ```python
 # Before (0.3.2)
 db.types.apply_at(type_info, ea)
@@ -271,6 +273,55 @@ XrefInfo(from_ea=0x401234, to_ea=0x402000, type=CALL_NEAR)
 >>> caller = db.xrefs.get_callers(func_ea)[0]
 >>> print(caller)
 CallerInfo(caller_ea=0x401234, callee_ea=0x402000)
+```
+
+### String-to-Enum API Refactoring
+Methods that previously accepted string parameters now accept proper enum types while maintaining backward compatibility with strings. This makes the API more LLM-friendly by providing clear, discoverable options through enum members.
+
+**Rationale**: Proper enums are more LLM-friendly than magic strings because:
+- LLMs can see all valid options via enum member introspection
+- Type hints provide clear documentation of accepted values
+- IDE autocompletion works with enum members
+- Invalid values are caught at runtime with helpful error messages
+
+**New Enums Added**:
+
+| Module | Enum | Values |
+|--------|------|--------|
+| `analysis` | `AnalysisType` | `CODE`, `FUNCTION`, `REANALYSIS` |
+| `search` | `SearchTarget` | `UNDEFINED`, `DEFINED`, `CODE`, `DATA`, `CODE_OUTSIDE_FUNCTION` |
+| `types` | `TypeLookupMode` | `NAME`, `ORDINAL`, `ADDRESS` |
+| `types` | `TypeApplyMode` | `NAME`, `DECL`, `TINFO` |
+| `xrefs` | `XrefKind` | `ALL`, `CODE`, `DATA`, `CALLS`, `JUMPS`, `READS`, `WRITES` |
+
+**Methods Updated**:
+
+| Module | Method | Parameter | Now Accepts |
+|--------|--------|-----------|-------------|
+| `analysis` | `schedule(ea, what)` | `what` | `Union[AnalysisType, str]` |
+| `search` | `find_next()`, `find_all()` | `target` | `Union[SearchTarget, str]` |
+| `search` | `find_next()`, `find_all()` | `direction` | `Union[SearchDirection, str]` |
+| `types` | `get()` | `mode` | `Union[TypeLookupMode, str]` |
+| `types` | `apply()` | `mode` | `Union[TypeApplyMode, str]` |
+| `xrefs` | `get_refs_to()`, `get_refs_from()` | `kind` | `Union[XrefKind, str]` |
+| `xrefs` | `has_refs_to()`, `has_refs_from()` | `kind` | `Union[XrefKind, str]` |
+| `exporter` | `export()` | `format` | `Union[ExportFormat, str]` |
+
+**Backward Compatibility**: String values continue to work (case-insensitive):
+
+```python
+# Both forms are equivalent - use whichever you prefer
+db.analysis.schedule(ea, AnalysisType.CODE)      # Enum form
+db.analysis.schedule(ea, "code")                  # String form (still works)
+
+db.xrefs.get_refs_to(ea, XrefKind.CALLS)         # Enum form
+db.xrefs.get_refs_to(ea, "calls")                 # String form (still works)
+
+db.search.find_next(ea, SearchTarget.CODE)       # Enum form
+db.search.find_next(ea, "code")                   # String form (still works)
+
+db.types.get("MyStruct", TypeLookupMode.NAME)    # Enum form
+db.types.get("MyStruct", "name")                  # String form (still works)
 ```
 
 ---
