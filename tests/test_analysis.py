@@ -7,6 +7,7 @@ import tempfile
 import pytest
 
 import ida_domain
+from ida_domain.analysis import AnalysisType
 from ida_domain.database import IdaCommandOptions
 
 
@@ -263,6 +264,92 @@ def test_schedule_validates_what_parameter(analysis_db):
 
     with pytest.raises(InvalidParameterError):
         analysis_db.analysis.schedule(valid_ea, "CODE_WRONG")
+
+
+def test_schedule_with_enum(analysis_db):
+    """
+    Test that schedule() accepts AnalysisType enum values.
+
+    RATIONALE: The schedule() method now accepts AnalysisType enum as the
+    primary way to specify the analysis type. This provides better type
+    safety and IDE autocomplete support.
+    """
+    # Wait for initial analysis
+    analysis_db.analysis.wait()
+
+    valid_ea = analysis_db.minimum_ea
+
+    # Test each enum value
+    analysis_db.analysis.schedule(valid_ea, AnalysisType.CODE)
+    analysis_db.analysis.wait()
+    assert analysis_db.analysis.is_complete
+
+    analysis_db.analysis.schedule(valid_ea, AnalysisType.FUNCTION)
+    analysis_db.analysis.wait()
+    assert analysis_db.analysis.is_complete
+
+    analysis_db.analysis.schedule(valid_ea, AnalysisType.REANALYSIS)
+    analysis_db.analysis.wait()
+    assert analysis_db.analysis.is_complete
+
+    # Test default value is AnalysisType.REANALYSIS
+    analysis_db.analysis.schedule(valid_ea)
+    analysis_db.analysis.wait()
+    assert analysis_db.analysis.is_complete
+
+
+def test_schedule_with_string_backward_compatibility(analysis_db):
+    """
+    Test that schedule() still accepts string values for backward compatibility.
+
+    RATIONALE: Existing code using string values should continue to work.
+    This ensures the refactoring to enums doesn't break existing scripts.
+    """
+    # Wait for initial analysis
+    analysis_db.analysis.wait()
+
+    valid_ea = analysis_db.minimum_ea
+
+    # Test each string value (lowercase)
+    analysis_db.analysis.schedule(valid_ea, "code")
+    analysis_db.analysis.wait()
+    assert analysis_db.analysis.is_complete
+
+    analysis_db.analysis.schedule(valid_ea, "function")
+    analysis_db.analysis.wait()
+    assert analysis_db.analysis.is_complete
+
+    analysis_db.analysis.schedule(valid_ea, "reanalysis")
+    analysis_db.analysis.wait()
+    assert analysis_db.analysis.is_complete
+
+
+def test_schedule_string_case_insensitive(analysis_db):
+    """
+    Test that schedule() string parameter is case-insensitive.
+
+    RATIONALE: For user convenience, string values should work regardless
+    of case. This matches the behavior of similar APIs and reduces user
+    friction when typing strings manually.
+    """
+    # Wait for initial analysis
+    analysis_db.analysis.wait()
+
+    valid_ea = analysis_db.minimum_ea
+
+    # Test uppercase
+    analysis_db.analysis.schedule(valid_ea, "CODE")
+    analysis_db.analysis.wait()
+    assert analysis_db.analysis.is_complete
+
+    # Test mixed case
+    analysis_db.analysis.schedule(valid_ea, "Function")
+    analysis_db.analysis.wait()
+    assert analysis_db.analysis.is_complete
+
+    analysis_db.analysis.schedule(valid_ea, "ReAnalysis")
+    analysis_db.analysis.wait()
+    assert analysis_db.analysis.is_complete
 
 
 def test_cancel_method_is_alias_for_cancel_analysis(analysis_db):

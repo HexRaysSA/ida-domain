@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import logging
+from enum import Enum
 
 import ida_auto
 from ida_idaapi import ea_t
-from typing_extensions import TYPE_CHECKING, cast
+from typing_extensions import TYPE_CHECKING, Union, cast
 
 from .base import (
     DatabaseEntity,
@@ -17,7 +18,20 @@ from .base import (
 if TYPE_CHECKING:
     from .database import Database
 
-__all__ = ['Analysis']
+__all__ = ['Analysis', 'AnalysisType']
+
+
+class AnalysisType(str, Enum):
+    """Type of analysis to schedule."""
+
+    CODE = "code"
+    """Schedule instruction creation (CODE queue)"""
+
+    FUNCTION = "function"
+    """Schedule function creation (PROC queue)"""
+
+    REANALYSIS = "reanalysis"
+    """Schedule reanalysis (USED queue)"""
 
 logger = logging.getLogger(__name__)
 
@@ -235,7 +249,9 @@ class Analysis(DatabaseEntity):
         """
         return cast(bool, ida_auto.enable_auto(enabled))
 
-    def schedule(self, ea: ea_t, what: str = "reanalysis") -> None:
+    def schedule(
+        self, ea: ea_t, what: Union[AnalysisType, str] = AnalysisType.REANALYSIS
+    ) -> None:
         """
         Schedule analysis at address (LLM-friendly unified scheduling method).
 
@@ -245,10 +261,11 @@ class Analysis(DatabaseEntity):
 
         Args:
             ea: Address to schedule for analysis.
-            what: Type of analysis. One of:
-                - "code": Create instruction (schedule_code_analysis)
-                - "function": Create function (schedule_function_analysis)
-                - "reanalysis": Reanalyze address (schedule_reanalysis)
+            what: Type of analysis. Use AnalysisType enum:
+                - AnalysisType.CODE: Create instruction (schedule_code_analysis)
+                - AnalysisType.FUNCTION: Create function (schedule_function_analysis)
+                - AnalysisType.REANALYSIS: Reanalyze address (schedule_reanalysis)
+                String values ("code", "function", "reanalysis") also accepted.
 
         Raises:
             InvalidEAError: If address is invalid.
@@ -256,12 +273,8 @@ class Analysis(DatabaseEntity):
 
         Example:
             >>> db = Database.open_current()
-            >>> # Schedule code creation
-            >>> db.analysis.schedule(0x401000, "code")
-            >>> # Schedule function creation
-            >>> db.analysis.schedule(0x401000, "function")
-            >>> # Schedule reanalysis (default)
-            >>> db.analysis.schedule(0x401000)
+            >>> db.analysis.schedule(0x401000, AnalysisType.CODE)
+            >>> db.analysis.schedule(0x401000, "code")  # Also accepted
             >>> db.analysis.wait()
 
         Note:
@@ -271,17 +284,23 @@ class Analysis(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        what_lower = what.lower()
-        if what_lower == "code":
+        # Normalize to enum
+        if isinstance(what, str):
+            try:
+                what = AnalysisType(what.lower())
+            except ValueError:
+                raise InvalidParameterError(
+                    'what', what,
+                    f'must be one of: {", ".join(e.value for e in AnalysisType)}'
+                )
+
+        # Use enum for comparison
+        if what == AnalysisType.CODE:
             self.schedule_code_analysis(ea)
-        elif what_lower == "function":
+        elif what == AnalysisType.FUNCTION:
             self.schedule_function_analysis(ea)
-        elif what_lower == "reanalysis":
+        elif what == AnalysisType.REANALYSIS:
             self.schedule_reanalysis(ea)
-        else:
-            raise InvalidParameterError(
-                'what', what, 'must be one of: "code", "function", "reanalysis"'
-            )
 
     def schedule_code_analysis(self, ea: ea_t) -> None:
         """
