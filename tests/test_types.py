@@ -27,6 +27,7 @@ import pytest
 import ida_domain
 from ida_domain.base import InvalidEAError, InvalidParameterError
 from ida_domain.database import IdaCommandOptions
+from ida_domain.types import TypeApplyMode, TypeLookupMode
 
 # types_test_setup fixture is provided by conftest.py
 
@@ -306,3 +307,93 @@ class TestLLMFriendlyAPI:
         """
         with pytest.raises(InvalidEAError):
             db_readonly.types.format(0xFFFFFFFFFFFFFFFF)
+
+
+class TestTypeLookupModeEnum:
+    """Tests for TypeLookupMode enum support in get() method."""
+
+    def test_get_with_enum_name(self, db_readonly):
+        """
+        Test get() accepts TypeLookupMode.NAME enum value.
+
+        RATIONALE: Enum values should be the primary interface.
+        """
+        result = db_readonly.types.get('NonExistentTypeXYZ', by=TypeLookupMode.NAME)
+        assert result is None
+
+    def test_get_with_enum_ordinal(self, db_readonly):
+        """
+        Test get() accepts TypeLookupMode.ORDINAL enum value.
+
+        RATIONALE: Enum values should be the primary interface.
+        """
+        result = db_readonly.types.get(999999, by=TypeLookupMode.ORDINAL)
+        assert result is None
+
+    def test_get_with_enum_address(self, db_readonly):
+        """
+        Test get() accepts TypeLookupMode.ADDRESS enum value.
+
+        RATIONALE: Enum values should be the primary interface.
+        """
+        first_func = next(db_readonly.functions.get_all())
+        result = db_readonly.types.get(first_func.start_ea, by=TypeLookupMode.ADDRESS)
+        assert result is None or hasattr(result, 'get_type_name')
+
+    def test_get_default_is_enum(self, db_readonly):
+        """
+        Test get() default for 'by' parameter is TypeLookupMode.NAME.
+
+        RATIONALE: Default should be the enum, not a string.
+        """
+        # Call without specifying 'by' - should use TypeLookupMode.NAME default
+        result = db_readonly.types.get('NonExistentTypeXYZ')
+        assert result is None
+
+
+class TestTypeApplyModeEnum:
+    """Tests for TypeApplyMode enum support in apply() method."""
+
+    def test_apply_with_enum_name(self, db_mutable):
+        """
+        Test apply() accepts TypeApplyMode.NAME enum value.
+
+        RATIONALE: Enum values should be the primary interface.
+        """
+        first_func = next(db_mutable.functions.get_all())
+        result = db_mutable.types.apply(first_func.start_ea, 'int', by=TypeApplyMode.NAME)
+        assert isinstance(result, bool)
+
+    def test_apply_with_enum_decl(self, db_mutable):
+        """
+        Test apply() accepts TypeApplyMode.DECL enum value.
+
+        RATIONALE: Enum values should be the primary interface.
+        """
+        first_func = next(db_mutable.functions.get_all())
+        result = db_mutable.types.apply(first_func.start_ea, 'int x', by=TypeApplyMode.DECL)
+        assert isinstance(result, bool)
+
+    def test_apply_default_is_enum(self, db_mutable):
+        """
+        Test apply() default for 'by' parameter is TypeApplyMode.NAME.
+
+        RATIONALE: Default should be the enum, not a string.
+        """
+        first_func = next(db_mutable.functions.get_all())
+        # Call without specifying 'by' - should use TypeApplyMode.NAME default
+        result = db_mutable.types.apply(first_func.start_ea, 'int')
+        assert isinstance(result, bool)
+
+    def test_apply_is_case_insensitive(self, db_mutable):
+        """
+        Test apply() string parameter is case-insensitive.
+
+        RATIONALE: LLM-friendly API should be case-insensitive for backward compatibility.
+        """
+        first_func = next(db_mutable.functions.get_all())
+        # All these should work (not raise InvalidParameterError)
+        result1 = db_mutable.types.apply(first_func.start_ea, 'int', by='name')
+        result2 = db_mutable.types.apply(first_func.start_ea, 'int', by='NAME')
+        result3 = db_mutable.types.apply(first_func.start_ea, 'int', by='Name')
+        assert all(isinstance(r, bool) for r in [result1, result2, result3])

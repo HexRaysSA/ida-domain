@@ -17,7 +17,7 @@ from ida_typeinf import (
     tinfo_t,
     udt_type_data_t,
 )
-from typing_extensions import TYPE_CHECKING, Callable, Dict, Iterator, Optional, Tuple, cast
+from typing_extensions import TYPE_CHECKING, Callable, Dict, Iterator, Optional, Tuple, Union, cast
 
 from . import __ida_version__
 from .base import (
@@ -214,6 +214,32 @@ class TypeKind(Enum):
 
     NAMED = 1
     NUMBERED = 2
+
+
+class TypeLookupMode(str, Enum):
+    """Mode for type lookup operations."""
+
+    NAME = "name"
+    """Look up type by name"""
+
+    ORDINAL = "ordinal"
+    """Look up type by ordinal number"""
+
+    ADDRESS = "address"
+    """Get type at an address"""
+
+
+class TypeApplyMode(str, Enum):
+    """Mode for type application operations."""
+
+    NAME = "name"
+    """Apply a named type from library"""
+
+    DECL = "decl"
+    """Parse and apply a C declaration"""
+
+    TINFO = "tinfo"
+    """Apply a tinfo_t object directly"""
 
 
 class UdtAttr(Flag, metaclass=_CheckAttrSupport):
@@ -1663,7 +1689,7 @@ class Types(DatabaseEntity):
     def get(
         self,
         source: 'ea_t | str | int',
-        by: str = 'name',
+        by: Union[TypeLookupMode, str] = TypeLookupMode.NAME,
         library: Optional[til_t] = None,
     ) -> Optional[tinfo_t]:
         """
@@ -1674,13 +1700,14 @@ class Types(DatabaseEntity):
 
         Args:
             source: The type identifier. Interpretation depends on 'by' parameter:
-                - For by="name": type name string
-                - For by="ordinal": ordinal number (int)
-                - For by="address": effective address (ea_t)
-            by: How to interpret the source. Options:
-                - "name": Look up type by name (default)
-                - "ordinal": Look up type by ordinal number
-                - "address": Get type at an address
+                - For by=TypeLookupMode.NAME: type name string
+                - For by=TypeLookupMode.ORDINAL: ordinal number (int)
+                - For by=TypeLookupMode.ADDRESS: effective address (ea_t)
+            by: Lookup mode. Use TypeLookupMode enum:
+                - TypeLookupMode.NAME: Look up type by name (default)
+                - TypeLookupMode.ORDINAL: Look up type by ordinal number
+                - TypeLookupMode.ADDRESS: Get type at an address
+                String values also accepted for backward compatibility.
             library: Type library to search (default: local database library)
 
         Returns:
@@ -1688,37 +1715,48 @@ class Types(DatabaseEntity):
 
         Raises:
             InvalidParameterError: If 'by' is not recognized
-            InvalidEAError: If by="address" and source is an invalid address
+            InvalidEAError: If by=TypeLookupMode.ADDRESS and source is an invalid address
 
         Example:
             >>> db = Database.open_current()
-            >>> # Get by name
-            >>> type_info = db.types.get("size_t", by="name")
+            >>> # Get by name (using enum)
+            >>> type_info = db.types.get("size_t", by=TypeLookupMode.NAME)
             >>> # Get by ordinal
-            >>> type_info = db.types.get(5, by="ordinal")
+            >>> type_info = db.types.get(5, by=TypeLookupMode.ORDINAL)
             >>> # Get by address
-            >>> type_info = db.types.get(0x401000, by="address")
+            >>> type_info = db.types.get(0x401000, by=TypeLookupMode.ADDRESS)
+            >>> # String values also accepted for backward compatibility
+            >>> type_info = db.types.get("size_t", by="name")
         """
-        by_lower = by.lower()
+        # Normalize string to enum
+        if isinstance(by, str):
+            try:
+                by = TypeLookupMode(by.lower())
+            except ValueError:
+                raise InvalidParameterError(
+                    'by',
+                    by,
+                    f'must be one of: {", ".join(e.value for e in TypeLookupMode)}',
+                )
 
-        if by_lower == 'name':
+        if by == TypeLookupMode.NAME:
             return self.get_by_name(str(source), library)
-        elif by_lower == 'ordinal':
+        elif by == TypeLookupMode.ORDINAL:
             return self.get_by_ordinal(int(source), library)
-        elif by_lower == 'address':
+        elif by == TypeLookupMode.ADDRESS:
             return self.get_at(source)
         else:
             raise InvalidParameterError(
                 'by',
                 by,
-                'must be one of: "name", "ordinal", "address"',
+                f'must be one of: {", ".join(e.value for e in TypeLookupMode)}',
             )
 
     def apply(
         self,
         ea: 'ea_t',
         type_source: 'str | tinfo_t',
-        by: str = 'name',
+        by: Union[TypeApplyMode, str] = TypeApplyMode.NAME,
         flags: TypeApplyFlags = TypeApplyFlags.DEFINITE,
     ) -> bool:
         """
@@ -1730,14 +1768,15 @@ class Types(DatabaseEntity):
         Args:
             ea: The effective address where the type should be applied.
             type_source: The type to apply. Interpretation depends on 'by' parameter:
-                - For by="name": type name string
-                - For by="decl": C declaration string
-                - For by="tinfo": tinfo_t object
-            by: How to interpret type_source. Options:
-                - "name": Apply a named type (default)
-                - "decl": Parse and apply a C declaration
-                - "tinfo": Apply a tinfo_t object directly
-            flags: Type apply flags (used for by="tinfo")
+                - For by=TypeApplyMode.NAME: type name string
+                - For by=TypeApplyMode.DECL: C declaration string
+                - For by=TypeApplyMode.TINFO: tinfo_t object
+            by: Apply mode. Use TypeApplyMode enum:
+                - TypeApplyMode.NAME: Apply a named type (default)
+                - TypeApplyMode.DECL: Parse and apply a C declaration
+                - TypeApplyMode.TINFO: Apply a tinfo_t object directly
+                String values also accepted for backward compatibility.
+            flags: Type apply flags (used for by=TypeApplyMode.TINFO)
 
         Returns:
             True if the type was applied successfully, False otherwise.
@@ -1748,24 +1787,35 @@ class Types(DatabaseEntity):
 
         Example:
             >>> db = Database.open_current()
-            >>> # Apply by name
-            >>> db.types.apply(0x401000, "HWND", by="name")
+            >>> # Apply by name (using enum)
+            >>> db.types.apply(0x401000, "HWND", by=TypeApplyMode.NAME)
             >>> # Apply by declaration
-            >>> db.types.apply(0x401000, "int *", by="decl")
+            >>> db.types.apply(0x401000, "int *", by=TypeApplyMode.DECL)
+            >>> # String values also accepted for backward compatibility
+            >>> db.types.apply(0x401000, "HWND", by="name")
         """
-        by_lower = by.lower()
+        # Normalize string to enum
+        if isinstance(by, str):
+            try:
+                by = TypeApplyMode(by.lower())
+            except ValueError:
+                raise InvalidParameterError(
+                    'by',
+                    by,
+                    f'must be one of: {", ".join(e.value for e in TypeApplyMode)}',
+                )
 
-        if by_lower == 'name':
+        if by == TypeApplyMode.NAME:
             return self.apply_by_name(ea, str(type_source), flags)
-        elif by_lower == 'decl':
+        elif by == TypeApplyMode.DECL:
             return self.apply_declaration(ea, str(type_source))
-        elif by_lower == 'tinfo':
+        elif by == TypeApplyMode.TINFO:
             return self.apply_at(ea, cast(tinfo_t, type_source), flags)
         else:
             raise InvalidParameterError(
                 'by',
                 by,
-                'must be one of: "name", "decl", "tinfo"',
+                f'must be one of: {", ".join(e.value for e in TypeApplyMode)}',
             )
 
     def guess(self, ea: 'ea_t') -> Optional[tinfo_t]:
