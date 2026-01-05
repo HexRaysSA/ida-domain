@@ -294,6 +294,13 @@ Methods that previously accepted string parameters now accept proper enum types 
 | `types` | `TypeApplyMode` | `NAME`, `DECL`, `TINFO` |
 | `xrefs` | `XrefKind` | `ALL`, `CODE`, `DATA`, `CALLS`, `JUMPS`, `READS`, `WRITES` |
 
+**Existing Enums Updated to Accept Strings**:
+
+| Module | Enum | Values |
+|--------|------|--------|
+| `search` | `SearchDirection` | `UP`, `DOWN` |
+| `exporter` | `ExportFormat` | `ASM`, `LST`, `HTML`, `EXE`, `DIF`, `IDC`, `MAP` |
+
 **Methods Updated**:
 
 | Module | Method | Parameter | Now Accepts |
@@ -301,8 +308,8 @@ Methods that previously accepted string parameters now accept proper enum types 
 | `analysis` | `schedule(ea, what)` | `what` | `Union[AnalysisType, str]` |
 | `search` | `find_next()`, `find_all()` | `target` | `Union[SearchTarget, str]` |
 | `search` | `find_next()`, `find_all()` | `direction` | `Union[SearchDirection, str]` |
-| `types` | `get()` | `mode` | `Union[TypeLookupMode, str]` |
-| `types` | `apply()` | `mode` | `Union[TypeApplyMode, str]` |
+| `types` | `get()` | `by` | `Union[TypeLookupMode, str]` |
+| `types` | `apply()` | `by` | `Union[TypeApplyMode, str]` |
 | `xrefs` | `get_refs_to()`, `get_refs_from()` | `kind` | `Union[XrefKind, str]` |
 | `xrefs` | `has_refs_to()`, `has_refs_from()` | `kind` | `Union[XrefKind, str]` |
 | `exporter` | `export()` | `format` | `Union[ExportFormat, str]` |
@@ -322,6 +329,9 @@ db.search.find_next(ea, "code")                   # String form (still works)
 
 db.types.get("MyStruct", TypeLookupMode.NAME)    # Enum form
 db.types.get("MyStruct", "name")                  # String form (still works)
+
+db.exporter.export(path, ExportFormat.ASM)       # Enum form
+db.exporter.export(path, "asm")                   # String form (still works)
 ```
 
 ---
