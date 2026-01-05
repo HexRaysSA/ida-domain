@@ -521,3 +521,97 @@ def test_export_validates_format_parameter(exporter_db, temp_output_dir):
 
     with pytest.raises(InvalidParameterError):
         exporter_db.exporter.export(output_path, "")
+
+
+def test_export_with_enum_format(exporter_db, temp_output_dir):
+    """
+    Test export() with ExportFormat enum values.
+
+    RATIONALE: The export() method should accept ExportFormat enum values
+    as the preferred way to specify the format. This provides type safety
+    and IDE autocompletion.
+    """
+    output_path = os.path.join(temp_output_dir, 'enum_test.asm')
+
+    success = exporter_db.exporter.export(output_path, ExportFormat.ASM)
+
+    assert success is True, 'export() should succeed with enum format'
+    assert os.path.exists(output_path), 'Export file should be created'
+    assert os.path.getsize(output_path) > 0, 'Export file should not be empty'
+
+
+def test_export_with_all_enum_formats(exporter_db, temp_output_dir):
+    """
+    Test export() accepts all ExportFormat enum values.
+
+    RATIONALE: Verify that all enum formats work correctly. Each format
+    should produce a valid output file.
+    """
+    formats_and_extensions = [
+        (ExportFormat.ASM, 'test.asm'),
+        (ExportFormat.LST, 'test.lst'),
+        (ExportFormat.MAP, 'test.map'),
+        (ExportFormat.IDC, 'test.idc'),
+        (ExportFormat.DIF, 'test.dif'),
+    ]
+
+    for fmt, filename in formats_and_extensions:
+        output_path = os.path.join(temp_output_dir, filename)
+        success = exporter_db.exporter.export(output_path, fmt)
+        assert success is True, f'export() should succeed with {fmt.name}'
+        assert os.path.exists(output_path), f'File should be created for {fmt.name}'
+
+
+def test_export_with_string_format(exporter_db, temp_output_dir):
+    """
+    Test export() with string format values.
+
+    RATIONALE: For backward compatibility and convenience, export() should
+    accept string format values like "asm", "map", etc.
+    """
+    output_path = os.path.join(temp_output_dir, 'string_test.asm')
+
+    success = exporter_db.exporter.export(output_path, "asm")
+
+    assert success is True, 'export() should succeed with string format'
+    assert os.path.exists(output_path), 'Export file should be created'
+
+
+def test_export_string_format_case_insensitivity(exporter_db, temp_output_dir):
+    """
+    Test that export() string format is case-insensitive.
+
+    RATIONALE: User convenience - "ASM", "Asm", and "asm" should all work
+    the same way.
+    """
+    test_cases = [
+        ('asm', 'lowercase.asm'),
+        ('ASM', 'uppercase.asm'),
+        ('Asm', 'mixedcase.asm'),
+        ('MAP', 'map_upper.map'),
+        ('Map', 'map_mixed.map'),
+    ]
+
+    for format_str, filename in test_cases:
+        output_path = os.path.join(temp_output_dir, filename)
+        success = exporter_db.exporter.export(output_path, format_str)
+        assert success is True, f'export() should succeed with "{format_str}"'
+        assert os.path.exists(output_path), f'File should be created for "{format_str}"'
+
+
+def test_export_accepts_diff_and_dif_strings(exporter_db, temp_output_dir):
+    """
+    Test that export() accepts both 'diff' and 'dif' strings.
+
+    RATIONALE: The enum is named 'DIF' but users might type 'diff'.
+    Both should be accepted for convenience.
+    """
+    # Test 'diff'
+    output_path1 = os.path.join(temp_output_dir, 'test_diff.dif')
+    success1 = exporter_db.exporter.export(output_path1, "diff")
+    assert success1 is True, 'export() should accept "diff"'
+
+    # Test 'dif'
+    output_path2 = os.path.join(temp_output_dir, 'test_dif.dif')
+    success2 = exporter_db.exporter.export(output_path2, "dif")
+    assert success2 is True, 'export() should accept "dif"'

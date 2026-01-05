@@ -9,7 +9,7 @@ executables, and other standard output formats.
 from __future__ import annotations
 
 from enum import IntEnum, IntFlag
-from typing import TYPE_CHECKING, Optional, cast
+from typing import TYPE_CHECKING, Optional, Union, cast
 
 import ida_ida
 import ida_loader
@@ -107,7 +107,7 @@ class Exporter(DatabaseEntity):
     def export(
         self,
         output_path: str,
-        format: str,
+        format: Union[ExportFormat, str],
         start_ea: Optional[ea_t] = None,
         end_ea: Optional[ea_t] = None,
     ) -> bool:
@@ -117,17 +117,18 @@ class Exporter(DatabaseEntity):
         This is an LLM-friendly unified interface for exporting database contents.
         Instead of remembering multiple method names (generate_assembly,
         generate_map_file, etc.), LLMs can use this single method with a
-        string format parameter.
+        format parameter.
 
         Args:
             output_path: Output file path
-            format: Export format. One of:
-                - "asm": Assembly file
-                - "lst": Listing file
-                - "map": MAP file (address map with symbols)
-                - "idc": IDC script
-                - "exe": Reconstructed executable
-                - "diff": Difference file
+            format: Export format. Use ExportFormat enum:
+                - ExportFormat.ASM: Assembly file
+                - ExportFormat.LST: Listing file
+                - ExportFormat.MAP: MAP file (address map with symbols)
+                - ExportFormat.IDC: IDC script
+                - ExportFormat.EXE: Reconstructed executable
+                - ExportFormat.DIF: Difference file
+                String values ("asm", "lst", "map", "idc", "exe", "diff") also accepted.
             start_ea: Start address (None = database minimum)
             end_ea: End address (None = database maximum)
 
@@ -141,33 +142,54 @@ class Exporter(DatabaseEntity):
 
         Example:
             >>> db = Database.open_current()
-            >>> # Export assembly file
-            >>> db.exporter.export("output.asm", "asm")
-            >>> # Export MAP file
+            >>> # Export assembly file using enum (preferred)
+            >>> db.exporter.export("output.asm", ExportFormat.ASM)
+            >>> # Export MAP file using string (also supported)
             >>> db.exporter.export("output.map", "map")
 
         Note:
             This method provides a simpler API for LLMs that don't need to
             remember the specific method names for each export format.
         """
-        format_lower = format.lower()
+        # Normalize string to ExportFormat enum
+        if isinstance(format, str):
+            format_lower = format.lower()
+            # Map string values to ExportFormat enum
+            format_map = {
+                'asm': ExportFormat.ASM,
+                'lst': ExportFormat.LST,
+                'map': ExportFormat.MAP,
+                'idc': ExportFormat.IDC,
+                'exe': ExportFormat.EXE,
+                'diff': ExportFormat.DIF,
+                'dif': ExportFormat.DIF,  # Also accept 'dif' for consistency with enum name
+            }
+            if format_lower not in format_map:
+                raise InvalidParameterError(
+                    'format', format,
+                    f'must be one of: {", ".join(sorted(set(format_map.keys())))}'
+                )
+            format = format_map[format_lower]
 
-        if format_lower == "asm":
+        # Now format is guaranteed to be ExportFormat
+        if format == ExportFormat.ASM:
             return self.generate_assembly(output_path, start_ea, end_ea)
-        elif format_lower == "lst":
+        elif format == ExportFormat.LST:
             return self.generate_listing(output_path, start_ea, end_ea)
-        elif format_lower == "map":
+        elif format == ExportFormat.MAP:
             return self.generate_map_file(output_path, start_ea, end_ea)
-        elif format_lower == "idc":
+        elif format == ExportFormat.IDC:
             return self.generate_idc_script(output_path, start_ea, end_ea)
-        elif format_lower == "exe":
+        elif format == ExportFormat.EXE:
             return self.generate_executable(output_path)
-        elif format_lower == "diff":
+        elif format == ExportFormat.DIF:
             return self.generate_diff(output_path, start_ea, end_ea)
         else:
+            # This shouldn't happen if ExportFormat is properly defined,
+            # but handle gracefully just in case
             raise InvalidParameterError(
                 'format', format,
-                'must be one of: "asm", "lst", "map", "idc", "exe", "diff"'
+                'must be a valid ExportFormat enum value'
             )
 
     # ============================================================================
