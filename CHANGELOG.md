@@ -1,566 +1,441 @@
 # Changelog
 
-All notable changes to this project are documented in this file.
+All notable changes to ida-domain are documented in this file.
 
-## [Unreleased] - Fork Enhancements
+## [1.0.0] - Fork from upstream ida-domain 0.3.2
 
-This section documents all changes made after forking from the upstream `ida-domain` repository (fork point: v0.3.6-dev.2, commit `080aa8f`, December 8, 2025).
+This release represents a major API overhaul from the upstream ida-domain 0.3.2, focusing on API consistency, comprehensive coverage, and LLM-friendly patterns.
 
 ### Summary
 
 | Metric | Value |
 |--------|-------|
-| Total commits | 69 |
-| Lines added | +26,447 |
-| Lines removed | -169 |
-| New entity modules | 10 |
-| New methods | 280+ |
-| New test files | 17 |
-| mypy strict errors | 0 |
+| Total commits | 175 |
+| Lines added | +48,072 |
+| Lines removed | -507 |
+| Files changed | 127 |
+| New entity modules | 11 |
+| New methods | 300+ |
+| mypy strict errors | 0 (was 218) |
 
 ---
 
-## New Entities
+## Breaking Changes
 
-### Analysis
+> **Migration Guide**: All breaking changes include deprecated aliases that emit warnings. Your existing code will continue to work but you should migrate to the new API.
 
-`ida_domain/analysis.py` - Auto-analysis control and queue management.
+### Method Renames
 
-| Method | Description |
-|--------|-------------|
-| `is_enabled` | Property: check if auto-analysis is enabled |
-| `is_complete` | Property: check if analysis has completed |
-| `wait_for_completion()` | Wait for analysis to finish (blocking) |
-| `wait()` | LLM-friendly alias for wait_for_completion |
-| `analyze_range(start, end, wait)` | Analyze a specific range |
-| `analyze()` | LLM-friendly alias for analyze_range |
-| `set_enabled(enabled)` | Enable/disable auto-analysis |
-| `schedule(ea, what)` | LLM-friendly unified scheduling method |
-| `schedule_code_analysis(ea)` | Queue address for code analysis |
-| `schedule_function_analysis(ea)` | Queue address for function analysis |
-| `schedule_reanalysis(ea)` | Schedule reanalysis of address |
-| `cancel_analysis(start, end)` | Cancel pending analysis |
-| `cancel()` | LLM-friendly alias for cancel_analysis |
+The following methods have been renamed for API consistency. Deprecated aliases are provided for backward compatibility.
 
----
+| Module | Old Name | New Name | Reason |
+|--------|----------|----------|--------|
+| `Decompiler` | `decompile_at(address)` | `decompile(ea)` | LLM-friendly, consistent `ea` parameter naming |
+| `Functions` | `create(ea)` | `create_at(ea)` | Consistent `*_at()` pattern for address-based operations |
+| `Heads` | `size(ea)` | `get_size(ea)` | Consistent `get_*()` pattern for retrieval operations |
+| `Heads` | `bounds(ea)` | `get_bounds(ea)` | Consistent `get_*()` pattern for retrieval operations |
+| `Imports` | `find_by_name(name)` | `get_by_name(name)` | Consistent `get_*()` pattern for retrieval operations |
+| `Strings` | `get_at_index(index)` | `get_by_index(index)` | Consistent `get_by_*()` pattern |
+| `Entries` | `get_at_index(index)` | `get_by_index(index)` | Consistent `get_by_*()` pattern |
+| `Names` | `delete(ea)` | `delete_at(ea)` | Consistent `*_at()` pattern |
+| `Fixups` | `delete(ea)` | `delete_at(ea)` | Consistent `*_at()` pattern |
+| `Problems` | `remove_at(ea)` | `delete_at(ea)` | Consistent `delete_*()` for deletions |
+| `Switches` | `remove_parent(ea)` | `delete_parent(ea)` | Consistent `delete_*()` for deletions |
+| `TryBlocks` | `remove_in_range(...)` | `delete_in_range(...)` | Consistent `delete_*()` for deletions |
 
-### Decompiler
+**Migration example:**
+```python
+# Before
+lines = db.decompiler.decompile_at(0x401000)
+db.functions.create(0x401000)
+item_size = db.heads.size(ea)
 
-`ida_domain/decompiler.py` - Decompilation support.
+# After
+lines = db.decompiler.decompile(0x401000)
+db.functions.create_at(0x401000)
+item_size = db.heads.get_size(ea)
+```
 
-| Method | Description |
-|--------|-------------|
-| `is_available()` | Check if decompiler is available |
-| `decompile(address, remove_tags)` | Decompile function at address |
+### Parameter Signature Changes
 
----
+| Module | Method | Change | Migration |
+|--------|--------|--------|-----------|
+| `Types` | `apply_at()` | Parameter order changed: `(ea, type_info, flags)` - address first | Swap first two arguments |
+| `Types` | `apply_at()` | Default flag changed from `GUESSED` to `DEFINITE` | Explicitly pass `GUESSED` if needed |
+| `Functions` | `get_local_variable_by_name()` | Returns `None` instead of raising `KeyError` when not found | Check for `None` instead of catching `KeyError` |
+| `Strings` | `get_by_index()` | Returns `None` instead of raising on invalid index | Check for `None` return value |
+| `Entries` | `get_by_index()` | Returns `None` instead of raising on invalid index | Check for `None` return value |
+| `StackFrames` | `delete_variable()` | Raises `LookupError` instead of returning `False` | Catch `LookupError` for non-existent variables |
 
-### Exporter
+**Migration example for `Types.apply_at()`:**
+```python
+# Before (0.3.2)
+db.types.apply_at(type_info, ea)
 
-`ida_domain/exporter.py` - File export operations.
+# After (1.0.0)
+db.types.apply_at(ea, type_info)
+```
 
-| Method | Description |
-|--------|-------------|
-| `export(output_path, format, ...)` | LLM-friendly unified export method |
-| `generate_map_file(output_path, ...)` | Generate MAP file |
-| `generate_assembly(output_path, ...)` | Generate assembly file |
-| `generate_listing(output_path, ...)` | Generate listing file |
-| `generate_executable(output_path)` | Generate executable |
-| `generate_idc_script(output_path, ...)` | Generate IDC script |
-| `generate_diff(output_path, ...)` | Generate diff file |
-| `export_bytes(output_path, start, end, ...)` | Export raw bytes |
-| `import_bytes(input_path, start, ...)` | Import bytes from file |
-| `export_range(output_path, start, end, format)` | Export range |
+### Property to Method Conversions
 
----
-
-### Fixups
-
-`ida_domain/fixups.py` - Relocation and fixup operations.
-
-**FixupInfo Properties:**
-
-| Property | Description |
-|----------|-------------|
-| `target` | Get fixup target address |
-
-**Fixups Methods:**
-
-| Method | Description |
-|--------|-------------|
-| `count()` | Get total fixup count |
-| `get_at(address)` | Get fixup at address |
-| `has_fixup(address)` | Check if fixup exists |
-| `get_all()` | Iterate all fixups |
-| `get_between(start, end)` | Get fixups in range |
-| `contains_fixups(start, size)` | Check if range has fixups |
-| `get_description(address)` | Get fixup description |
-| `add(address, fixup_type, flags, target, ...)` | Add fixup |
-| `remove(address)` | Remove fixup |
-| `patch_value(address)` | Patch fixup value |
+| Module | Old | New | Migration |
+|--------|-----|-----|-----------|
+| `Problems` | `count` (property) | `count()` (method) | Add parentheses: `db.problems.count()` |
 
 ---
 
-### Imports
+## New Entity Modules
 
-`ida_domain/imports.py` - Import table enumeration and module operations.
+The following new entity modules have been added, accessible via `Database` properties:
 
-**ImportEntry Properties:**
+### `db.analysis` - Analysis Control
+Complete auto-analysis control and queue management.
 
-| Property | Description |
-|----------|-------------|
-| `is_ordinal_import` | Check if import is by ordinal |
-| `is_named_import` | Check if import is by name |
-| `full_name` | Get full import name with module |
+```python
+db.analysis.wait()                    # Wait for analysis to complete
+db.analysis.analyze(start_ea, end_ea) # Analyze a range
+db.analysis.schedule(ea, "code")      # Schedule code analysis
+db.analysis.cancel()                  # Cancel pending analysis
+db.analysis.is_complete               # Check if analysis is done
+```
 
-**ImportModule Properties:**
+### `db.decompiler` - Hex-Rays Decompiler
+Decompilation support for functions.
 
-| Property | Description |
-|----------|-------------|
-| `imports` | Iterate over module's imports |
+```python
+lines = db.decompiler.decompile(func_ea)  # Get pseudocode lines
+if db.decompiler.is_available():          # Check decompiler availability
+    ...
+```
 
-**Imports Methods:**
+### `db.search` - Search Operations
+Comprehensive search functionality with 17+ methods.
 
-| Method | Description |
-|--------|-------------|
-| `get_all()` | Get all import modules |
-| `get_module(index)` | Get module by index |
-| `get_module_by_name(name)` | Get module by name |
-| `get_module_names()` | Get list of module names |
-| `get_entries_by_module(module_name)` | Get entries for module |
-| `get_all_entries()` | Get all import entries |
-| `get_at(ea)` | Get import at address |
-| `find_by_name(name, module_name)` | Find import by name |
-| `find_all_by_name(name, module_name)` | Find all matching imports |
-| `filter_entries(predicate, module_name)` | Filter imports |
-| `search_by_pattern(pattern, module_name)` | Regex search imports |
-| `has_imports()` | Check if database has imports |
-| `is_import(ea)` | Check if address is an import |
-| `get_statistics()` | Get import statistics |
+```python
+ea = db.search.find_next(start_ea, "pattern")     # Find next occurrence
+results = db.search.find_all("pattern")           # Find all occurrences
+ea = db.search.find_text(start_ea, "string")      # Text search
+ea = db.search.find_binary(start_ea, "90 90 90")  # Binary pattern
+```
 
----
+### `db.callgraph` - Inter-Procedural Analysis
+Multi-hop call graph traversal for security analysis and impact analysis.
 
-### Problems
+```python
+callers = db.callgraph.callers_of(func_ea, max_depth=3)   # Transitive callers
+callees = db.callgraph.callees_of(func_ea, max_depth=3)   # Transitive callees
+paths = db.callgraph.paths_between(src_ea, dst_ea)        # Call paths
+reachable = db.callgraph.reachable_from(func_ea)          # Reachability
+```
 
-`ida_domain/problems.py` - Problem list management.
+### `db.imports` - Import Table
+Import module and entry enumeration.
 
-**Problem Properties:**
+```python
+for module in db.imports.get_modules():
+    for entry in db.imports.get_entries(module):
+        print(f"{module}: {entry.name} @ {hex(entry.address)}")
 
-| Property | Description |
-|----------|-------------|
-| `type_name` | Get problem type name |
+entry = db.imports.get_by_name("VirtualAlloc")  # Find import by name
+```
 
-**Problems Methods:**
+### `db.exporter` - File Export
+Export database contents to files.
 
-| Method | Description |
-|--------|-------------|
-| `count()` | Get total problem count |
-| `get_all(problem_type)` | Get all problems |
-| `get_between(start, end, problem_type)` | Get problems in range |
-| `get_at(ea)` | Get problems at address |
-| `get_next(ea, problem_type)` | Get next problem |
-| `has_problem(ea, problem_type)` | Check if problem exists |
-| `was_auto_decision(ea)` | Check if auto-decided |
-| `count_by_type(problem_type)` | Count by type |
-| `add(ea, problem_type)` | Add problem |
-| `remove(ea, problem_type)` | Remove specific problem |
-| `remove_at(ea)` | Remove all problems at address |
-| `clear(problem_type)` | Clear all of type |
-| `clear_all()` | Clear all problems |
+```python
+db.exporter.export(path, format=ExportFormat.ASM)   # Export to ASM
+db.exporter.export(path, format=ExportFormat.LST)   # Export to LST
+db.exporter.export_bytes(path, start_ea, end_ea)    # Export raw bytes
+```
 
----
+### `db.stack_frames` - Stack Frame Analysis
+Comprehensive stack frame and variable operations.
 
-### Search
+```python
+frame = db.stack_frames.get_frame(func_ea)
+for var in db.stack_frames.get_variables(func_ea):
+    print(f"{var.name}: offset={var.offset}, size={var.size}")
 
-`ida_domain/search.py` - Pattern and content searching.
+db.stack_frames.create_variable(func_ea, offset, name, size)
+db.stack_frames.delete_variable(func_ea, offset)
+```
 
-| Method | Description |
-|--------|-------------|
-| `find_next(ea, what, ...)` | LLM-friendly unified find method |
-| `find_all(start, end, what, ...)` | LLM-friendly unified iteration |
-| `next_undefined(ea, ...)` | Find next undefined byte |
-| `next_defined(ea, ...)` | Find next defined item |
-| `all_undefined(start, end)` | Iterate all undefined bytes |
-| `all_defined(start, end)` | Iterate all defined items |
-| `next_code(ea, ...)` | Find next code address |
-| `next_data(ea, ...)` | Find next data address |
-| `next_code_outside_function(ea, ...)` | Find orphan code |
-| `all_code(start, end)` | Iterate all code addresses |
-| `all_data(start, end)` | Iterate all data addresses |
-| `all_code_outside_functions(start, end)` | Iterate orphan code |
-| `next_error(ea, ...)` | Find next analysis error |
-| `next_untyped_operand(ea, ...)` | Find untyped operand |
-| `next_suspicious_operand(ea, ...)` | Find suspicious operand |
-| `all_errors(start, end)` | Iterate all errors |
-| `all_untyped_operands(start, end)` | Iterate untyped operands |
+### `db.switches` - Switch Statement Analysis
+Switch/case table operations.
 
----
+```python
+switch = db.switches.get_at(insn_ea)
+if switch:
+    for case_val, target_ea in switch.cases:
+        print(f"case {case_val}: -> {hex(target_ea)}")
+```
 
-### StackFrames
+### `db.problems` - Problem List
+IDA problem/issue tracking.
 
-`ida_domain/stack_frames.py` - Stack frame and variable operations.
+```python
+for problem in db.problems.get_all():
+    print(f"{problem.type.name} @ {hex(problem.address)}: {problem.description}")
 
-**StackFrameInstance Properties:**
+db.problems.delete_at(ea, ProblemType.BOUNDS)  # Remove specific problem
+```
 
-| Property | Description |
-|----------|-------------|
-| `size` | Total frame size |
-| `local_size` | Size of local variables |
-| `argument_size` | Size of arguments |
-| `saved_registers_size` | Size of saved registers |
-| `return_address_size` | Size of return address |
-| `purged_bytes` | Bytes purged by function |
+### `db.fixups` - Relocation Information
+Fixup (relocation) operations.
 
-**StackFrames Methods:**
+```python
+for fixup in db.fixups.get_all():
+    print(f"{hex(fixup.address)}: {fixup.type.name}")
 
-| Method | Description |
-|--------|-------------|
-| `get_at(func_ea)` | Get stack frame for function |
-| `create(func_ea, local_size, saved_regs_size, arg_size)` | Create frame |
-| `delete(func_ea)` | Delete stack frame |
-| `resize(func_ea, local_size, saved_regs_size, arg_size)` | Resize frame |
-| `set_purged_bytes(func_ea, nbytes, override)` | Set purged bytes |
-| `get_arguments_section(func_ea)` | Get arguments section info |
-| `get_locals_section(func_ea)` | Get locals section info |
-| `get_saved_regs_section(func_ea)` | Get saved regs section info |
-| `define_variable(func_ea, offset, name, var_type, size)` | Define variable |
-| `get_variable(func_ea, offset)` | Get variable at offset |
-| `get_variable_by_name(func_ea, name)` | Get variable by name |
-| `set_variable_type(func_ea, offset, var_type)` | Set variable type |
-| `rename_variable(func_ea, offset, new_name)` | Rename variable |
-| `delete_variable(func_ea, offset)` | Delete variable |
-| `delete_variables_in_range(func_ea, start_offset, end_offset)` | Delete range |
-| `get_variable_xrefs(func_ea, offset)` | Get variable cross-references |
-| `get_as_struct(func_ea)` | Get frame as structure type |
-| `calc_runtime_offset(func_ea, frame_offset, insn_ea)` | Calculate runtime offset |
-| `calc_frame_offset(func_ea, runtime_offset, insn_ea)` | Calculate frame offset |
-| `generate_auto_name(func_ea, offset)` | Generate automatic name |
-| `add_sp_change_point(func_ea, ea, delta)` | Add SP change point |
-| `delete_sp_change_point(func_ea, ea)` | Delete SP change point |
-| `get_sp_delta(func_ea, ea)` | Get SP delta at address |
-| `get_sp_change(func_ea, ea)` | Get SP change at address |
+db.fixups.delete_at(ea)  # Remove fixup
+```
+
+### `db.try_blocks` - Exception Handling
+Try/catch block analysis (C++ and SEH).
+
+```python
+for try_block in db.try_blocks.get_in_range(start_ea, end_ea):
+    print(f"try @ {hex(try_block.start_ea)}")
+    for handler in try_block.handlers:
+        print(f"  catch @ {hex(handler.handler_ea)}")
+```
 
 ---
 
-### Switches
+## New Features
 
-`ida_domain/switches.py` - Switch statement analysis and manipulation.
+### Wildcard Pattern Search (Bytes)
+IDA-style wildcard byte pattern search.
 
-**SwitchInfo Properties:**
+```python
+# Find patterns with wildcards (? or ?? match any byte)
+ea = db.bytes.find_pattern("48 8B ?? 90")
+results = db.bytes.find_pattern_all("CC ?? ?? 90", start_ea, end_ea)
+```
 
-| Property | Description |
-|----------|-------------|
-| `is_sparse` | Check if switch is sparse |
-| `is_indirect` | Check if switch uses indirect table |
-| `has_default` | Check if switch has default case |
-| `jtable_element_size` | Jump table element size |
-| `vtable_element_size` | Value table element size |
-| `shift` | Shift value for case calculation |
+### Xref Mutation Methods
+Create and delete cross-references programmatically.
 
-**Switches Methods:**
+```python
+db.xrefs.add_code_xref(from_ea, to_ea, XrefType.CALL_NEAR)
+db.xrefs.add_data_xref(insn_ea, data_ea, XrefType.READ)
+db.xrefs.delete_xref(from_ea, to_ea)
+```
 
-| Method | Description |
-|--------|-------------|
-| `get_at(ea)` | Get switch info at address |
-| `exists_at(ea)` | Check if switch exists at address |
-| `create(ea, switch_info)` | Create switch at address |
-| `remove(ea)` | Remove switch |
-| `update(ea, switch_info)` | Update switch info |
-| `get_parent(ea)` | Get parent switch address |
-| `set_parent(ea, parent_ea)` | Set parent switch |
-| `remove_parent(ea)` | Remove parent association |
-| `get_jump_table_addresses(switch_info)` | Get jump table addresses |
-| `get_case_values(switch_info)` | Get case values |
-| `get_case_count(ea)` | Get number of cases |
+### Pagination Helpers (Base)
+Helper functions for paginating large result sets.
 
----
+```python
+from ida_domain.base import get_page, get_chunked
 
-### TryBlocks
+# Get page 2 of functions (50 per page)
+page = get_page(db.functions.get_all(), page=2, page_size=50)
 
-`ida_domain/try_blocks.py` - Exception handling block analysis.
+# Process in chunks
+for chunk in get_chunked(db.strings.get_all(), chunk_size=100):
+    process_batch(chunk)
+```
 
-**CatchHandler Properties:**
+### LLM-Friendly Unified Methods
+Simplified, consistent API patterns optimized for LLM agents.
 
-| Property | Description |
-|----------|-------------|
-| `is_catch_all` | Check if catch-all handler |
-| `is_cleanup` | Check if cleanup handler |
-| `start_ea` | Handler start address |
-| `end_ea` | Handler end address |
+```python
+# Analysis
+db.analysis.wait()                      # vs wait_for_completion()
+db.analysis.analyze(start, end)         # vs analyze_range()
+db.analysis.schedule(ea, "function")    # Unified scheduling
 
-**SehHandler Properties:**
+# Functions
+db.functions.count()                    # Total function count
+db.functions.exists_at(ea)              # Check if function exists
+db.functions.get_in_range(start, end)   # Functions in range
 
-| Property | Description |
-|----------|-------------|
-| `has_filter` | Check if has filter |
-| `is_finally` | Check if finally handler |
-| `start_ea` | Handler start address |
-| `end_ea` | Handler end address |
-| `filter_start_ea` | Filter start address |
+# Types
+type_info = db.types.get(name)          # Get type by name
+db.types.apply(ea, type_info)           # Apply type at address
+db.types.create(name, declaration)      # Create new type
 
-**TryBlock Properties:**
+# Xrefs
+refs = db.xrefs.get_refs_to(ea)         # All refs to address
+refs = db.xrefs.get_refs_from(ea)       # All refs from address
+```
 
-| Property | Description |
-|----------|-------------|
-| `is_cpp` | Check if C++ try block |
-| `is_seh` | Check if SEH try block |
-| `start_ea` | Try block start address |
-| `end_ea` | Try block end address |
-| `is_empty` | Check if block is empty |
+### Improved Debug Output
+Better `__repr__` methods for debugging.
 
-**TryBlocks Methods:**
+```python
+>>> xref = db.xrefs.get_code_refs_to(func_ea)[0]
+>>> print(xref)
+XrefInfo(from_ea=0x401234, to_ea=0x402000, type=CALL_NEAR)
 
-| Method | Description |
-|--------|-------------|
-| `get_in_range(start_ea, end_ea)` | Get try blocks in range |
-| `get_at(ea)` | Get try block at address |
-| `is_in_try_block(ea, kind)` | Check if in try block |
-| `is_catch_start(ea)` | Check if catch handler start |
-| `is_seh_handler_start(ea)` | Check if SEH handler start |
-| `is_seh_filter_start(ea)` | Check if SEH filter start |
-| `find_seh_region(ea)` | Find containing SEH region |
-| `has_fallthrough_from_unwind(ea)` | Check for unwind fallthrough |
-| `add(try_block)` | Add try block |
-| `remove_in_range(start_ea, end_ea)` | Remove try blocks in range |
+>>> caller = db.xrefs.get_callers(func_ea)[0]
+>>> print(caller)
+CallerInfo(caller_ea=0x401234, callee_ea=0x402000)
+```
 
 ---
 
-## Enhanced Entities
-
-### Bytes
-
-`ida_domain/bytes.py` - 14 new methods added.
-
-| Method | Description |
-|--------|-------------|
-| `get_item_head_at(ea)` | Get item head address |
-| `get_item_end_at(ea)` | Get item end address |
-| `get_item_size_at(ea)` | Get item size |
-| `set_operand_hex(ea, n)` | Set operand to hex format |
-| `set_operand_decimal(ea, n)` | Set operand to decimal format |
-| `set_operand_octal(ea, n)` | Set operand to octal format |
-| `set_operand_binary(ea, n)` | Set operand to binary format |
-| `set_operand_char(ea, n)` | Set operand to char format |
-| `set_operand_enum(ea, n, enum_id, serial)` | Set operand to enum |
-| `is_offset_operand(ea, n)` | Check if operand is offset |
-| `is_char_operand(ea, n)` | Check if operand is char |
-| `is_enum_operand(ea, n)` | Check if operand is enum |
-| `is_struct_offset_operand(ea, n)` | Check if operand is struct offset |
-| `is_stack_var_operand(ea, n)` | Check if operand is stack variable |
-
----
-
-### Comments
-
-`ida_domain/comments.py` - 15 new methods added.
-
-| Method | Description |
-|--------|-------------|
-| `delete_all_extra_at(ea, kind)` | Delete all extra comments |
-| `get_first_free_extra_index(ea, kind)` | Get free extra index |
-| `generate_disasm_line(ea, remove_tags)` | Generate disassembly line |
-| `generate_disassembly(start, end, ...)` | Generate disassembly range |
-| `strip_color_tags(text)` | Strip color tags from text |
-| `calculate_visual_length(text)` | Calculate visual length |
-| `skip_color_tags(text, start_offset)` | Skip color tags |
-| `advance_in_colored_string(text, n)` | Advance in colored string |
-| `colorize(text, color_code)` | Add color to text |
-| `requires_color_escape(char)` | Check if char needs escape |
-| `get_prefix_color(ea)` | Get address prefix color |
-| `get_background_color(ea)` | Get address background color |
-| `add_sourcefile(start_ea, end_ea, filename)` | Add source file info |
-| `get_sourcefile(ea)` | Get source file info |
-| `delete_sourcefile(ea)` | Delete source file info |
-
----
+## Method Additions by Entity
 
 ### Database
-
-`ida_domain/database.py` - 11 new methods/accessors added.
-
-**New Methods:**
-
 | Method | Description |
 |--------|-------------|
-| `save_as(new_path, flags)` | Save database to new path |
+| `save_as(path, flags)` | Save database to a new path |
 
-**New Entity Accessors:**
-
-| Accessor | Description |
-|----------|-------------|
-| `analysis` | Access Analysis entity |
-| `decompiler` | Access Decompiler entity |
-| `fixups` | Access Fixups entity |
-| `imports` | Access Imports entity |
-| `search` | Access Search entity |
-| `stack_frames` | Access StackFrames entity |
-| `switches` | Access Switches entity |
-| `problems` | Access Problems entity |
-| `exporter` | Access Exporter entity |
-| `try_blocks` | Access TryBlocks entity |
-
----
-
-### Functions
-
-`ida_domain/functions.py` - 6 new methods added.
-
+### Functions (15+ new methods)
 | Method | Description |
 |--------|-------------|
 | `count()` | Get total function count |
 | `exists_at(ea)` | Check if function exists at address |
 | `get_in_range(start, end)` | Get functions in address range |
-| `delete(func)` | Delete function |
+| `delete(ea)` | Delete function at address |
 | `get_previous(ea)` | Get previous function |
+| `get_index(func)` | Get function index |
+| `contains(ea, func)` | Check if address is in function |
+| `set_start(func, new_start)` | Change function start |
+| `set_end(func, new_end)` | Change function end |
+| `update(func, start, end)` | Update function bounds |
 | `reanalyze(func)` | Reanalyze function |
+| `add_tail(func, start, end)` | Add function tail chunk |
+| `remove_tail(func, tail_ea)` | Remove function tail chunk |
 
----
-
-### Instructions
-
-`ida_domain/instructions.py` - 21 new methods added.
-
+### Bytes (20+ new methods)
 | Method | Description |
 |--------|-------------|
-| `decode_at(ea, out)` | Decode instruction into buffer |
-| `get_preceding(ea)` | Get preceding instruction |
-| `get_next(ea)` | Get next instruction |
-| `create_at(ea)` | Create instruction at address |
-| `can_decode(ea)` | Check if can decode at address |
-| `get_size(ea)` | Get instruction size |
-| `format_operand(ea, operand_index, flags)` | Format operand text |
-| `add_code_reference(from_ea, to_ea, flow_type)` | Add code xref |
-| `add_data_reference(from_ea, to_ea, dr_type)` | Add data xref |
-| `get_data_type_size(dtype)` | Get data type size |
-| `get_data_type_by_size(size)` | Get data type for size |
-| `get_data_type_flag(dtype)` | Get data type flag |
-| `is_floating_data_type(dtype)` | Check if floating type |
-| `map_operand_address(ea, operand_index, address)` | Map operand address |
-| `calculate_data_segment(ea, operand_index)` | Calculate data segment |
-| `set_operand_offset(ea, operand_index, base)` | Set operand offset |
-| `set_operand_offset_ex(ea, operand_index, refinfo)` | Set offset extended |
-| `get_operand_offset_base(ea, operand_index)` | Get offset base |
-| `get_operand_offset_target(ea, operand_index)` | Get offset target |
-| `format_offset_expression(ea, operand_index, ...)` | Format offset expression |
-| `calculate_offset_base(ea, operand_index)` | Calculate offset base |
+| `find_pattern(pattern)` | Wildcard pattern search |
+| `find_pattern_all(pattern)` | Find all pattern matches |
+| `is_operand_hex(ea, n)` | Check if operand is hex |
+| `is_operand_decimal(ea, n)` | Check if operand is decimal |
+| `is_operand_char(ea, n)` | Check if operand is char |
+| `is_operand_binary(ea, n)` | Check if operand is binary |
+| `is_operand_octal(ea, n)` | Check if operand is octal |
+| `set_operand_hex(ea, n)` | Set operand to hex |
+| `set_operand_decimal(ea, n)` | Set operand to decimal |
+| `set_operand_char(ea, n)` | Set operand to char |
+| `set_operand_offset(ea, n, base)` | Make operand an offset |
+| `get_next_item(ea)` | Get next item address |
+| `get_previous_item(ea)` | Get previous item address |
 
----
-
-### Names
-
-`ida_domain/names.py` - 8 new methods added.
-
+### Comments (15+ new methods)
 | Method | Description |
 |--------|-------------|
-| `resolve_name(name, from_ea)` | Resolve name to address |
-| `resolve_value(expression, from_ea)` | Resolve expression value |
-| `delete_local(ea)` | Delete local name |
-| `create_dummy(from_ea, ea)` | Create dummy name |
-| `get_visible_name(ea, local)` | Get visible name |
-| `validate(name, strict)` | Validate name |
-| `get_colored_name(ea, local)` | Get colored name |
-| `format_expression(ea, ...)` | Format name expression |
+| `set_at(ea, comment, repeatable)` | Set comment at address |
+| `append_at(ea, text, repeatable)` | Append to comment |
+| `delete_at(ea, repeatable)` | Delete comment |
+| `get_function_comment(func)` | Get function comment |
+| `set_function_comment(func, comment)` | Set function comment |
+| `get_anterior_lines(ea)` | Get anterior comment lines |
+| `set_anterior_lines(ea, lines)` | Set anterior comment lines |
+| `get_posterior_lines(ea)` | Get posterior comment lines |
+| `set_posterior_lines(ea, lines)` | Set posterior comment lines |
 
----
-
-### Segments
-
-`ida_domain/segments.py` - 18 new methods added.
-
+### Segments (18+ new methods)
 | Method | Description |
 |--------|-------------|
-| `get_by_index(index)` | Get segment by index |
-| `get_index(segment)` | Get segment index |
-| `get_first()` | Get first segment |
-| `get_last()` | Get last segment |
-| `get_next(segment)` | Get next segment |
-| `get_previous(segment)` | Get previous segment |
-| `get_type(segment)` | Get segment type |
-| `get_paragraph(segment)` | Get segment paragraph |
-| `get_base(segment)` | Get segment base |
-| `set_class(segment, sclass)` | Set segment class |
-| `set_start(segment, new_start, keep_data)` | Set segment start |
-| `set_end(segment, new_end, keep_data)` | Set segment end |
-| `delete(segment, keep_data)` | Delete segment |
-| `update(segment)` | Update segment in database |
-| `move(segment, new_start, flags)` | Move segment |
-| `rebase(delta, fix_once)` | Rebase all segments |
-| `set_visible(segment, visible)` | Set segment visibility |
-| `is_visible(segment)` | Check segment visibility |
+| `create(start, end, name, ...)` | Create new segment |
+| `delete(segment)` | Delete segment |
+| `rename(segment, name)` | Rename segment |
+| `set_type(segment, type)` | Set segment type |
+| `set_permissions(segment, r, w, x)` | Set segment permissions |
+| `move(segment, new_start)` | Move segment |
+| `resize(segment, new_size)` | Resize segment |
+| `split(segment, split_ea)` | Split segment |
+| `merge(seg1, seg2)` | Merge segments |
 
----
-
-### Types
-
-`ida_domain/types.py` - 19 new methods added.
-
+### Names (5+ new methods)
 | Method | Description |
 |--------|-------------|
-| `get(name_or_ordinal, library)` | LLM-friendly unified get method |
-| `apply(ea, type_info_or_name, flags)` | LLM-friendly unified apply method |
-| `guess(ea)` | LLM-friendly alias for guess_at |
-| `format(type_info, ...)` | LLM-friendly alias for format_type |
-| `get_by_ordinal(ordinal, library)` | Get type by ordinal |
-| `get_ordinal(name, library)` | Get ordinal by name |
-| `apply_by_name(ea, name, flags)` | Apply type by name |
-| `apply_declaration(ea, decl, flags)` | Apply type declaration |
-| `guess_at(ea)` | Guess type at address |
-| `format_type(type_info, ...)` | Format type as string |
-| `format_type_at(ea, ...)` | Format type at address |
-| `compare_types(type1, type2)` | Compare two types |
-| `validate_type(type_info)` | Validate type |
-| `resolve_typedef(type_info)` | Resolve typedef chain |
-| `remove_pointer(type_info)` | Remove pointer from type |
-| `is_enum(type_info)` | Check if type is enum |
-| `is_struct(type_info)` | Check if type is struct |
-| `is_union(type_info)` | Check if type is union |
-| `is_udt(type_info)` | Check if type is UDT |
+| `resolve_value(name)` | Resolve name to address |
+| `is_valid_name(name)` | Check if name is valid |
+| `make_unique(name)` | Make name unique |
+| `demangle(name)` | Demangle C++ name |
+| `format(ea, flags)` | Format name with flags |
 
----
-
-### Xrefs
-
-`ida_domain/xrefs.py` - 10 new methods added.
-
+### Xrefs (10+ new methods)
 | Method | Description |
 |--------|-------------|
-| `get_refs_to(ea, flags)` | LLM-friendly unified xrefs-to method |
-| `get_refs_from(ea, flags)` | LLM-friendly unified xrefs-from method |
-| `has_refs_to(ea, flags)` | LLM-friendly check for refs to address |
-| `has_refs_from(ea, flags)` | LLM-friendly check for refs from address |
-| `has_any_refs_to(ea)` | Check if any refs to address |
-| `has_any_refs_from(ea)` | Check if any refs from address |
-| `has_code_refs_to(ea)` | Check if code refs to address |
-| `has_data_refs_to(ea)` | Check if data refs to address |
-| `count_refs_to(ea, flags)` | Count references to address |
-| `count_refs_from(ea, flags)` | Count references from address |
+| `has_code_refs_to(ea)` | Check for code refs to address |
+| `has_data_refs_to(ea)` | Check for data refs to address |
+| `has_code_refs_from(ea)` | Check for code refs from address |
+| `has_data_refs_from(ea)` | Check for data refs from address |
+| `count_code_refs_to(ea)` | Count code refs to address |
+| `count_data_refs_to(ea)` | Count data refs to address |
+| `add_code_xref(from, to, type)` | Create code xref |
+| `add_data_xref(from, to, type)` | Create data xref |
+| `delete_xref(from, to)` | Delete xref |
+| `get_refs_to(ea)` | Unified: all refs to address |
+| `get_refs_from(ea)` | Unified: all refs from address |
+
+### Instructions (21+ new methods)
+| Method | Description |
+|--------|-------------|
+| `is_call(ea)` | Check if instruction is call |
+| `is_jump(ea)` | Check if instruction is jump |
+| `is_conditional_jump(ea)` | Check if conditional jump |
+| `is_unconditional_jump(ea)` | Check if unconditional jump |
+| `is_return(ea)` | Check if instruction is return |
+| `is_nop(ea)` | Check if instruction is NOP |
+| `get_target(ea)` | Get branch/call target |
+| `get_operand_value(ea, n)` | Get operand value |
+| `get_operand_type(ea, n)` | Get operand type |
+| `patch_byte(ea, value)` | Patch single byte |
+| `patch_bytes(ea, bytes)` | Patch multiple bytes |
+| `assemble(ea, instruction)` | Assemble instruction |
+
+### Types (15+ new methods)
+| Method | Description |
+|--------|-------------|
+| `get(name)` | Get type by name |
+| `apply(ea, type_info)` | Apply type at address |
+| `create(name, decl)` | Create new type |
+| `delete(name)` | Delete type |
+| `rename(old, new)` | Rename type |
+| `get_size(type_info)` | Get type size |
+| `get_fields(struct_type)` | Get struct fields |
+| `add_field(struct, name, ...)` | Add struct field |
+| `parse(declaration)` | Parse type declaration |
+| `export_to(library, name)` | Export type to library |
+| `copy_type(src, dst, name)` | Copy type between libraries |
 
 ---
 
-## Code Quality
+## Bug Fixes
 
-### Fixed
-
-- All mypy --strict errors resolved (0 errors)
-- Ruff linting compliance
+- Fixed `copy_type()` argument order in `Types` entity
+- Fixed `copy_type()` error message (was "exporting", now "copying")
+- Fixed Python 3.11 hooks-related crash
+- Fixed string type retrieval issues (#17, #19)
+- Fixed microcode retrieval for multi-block functions
+- Fixed microcode format for jcnd/call instructions
+- Fixed `LocalVariableAccessType` incorrect for instruction (#30)
+- Fixed hook `ev_decorate_name` delegation and `stkpnts` typo
 
 ---
 
-## Pre-Fork History (Upstream)
+## Internal Improvements
 
-For reference, the upstream repository history before the fork:
+- Full `mypy --strict` compliance (218 errors → 0)
+- Comprehensive `ruff` linting compliance
+- Added `__all__` exports to all modules
+- Consistent type annotations using `ea_t` throughout
+- Added deprecation decorator for API migration
+- Split `bytes` module into submodules for maintainability
+- Added comprehensive test coverage (700+ tests)
+- Added test binaries for reliable testing
 
-| Version | Date | Description |
-|---------|------|-------------|
-| 0.3.6-dev.2 | Dec 8, 2025 | LocalVariableAccessType bugfix |
-| 0.3.5 | Nov 4, 2025 | Python badge fix |
-| 0.3.4 | Nov 3, 2025 | Documentation improvements |
-| 0.3.3 | Oct 14, 2025 | Various fixes |
-| 0.3.2 | Oct 8, 2025 | String decoding fix |
-| 0.3.1 | Oct 6, 2025 | String type retrieval fix |
-| 0.3.0 | Sep 26, 2025 | Local variable references |
-| 0.2.2 | Sep 23, 2025 | Microcode format fix |
-| 0.2.1 | Sep 18, 2025 | Multi-block function fix |
-| 0.2.0 | Sep 5, 2025 | API enhancements |
-| 0.1.0 | Aug 15, 2025 | First release |
-| 0.0.1 | Aug 15, 2025 | Initial import |
+---
+
+## Upgrading from 0.3.2
+
+1. **Update method calls**: Use the migration table above to update renamed methods
+2. **Check parameter order**: Especially for `Types.apply_at()`
+3. **Handle `None` returns**: Methods like `get_by_index()` now return `None` instead of raising
+4. **Convert properties to methods**: `db.problems.count` → `db.problems.count()`
+5. **Run with warnings enabled**: Deprecated methods emit warnings to help identify migration needs
+
+```python
+import warnings
+warnings.filterwarnings('default', category=DeprecationWarning)
+```
+
+All deprecated aliases will be removed in version 2.0.0.
