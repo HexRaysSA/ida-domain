@@ -7,10 +7,10 @@ not just that individual methods work correctly.
 Each test represents a task a reverser would actually perform.
 """
 
-import pytest
-from typing import Set, List, Dict, Tuple
 from collections import defaultdict
+from typing import Dict, List, Set, Tuple
 
+import pytest
 
 # =============================================================================
 # WORKFLOW 1: CALL GRAPH ANALYSIS
@@ -156,7 +156,9 @@ class TestStringReferenceWorkflows:
         if hasattr(db, 'strings'):
             for string_item in db.strings:
                 string_ea = string_item.ea
-                content = string_item.content if hasattr(string_item, 'content') else str(string_item)
+                content = (
+                    string_item.content if hasattr(string_item, 'content') else str(string_item)
+                )
 
                 # Find all code references to this string
                 for xref in db.xrefs.code_refs_to_ea(string_ea):

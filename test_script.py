@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Simple IDA Python SDK test script"""
 
-import idaapi
+import idaapi  # noqa: I001
 import idc
 
 def main():
