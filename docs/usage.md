@@ -50,3 +50,7 @@ db.open('/path/to/your/database.idb')
 for i, func in enumerate(db.functions.get_all()):
     print(ida_funcs.get_func_name(func.start_ea)) # <== this is calling IDA Python SDK
 ```
+
+## Error Handling
+
+For detailed information about error handling conventions, exceptions, and best practices, see the [Error Handling Guide](error_handling.md).

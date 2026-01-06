@@ -17,7 +17,7 @@ from ida_typeinf import (
     tinfo_t,
     udt_type_data_t,
 )
-from typing_extensions import TYPE_CHECKING, Callable, Dict, Iterator, Optional, Tuple
+from typing_extensions import TYPE_CHECKING, Callable, Dict, Iterator, Optional, Tuple, Union, cast
 
 from . import __ida_version__
 from .base import (
@@ -216,6 +216,32 @@ class TypeKind(Enum):
     NUMBERED = 2
 
 
+class TypeLookupMode(str, Enum):
+    """Mode for type lookup operations."""
+
+    NAME = "name"
+    """Look up type by name"""
+
+    ORDINAL = "ordinal"
+    """Look up type by ordinal number"""
+
+    ADDRESS = "address"
+    """Get type at an address"""
+
+
+class TypeApplyMode(str, Enum):
+    """Mode for type application operations."""
+
+    NAME = "name"
+    """Apply a named type from library"""
+
+    DECL = "decl"
+    """Parse and apply a C declaration"""
+
+    TINFO = "tinfo"
+    """Apply a tinfo_t object directly"""
+
+
 class UdtAttr(Flag, metaclass=_CheckAttrSupport):
     """User Defined Type flags"""
 
@@ -236,7 +262,7 @@ class UdtDetails:
         type_name = UdtAttr.__name__
         attr_name = str(UdtAttr.TUPLE.name)
         if _is_supported(type_name, attr_name, warn=False):
-            return u.is_tuple()
+            return cast(bool, u.is_tuple())
         return False
 
     _HANDLERS: Dict[UdtAttr, Callable[[udt_type_data_t], bool]] = {
@@ -846,7 +872,7 @@ class TypeDetails:
         return details
 
 
-class TypeDetailsVisitor(ida_typeinf.tinfo_visitor_t):
+class TypeDetailsVisitor(ida_typeinf.tinfo_visitor_t):  # type: ignore[misc]
     """
     Visitor class for types.
     Used to recursively traverse types and gather the type members details.
@@ -959,7 +985,7 @@ class Types(DatabaseEntity):
             True if the operation succeeded, False otherwise.
         """
         ida_typeinf.compact_til(library)
-        return ida_typeinf.store_til(library, str(file.parents), str(file))
+        return cast(bool, ida_typeinf.store_til(library, str(file.parents), str(file)))
 
     def import_type(self, source: til_t, name: str) -> int:
         """
@@ -979,7 +1005,7 @@ class Types(DatabaseEntity):
         result = ida_typeinf.copy_named_type(ida_typeinf.get_idati(), source, name)
         if result == 0:
             raise RuntimeError(f'error importing type {name}')
-        return result
+        return cast(int, result)
 
     def export_type(self, destination: til_t, name: str) -> int:
         """
@@ -989,7 +1015,7 @@ class Types(DatabaseEntity):
         Numbered types will be automatically enabled for the external library.
 
         Args:
-            destination: The loaded type library from where to import the type.
+            destination: The loaded type library to export the type to.
             name: The name of the type.
 
         Raises:
@@ -1002,7 +1028,7 @@ class Types(DatabaseEntity):
         result = ida_typeinf.copy_named_type(destination, ida_typeinf.get_idati(), name)
         if result == 0:
             raise RuntimeError(f'error exporting type {name}')
-        return result
+        return cast(int, result)
 
     def copy_type(self, source: til_t, destination: til_t, name: str) -> int:
         """
@@ -1019,10 +1045,10 @@ class Types(DatabaseEntity):
         Returns:
             The ordinal number of the copied type.
         """
-        result = ida_typeinf.copy_named_type(source, destination, name)
+        result = ida_typeinf.copy_named_type(destination, source, name)
         if result == 0:
-            raise RuntimeError(f'error exporting type {name}')
-        return result
+            raise RuntimeError(f'error copying type {name}')
+        return cast(int, result)
 
     def parse_header_file(
         self,
@@ -1041,7 +1067,7 @@ class Types(DatabaseEntity):
         Returns:
             Number of parse errors.
         """
-        return ida_typeinf.parse_decls(library, header, None, flags)
+        return cast(int, ida_typeinf.parse_decls(library, header, None, flags))
 
     def parse_declarations(
         self,
@@ -1060,7 +1086,7 @@ class Types(DatabaseEntity):
         Returns:
             Number of parse errors.
         """
-        return ida_typeinf.parse_decls(library, decl, None, flags)
+        return cast(int, ida_typeinf.parse_decls(library, decl, None, flags))
 
     def parse_one_declaration(
         self,
@@ -1102,7 +1128,7 @@ class Types(DatabaseEntity):
 
         return tif
 
-    def get_by_name(self, name: str, library: til_t = None) -> Optional[tinfo_t]:
+    def get_by_name(self, name: str, library: Optional[til_t] = None) -> Optional[tinfo_t]:
         """
         Retrieve a type information object by name.
 
@@ -1140,14 +1166,14 @@ class Types(DatabaseEntity):
         return None
 
     def apply_at(
-        self, type: tinfo_t, ea: ea_t, flags: TypeApplyFlags = TypeApplyFlags.GUESSED
+        self, ea: ea_t, type_info: tinfo_t, flags: TypeApplyFlags = TypeApplyFlags.DEFINITE
     ) -> bool:
         """
-        Applies a named type to the given address.
+        Applies a type to the given address.
 
         Args:
             ea: The effective address.
-            type: The name of the type to apply.
+            type_info: The type information to apply.
             flags: Type apply flags.
 
         Returns:
@@ -1158,7 +1184,7 @@ class Types(DatabaseEntity):
         """
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
-        return ida_typeinf.apply_tinfo(ea, type, flags)
+        return cast(bool, ida_typeinf.apply_tinfo(ea, type_info, flags))
 
     def get_all(
         self, library: Optional[til_t] = None, type_kind: TypeKind = TypeKind.NAMED
@@ -1195,7 +1221,7 @@ class Types(DatabaseEntity):
             True if traversal was successful, False otherwise.
 
         """
-        return visitor.apply_to(type_info) == 0
+        return cast(None, visitor.apply_to(type_info) == 0)
 
     def get_details(self, type_info: tinfo_t) -> TypeDetails:
         """
@@ -1221,7 +1247,7 @@ class Types(DatabaseEntity):
         Returns:
             True if successful, False otherwise.
         """
-        return type_info.set_type_cmt(comment) == 0
+        return cast(bool, type_info.set_type_cmt(comment) == 0)
 
     def get_comment(self, type_info: tinfo_t) -> str:
         """
@@ -1234,3 +1260,621 @@ class Types(DatabaseEntity):
             Comment text, or empty string if no comment exists.
         """
         return type_info.get_type_cmt() or ''
+
+    def get_by_ordinal(self, ordinal: int, library: Optional[til_t] = None) -> Optional[tinfo_t]:
+        """
+        Retrieve a type information object by its ordinal number.
+
+        Ordinals are numeric identifiers for types in a type library. This method enables
+        lookup of types by their numeric ID rather than by name.
+
+        Args:
+            ordinal: The ordinal number of the type to retrieve. Must be positive.
+            library: Type library to retrieve from. If None, uses the local (database) library.
+
+        Returns:
+            The type information object if found, None if the ordinal doesn't exist.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Get type at ordinal 5
+            >>> type_info = db.types.get_by_ordinal(5)
+            >>> if type_info:
+            ...     print(f"Type name: {type_info.get_type_name()}")
+        """
+        if not library:
+            library = ida_typeinf.get_idati()
+
+        # Enable numbered types for this library
+        ida_typeinf.enable_numbered_types(library, True)
+
+        # Try to get the type using set_numbered_type
+        tif = ida_typeinf.tinfo_t()
+        if tif.get_numbered_type(library, ordinal):
+            return tif
+
+        return None
+
+    def get_ordinal(self, name: str, library: Optional[til_t] = None) -> Optional[int]:
+        """
+        Get the ordinal number of a named type.
+
+        Each named type in a library can be referenced by both its name and a numeric ordinal.
+        This method maps from name to ordinal.
+
+        Args:
+            name: The name of the type to look up.
+            library: Type library to search. If None, uses the local (database) library.
+
+        Returns:
+            The ordinal number of the named type, or None if not found.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> ordinal = db.types.get_ordinal("size_t")
+            >>> if ordinal:
+            ...     print(f"size_t has ordinal {ordinal}")
+        """
+        if not library:
+            library = ida_typeinf.get_idati()
+
+        ordinal = ida_typeinf.get_type_ordinal(library, name)
+        if ordinal == 0:  # 0 means not found
+            return None
+
+        return cast(Optional[int], ordinal)
+
+    def apply_by_name(
+        self, ea: ea_t, name: str, flags: TypeApplyFlags = TypeApplyFlags.DEFINITE
+    ) -> bool:
+        """
+        Apply a named type to the given address.
+
+        This is a convenience method that looks up a type by name and applies it to an
+        address in a single operation.
+
+        Args:
+            ea: The effective address where the type should be applied.
+            name: The name of the type to apply (e.g., "size_t", "HWND").
+            flags: Type apply flags controlling how the type is applied.
+
+        Returns:
+            True if the type was applied successfully, False otherwise.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Apply HWND type to a global variable
+            >>> success = db.types.apply_by_name(0x401000, "HWND")
+            >>> if success:
+            ...     print("Type applied successfully")
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        return cast(bool, ida_typeinf.apply_named_type(ea, name))
+
+    def apply_declaration(
+        self, ea: ea_t, decl: str, flags: TypeFormattingFlags = TypeFormattingFlags.HTI_DCL
+    ) -> bool:
+        """
+        Parse a C declaration and apply it directly to an address.
+
+        This method parses a C-style type declaration string and applies the parsed type
+        to the specified address in a single operation.
+
+        Args:
+            ea: The effective address where the type should be applied.
+            decl: The C declaration string (e.g., "int *", "struct foo", "void (__cdecl *)(int)").
+            flags: Type formatting flags for parsing the declaration.
+
+        Returns:
+            True if the declaration was parsed and applied successfully, False otherwise.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+            InvalidParameterError: If the declaration string is empty.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Apply a function pointer type
+            >>> success = db.types.apply_declaration(0x401000, "void (__cdecl *)(int, char*)")
+            >>> if success:
+            ...     print("Function type applied")
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        if not decl:
+            raise InvalidParameterError('decl', decl, 'cannot be empty')
+
+        # Get local library for parsing context
+        til = ida_typeinf.get_idati()
+
+        # Apply C declaration directly
+        return cast(bool, ida_typeinf.apply_cdecl(til, ea, decl, flags))
+
+    def guess_at(self, ea: ea_t) -> Optional[tinfo_t]:
+        """
+        Leverage IDA's type inference to guess the type at an address.
+
+        IDA Pro has sophisticated type inference capabilities that can deduce types from
+        usage patterns, cross-references, and context. This method invokes IDA's type
+        guessing engine for a specific address.
+
+        Args:
+            ea: The effective address for which to infer the type.
+
+        Returns:
+            The inferred type information if successful, None if type cannot be guessed.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Let IDA guess the type of a function
+            >>> guessed_type = db.types.guess_at(0x401000)
+            >>> if guessed_type:
+            ...     print(f"Guessed type: {db.types.format_type(guessed_type)}")
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        tif = ida_typeinf.tinfo_t()
+        result = ida_typeinf.guess_tinfo(tif, ea)
+
+        # guess_tinfo returns GUESS_FUNC_* codes
+        # Non-zero means successful guess
+        if result != 0:
+            return tif
+
+        return None
+
+    def format_type(
+        self, type_info: tinfo_t, flags: TypeFormattingFlags = TypeFormattingFlags(0)
+    ) -> str:
+        """
+        Format a type as a C declaration string.
+
+        Converts a type information object into a human-readable C-style declaration string.
+        The formatting can be customized with flags to control aspects like typedef expansion,
+        spacing, and comment inclusion.
+
+        Args:
+            type_info: The type information object to format.
+            flags: Formatting flags controlling the output style.
+
+        Returns:
+            A C-style declaration string representing the type.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> type_info = db.types.get_by_name("size_t")
+            >>> if type_info:
+            ...     decl = db.types.format_type(type_info)
+            ...     print(f"Declaration: {decl}")
+        """
+        return cast(str, type_info.dstr())
+
+    def format_type_at(
+        self, ea: ea_t, flags: TypeFormattingFlags = TypeFormattingFlags(0)
+    ) -> Optional[str]:
+        """
+        Format the type at an address as a C declaration string.
+
+        This is a convenience method that retrieves the type at an address and formats it
+        as a C declaration in a single operation.
+
+        Args:
+            ea: The effective address of the item to format.
+            flags: Formatting flags controlling the output style.
+
+        Returns:
+            A C-style declaration string, or None if no type exists at the address.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Format the type of a global variable
+            >>> decl = db.types.format_type_at(0x401000)
+            >>> if decl:
+            ...     print(f"Type: {decl}")
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        # Use print_type to format the type at an address
+        result = ida_typeinf.print_type(ea, False)  # False = don't force one line
+        if result:
+            return cast(Optional[str], result)
+
+        return None
+
+    def compare_types(self, type1: tinfo_t, type2: tinfo_t) -> bool:
+        """
+        Check if two types are structurally equivalent.
+
+        Performs a structural comparison of two type information objects to determine if
+        they represent the same type, even if they have different names or come from
+        different libraries.
+
+        Args:
+            type1: The first type to compare.
+            type2: The second type to compare.
+
+        Returns:
+            True if the types are equivalent, False otherwise.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> type1 = db.types.get_by_name("size_t")
+            >>> type2 = db.types.get_by_name("unsigned long")
+            >>> if type1 and type2:
+            ...     if db.types.compare_types(type1, type2):
+            ...         print("Types are equivalent")
+        """
+        # compare_tinfo returns 0 if types are equal
+        result = ida_typeinf.compare_tinfo(type1, type2, 0)
+        return cast(bool, result == 0)
+
+    def validate_type(self, type_info: tinfo_t) -> bool:
+        """
+        Validate that a type is well-formed and correct.
+
+        Checks whether a type information object is valid according to IDA's type system
+        rules. This includes verifying that the type is properly constructed, all
+        references are resolved, and the type conforms to language semantics.
+
+        Args:
+            type_info: The type information object to validate.
+
+        Returns:
+            True if the type is valid, False if it contains errors.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> type_info = db.types.get_by_name("MyStruct")
+            >>> if type_info and db.types.validate_type(type_info):
+            ...     print("Type is well-formed")
+        """
+        return cast(bool, ida_typeinf.verify_tinfo(type_info))
+
+    def resolve_typedef(self, type_info: tinfo_t) -> tinfo_t:
+        """
+        Follow typedef chains to get the underlying concrete type.
+
+        When a type is a typedef (type alias), this method resolves it to the actual
+        underlying type. If the type is not a typedef, returns an equivalent type.
+
+        Args:
+            type_info: The type information object to resolve.
+
+        Returns:
+            A new type information object with typedefs resolved.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> type_info = db.types.get_by_name("DWORD")  # Often typedef to unsigned long
+            >>> resolved = db.types.resolve_typedef(type_info)
+            >>> print(f"DWORD resolves to: {db.types.format_type(resolved)}")
+        """
+        # Create a copy to avoid modifying original
+        result = ida_typeinf.tinfo_t()
+        ida_typeinf.copy_tinfo_t(result, type_info)
+
+        # Resolve typedef chain in-place
+        ida_typeinf.resolve_typedef(result)
+
+        return result
+
+    def remove_pointer(self, type_info: tinfo_t) -> Optional[tinfo_t]:
+        """
+        Strip pointer/reference from a type to get the pointed-to type.
+
+        If the given type is a pointer or reference, returns the type being pointed to.
+        For example, "int *" would return "int".
+
+        Args:
+            type_info: The type information object to dereference.
+
+        Returns:
+            The pointed-to type if the input is a pointer, None otherwise.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> ptr_type = db.types.get_at(0x401000)  # Assume this is "char *"
+            >>> if ptr_type:
+            ...     base_type = db.types.remove_pointer(ptr_type)
+            ...     if base_type:
+            ...         print(f"Points to: {db.types.format_type(base_type)}")
+        """
+        # Check if it's actually a pointer
+        if not type_info.is_ptr():
+            return None
+
+        # Create a copy to modify
+        result = ida_typeinf.tinfo_t()
+        ida_typeinf.copy_tinfo_t(result, type_info)
+
+        # Remove pointer modifier
+        if ida_typeinf.remove_pointer(result):
+            return result
+
+        return None
+
+    def is_enum(self, type_info: tinfo_t) -> bool:
+        """
+        Check if a type is an enumeration.
+
+        Args:
+            type_info: The type information object to test.
+
+        Returns:
+            True if the type is an enum, False otherwise.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> type_info = db.types.get_by_name("MyEnum")
+            >>> if type_info and db.types.is_enum(type_info):
+            ...     print("Type is an enumeration")
+        """
+        return cast(bool, type_info.is_enum())
+
+    def is_struct(self, type_info: tinfo_t) -> bool:
+        """
+        Check if a type is a structure.
+
+        Args:
+            type_info: The type information object to test.
+
+        Returns:
+            True if the type is a struct, False otherwise.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> type_info = db.types.get_by_name("MyStruct")
+            >>> if type_info and db.types.is_struct(type_info):
+            ...     print("Type is a structure")
+        """
+        return cast(bool, type_info.is_struct())
+
+    def is_union(self, type_info: tinfo_t) -> bool:
+        """
+        Check if a type is a union.
+
+        Args:
+            type_info: The type information object to test.
+
+        Returns:
+            True if the type is a union, False otherwise.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> type_info = db.types.get_by_name("MyUnion")
+            >>> if type_info and db.types.is_union(type_info):
+            ...     print("Type is a union")
+        """
+        return cast(bool, type_info.is_union())
+
+    def is_udt(self, type_info: tinfo_t) -> bool:
+        """
+        Check if a type is a user-defined type (structure or union).
+
+        A UDT (User-Defined Type) is either a struct or a union. This method is equivalent
+        to `is_struct(type_info) or is_union(type_info)`.
+
+        Args:
+            type_info: The type information object to test.
+
+        Returns:
+            True if the type is a UDT (struct or union), False otherwise.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> type_info = db.types.get_by_name("SomeType")
+            >>> if type_info and db.types.is_udt(type_info):
+            ...     print("Type is a user-defined type")
+        """
+        return cast(bool, type_info.is_udt())
+
+    # ========================================================================
+    # LLM-Friendly API Methods
+    # ========================================================================
+
+    def get(
+        self,
+        source: 'ea_t | str | int',
+        by: Union[TypeLookupMode, str] = TypeLookupMode.NAME,
+        library: Optional[til_t] = None,
+    ) -> Optional[tinfo_t]:
+        """
+        Retrieve a type (LLM-friendly unified interface).
+
+        This method provides a simplified interface using string parameters
+        instead of multiple method names, making it more accessible to LLM agents.
+
+        Args:
+            source: The type identifier. Interpretation depends on 'by' parameter:
+                - For by=TypeLookupMode.NAME: type name string
+                - For by=TypeLookupMode.ORDINAL: ordinal number (int)
+                - For by=TypeLookupMode.ADDRESS: effective address (ea_t)
+            by: Lookup mode. Use TypeLookupMode enum:
+                - TypeLookupMode.NAME: Look up type by name (default)
+                - TypeLookupMode.ORDINAL: Look up type by ordinal number
+                - TypeLookupMode.ADDRESS: Get type at an address
+                String values also accepted for backward compatibility.
+            library: Type library to search (default: local database library)
+
+        Returns:
+            Type information object if found, None otherwise.
+
+        Raises:
+            InvalidParameterError: If 'by' is not recognized
+            InvalidEAError: If by=TypeLookupMode.ADDRESS and source is an invalid address
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Get by name (using enum)
+            >>> type_info = db.types.get("size_t", by=TypeLookupMode.NAME)
+            >>> # Get by ordinal
+            >>> type_info = db.types.get(5, by=TypeLookupMode.ORDINAL)
+            >>> # Get by address
+            >>> type_info = db.types.get(0x401000, by=TypeLookupMode.ADDRESS)
+            >>> # String values also accepted for backward compatibility
+            >>> type_info = db.types.get("size_t", by="name")
+        """
+        # Normalize string to enum
+        if isinstance(by, str):
+            try:
+                by = TypeLookupMode(by.lower())
+            except ValueError:
+                raise InvalidParameterError(
+                    'by',
+                    by,
+                    f'must be one of: {", ".join(e.value for e in TypeLookupMode)}',
+                )
+
+        if by == TypeLookupMode.NAME:
+            return self.get_by_name(str(source), library)
+        elif by == TypeLookupMode.ORDINAL:
+            return self.get_by_ordinal(int(source), library)
+        elif by == TypeLookupMode.ADDRESS:
+            return self.get_at(source)
+        else:
+            raise InvalidParameterError(
+                'by',
+                by,
+                f'must be one of: {", ".join(e.value for e in TypeLookupMode)}',
+            )
+
+    def apply(
+        self,
+        ea: 'ea_t',
+        type_source: 'str | tinfo_t',
+        by: Union[TypeApplyMode, str] = TypeApplyMode.NAME,
+        flags: TypeApplyFlags = TypeApplyFlags.DEFINITE,
+    ) -> bool:
+        """
+        Apply a type to an address (LLM-friendly unified interface).
+
+        This method provides a simplified interface using string parameters
+        instead of multiple method names, making it more accessible to LLM agents.
+
+        Args:
+            ea: The effective address where the type should be applied.
+            type_source: The type to apply. Interpretation depends on 'by' parameter:
+                - For by=TypeApplyMode.NAME: type name string
+                - For by=TypeApplyMode.DECL: C declaration string
+                - For by=TypeApplyMode.TINFO: tinfo_t object
+            by: Apply mode. Use TypeApplyMode enum:
+                - TypeApplyMode.NAME: Apply a named type (default)
+                - TypeApplyMode.DECL: Parse and apply a C declaration
+                - TypeApplyMode.TINFO: Apply a tinfo_t object directly
+                String values also accepted for backward compatibility.
+            flags: Type apply flags (used for by=TypeApplyMode.TINFO)
+
+        Returns:
+            True if the type was applied successfully, False otherwise.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid
+            InvalidParameterError: If 'by' is not recognized
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Apply by name (using enum)
+            >>> db.types.apply(0x401000, "HWND", by=TypeApplyMode.NAME)
+            >>> # Apply by declaration
+            >>> db.types.apply(0x401000, "int *", by=TypeApplyMode.DECL)
+            >>> # String values also accepted for backward compatibility
+            >>> db.types.apply(0x401000, "HWND", by="name")
+        """
+        # Normalize string to enum
+        if isinstance(by, str):
+            try:
+                by = TypeApplyMode(by.lower())
+            except ValueError:
+                raise InvalidParameterError(
+                    'by',
+                    by,
+                    f'must be one of: {", ".join(e.value for e in TypeApplyMode)}',
+                )
+
+        if by == TypeApplyMode.NAME:
+            return self.apply_by_name(ea, str(type_source), flags)
+        elif by == TypeApplyMode.DECL:
+            return self.apply_declaration(ea, str(type_source))
+        elif by == TypeApplyMode.TINFO:
+            return self.apply_at(ea, cast(tinfo_t, type_source), flags)
+        else:
+            raise InvalidParameterError(
+                'by',
+                by,
+                f'must be one of: {", ".join(e.value for e in TypeApplyMode)}',
+            )
+
+    def guess(self, ea: 'ea_t') -> Optional[tinfo_t]:
+        """
+        Guess the type at an address (LLM-friendly alias for guess_at).
+
+        This is a shorter, more intuitive name for the guess_at method,
+        designed to be easier for LLM agents to discover and use.
+
+        Args:
+            ea: The effective address for which to infer the type.
+
+        Returns:
+            The inferred type information if successful, None if type cannot be guessed.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> guessed = db.types.guess(0x401000)
+            >>> if guessed:
+            ...     print(f"Guessed: {db.types.format(guessed)}")
+        """
+        return self.guess_at(ea)
+
+    def format(
+        self,
+        source: 'ea_t | tinfo_t',
+        flags: TypeFormattingFlags = TypeFormattingFlags(0),
+    ) -> Optional[str]:
+        """
+        Format a type as a C declaration string (LLM-friendly unified interface).
+
+        This method accepts either an address or a tinfo_t object and returns
+        the type formatted as a C declaration string.
+
+        Args:
+            source: Either an effective address (ea_t) or a type information object (tinfo_t)
+            flags: Formatting flags controlling the output style
+
+        Returns:
+            A C-style declaration string, or None if no type exists at the address.
+
+        Raises:
+            InvalidEAError: If source is an address and it's invalid
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Format type at address
+            >>> decl = db.types.format(0x401000)
+            >>> # Format a tinfo_t object
+            >>> type_info = db.types.get("size_t", by="name")
+            >>> if type_info:
+            ...     decl = db.types.format(type_info)
+        """
+        # Check if source is a tinfo_t (has get_type_name method)
+        if hasattr(source, 'get_type_name'):
+            return self.format_type(cast(tinfo_t, source), flags)
+        else:
+            # Assume it's an address
+            return self.format_type_at(source, flags)

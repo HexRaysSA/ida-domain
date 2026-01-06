@@ -14,26 +14,45 @@ import ida_loader
 import ida_nalt
 import ida_typeinf
 from ida_idaapi import ea_t
-from typing_extensions import TYPE_CHECKING, List, Literal, Optional, Tuple, Type, Union
+from typing_extensions import TYPE_CHECKING, List, Literal, Optional, Tuple, Type, Union, cast
 
-from .base import check_db_open
+from .analysis import Analysis
+from .base import InvalidParameterError, check_db_open
 from .bytes import Bytes
+from .callgraph import CallGraph
 from .comments import Comments
+from .decompiler import Decompiler
 from .entries import Entries
+from .exporter import Exporter
+from .fixups import Fixups
 from .functions import Functions
 from .heads import Heads
 from .hooks import HooksList  # type: ignore
+from .imports import Imports
 from .instructions import Instructions
 from .names import Names
+from .problems import Problems
+from .search import Search
 from .segments import Segments
 from .signature_files import SignatureFiles
+from .stack_frames import StackFrames
 from .strings import Strings
+from .switches import Switches
+from .try_blocks import TryBlocks
 from .types import Types
 from .xrefs import Xrefs
 
 if TYPE_CHECKING:
     from .instructions import Instructions
 
+__all__ = [
+    'Database',
+    'DatabaseError',
+    'DatabaseMetadata',
+    'CompilerInformation',
+    'ExecutionMode',
+    'IdaCommandOptions',
+]
 
 logger = logging.getLogger(__name__)
 
@@ -584,6 +603,46 @@ class Database:
         self.unhook()
 
     @check_db_open
+    def save_as(self, new_path: str, flags: int = 0) -> bool:
+        """
+        Saves the database to a new location (equivalent to "Save As" in UI).
+
+        Args:
+            new_path: Destination path for the new database file
+            flags: Database save flags (reserved for future use, defaults to 0)
+
+        Returns:
+            True if database was successfully saved, False otherwise
+
+        Raises:
+            InvalidParameterError: If new_path is empty
+            IOError: If file cannot be written
+
+        Example:
+            >>> db = Database.open("program.idb")
+            >>> # Perform analysis...
+            >>> if db.save_as("program_analyzed.idb"):
+            ...     print("Database saved to new location")
+            >>> # Save with different name
+            >>> db.save_as(f"program_backup.idb")
+
+        Note:
+            After save_as(), the database continues operating on the original file.
+            To switch to the new file, close and reopen it.
+        """
+        if not new_path:
+            raise InvalidParameterError('new_path', new_path, 'must not be empty')
+
+        # save_database(outfile, flags=0) saves the database to a new location
+        # Returns True on success, False on failure
+        success: bool = bool(ida_loader.save_database(new_path, flags))
+
+        if not success:
+            raise IOError(f'Failed to save database to {new_path}')
+
+        return success
+
+    @check_db_open
     def execute_script(self, file_path: str) -> None:
         """
         Execute the specified python script
@@ -611,9 +670,9 @@ class Database:
             True if address is valid according to the check level.
         """
         if strict_check:
-            return ida_bytes.is_mapped(ea)
+            return cast(bool, ida_bytes.is_mapped(ea))
         else:
-            return self.minimum_ea <= ea <= self.maximum_ea
+            return cast(bool, self.minimum_ea <= ea <= self.maximum_ea)
 
     def hook(self) -> None:
         """
@@ -833,6 +892,11 @@ class Database:
         return DatabaseMetadata(**metadata_values)
 
     @property
+    def analysis(self) -> Analysis:
+        """Handler that provides access to auto-analysis control operations."""
+        return Analysis(self)
+
+    @property
     def segments(self) -> Segments:
         """Handler that provides access to memory segment-related operations."""
         return Segments(self)
@@ -853,9 +917,24 @@ class Database:
         return Comments(self)
 
     @property
+    def decompiler(self) -> Decompiler:
+        """Handler that provides access to decompiler operations."""
+        return Decompiler(self)
+
+    @property
     def entries(self) -> Entries:
         """Handler that provides access to entries operations."""
         return Entries(self)
+
+    @property
+    def fixups(self) -> Fixups:
+        """Handler that provides access to fixup (relocation) operations."""
+        return Fixups(self)
+
+    @property
+    def imports(self) -> Imports:
+        """Handler that provides access to import table operations."""
+        return Imports(self)
 
     @property
     def heads(self) -> Heads:
@@ -891,6 +970,48 @@ class Database:
     def xrefs(self) -> Xrefs:
         """Handler that provides access to cross-reference (xref) operations."""
         return Xrefs(self)
+
+    @property
+    def callgraph(self) -> CallGraph:
+        """
+        Handler that provides access to call graph traversal operations.
+
+        Returns:
+            CallGraph instance for inter-procedural analysis.
+        """
+        if not hasattr(self, '_callgraph'):
+            self._callgraph = CallGraph(self)
+        return self._callgraph
+
+    @property
+    def search(self) -> Search:
+        """Handler that provides access to search operations."""
+        return Search(self)
+
+    @property
+    def stack_frames(self) -> StackFrames:
+        """Handler that provides access to stack frame operations."""
+        return StackFrames(self)
+
+    @property
+    def switches(self) -> Switches:
+        """Handler that provides access to switch statement operations."""
+        return Switches(self)
+
+    @property
+    def problems(self) -> Problems:
+        """Handler that provides access to problem list operations."""
+        return Problems(self)
+
+    @property
+    def exporter(self) -> Exporter:
+        """Handler that provides access to file export operations."""
+        return Exporter(self)
+
+    @property
+    def try_blocks(self) -> TryBlocks:
+        """Handler that provides access to exception handling try/catch blocks."""
+        return TryBlocks(self)
 
     @property
     def hooks(self) -> HooksList:

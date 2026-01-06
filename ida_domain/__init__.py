@@ -40,6 +40,28 @@ if __ida_version__ < 910:
     raise ImportError('IDA Domain requires IDA 9.1.0 or later')
 
 # If we reach this point kernel libraries were successfully loaded
+from .callgraph import CallGraph, CallPath
 from .database import Database
+from .decompiler import Decompiler
+from .exporter import Exporter, ExportFlags, ExportFormat
+from .fixups import FixupInfo, Fixups, FixupType
+from .problems import Problem, Problems, ProblemType
+from .stack_frames import (
+    FrameSection,
+    StackFrameInstance,
+    StackFrames,
+    StackVariable,
+    StackVarXref,
+)
+from .switches import Switches, SwitchFlags, SwitchInfo
+from .try_blocks import (
+    CatchHandler,
+    SehFilterCode,
+    SehHandler,
+    TryBlock,
+    TryBlockError,
+    TryBlockKind,
+    TryBlocks,
+)
 
 logging.getLogger(__name__).addHandler(NullHandler())

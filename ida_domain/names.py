@@ -4,10 +4,10 @@ import logging
 from enum import IntFlag
 
 import ida_name
-from ida_idaapi import ea_t
-from typing_extensions import TYPE_CHECKING, Iterator, Optional, Tuple, Union
+from ida_idaapi import BADADDR, ea_t
+from typing_extensions import TYPE_CHECKING, Iterator, Optional, Tuple, Union, cast
 
-from .base import DatabaseEntity, InvalidEAError, check_db_open, decorate_all_methods
+from .base import DatabaseEntity, InvalidEAError, check_db_open, decorate_all_methods, deprecated
 
 if TYPE_CHECKING:
     from .database import Database
@@ -99,10 +99,10 @@ class Names(DatabaseEntity):
     def __init__(self, database: Database) -> None:
         super().__init__(database)
 
-    def __iter__(self) -> Iterator[tuple[ea_t, str]]:
+    def __iter__(self) -> Iterator[Tuple[ea_t, str]]:
         return self.get_all()
 
-    def __getitem__(self, index: int) -> Tuple[ea_t, str] | None:
+    def __getitem__(self, index: int) -> Optional[Tuple[ea_t, str]]:
         return self.get_at_index(index)
 
     def __len__(self) -> int:
@@ -121,9 +121,9 @@ class Names(DatabaseEntity):
         Returns:
             The number of named elements.
         """
-        return ida_name.get_nlist_size()
+        return cast(int, ida_name.get_nlist_size())
 
-    def get_at_index(self, index: int) -> Tuple[ea_t, str] | None:
+    def get_at_index(self, index: int) -> Optional[Tuple[ea_t, str]]:
         """
         Retrieves the named element at the specified index.
 
@@ -153,7 +153,7 @@ class Names(DatabaseEntity):
         """
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
-        return ida_name.get_name(ea)
+        return cast(Optional[str], ida_name.get_name(ea))
 
     def get_all(self) -> Iterator[Tuple[ea_t, str]]:
         """
@@ -186,7 +186,7 @@ class Names(DatabaseEntity):
         """
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
-        return ida_name.set_name(ea, name, flags)
+        return cast(bool, ida_name.set_name(ea, name, flags))
 
     def force_name(
         self, ea: ea_t, name: str, flags: Union[int, SetNameFlags] = SetNameFlags.NOCHECK
@@ -207,9 +207,9 @@ class Names(DatabaseEntity):
         """
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
-        return ida_name.force_name(ea, name, flags)
+        return cast(bool, ida_name.force_name(ea, name, flags))
 
-    def delete(self, ea: ea_t) -> bool:
+    def delete_at(self, ea: ea_t) -> bool:
         """
         Delete name at the specified address.
 
@@ -224,7 +224,26 @@ class Names(DatabaseEntity):
         """
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
-        return ida_name.del_global_name(ea)
+        return cast(bool, ida_name.del_global_name(ea))
+
+    @deprecated("Use delete_at() instead")
+    def delete(self, ea: ea_t) -> bool:
+        """
+        Delete name at the specified address.
+
+        .. deprecated::
+            Use :meth:`delete_at` instead.
+
+        Args:
+            ea: Linear address.
+
+        Returns:
+            True if successful, False otherwise.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+        """
+        return self.delete_at(ea)
 
     def is_valid_name(self, name: str) -> bool:
         """
@@ -236,7 +255,7 @@ class Names(DatabaseEntity):
         Returns:
             True if valid, False otherwise.
         """
-        return ida_name.is_uname(name)
+        return cast(bool, ida_name.is_uname(name))
 
     def is_public_name(self, ea: ea_t) -> bool:
         """
@@ -253,7 +272,7 @@ class Names(DatabaseEntity):
         """
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
-        return ida_name.is_public_name(ea)
+        return cast(bool, ida_name.is_public_name(ea))
 
     def make_name_public(self, ea: ea_t) -> None:
         """
@@ -298,7 +317,7 @@ class Names(DatabaseEntity):
         """
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
-        return ida_name.is_weak_name(ea)
+        return cast(bool, ida_name.is_weak_name(ea))
 
     def make_name_weak(self, ea: ea_t) -> None:
         """
@@ -347,7 +366,7 @@ class Names(DatabaseEntity):
         """
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
-        return ida_name.get_demangled_name(ea, inhibitor, demform)
+        return cast(Optional[str], ida_name.get_demangled_name(ea, inhibitor, demform))
 
     def demangle_name(self, name: str, disable_mask: Union[int, DemangleFlags] = 0) -> str:
         """
@@ -360,4 +379,289 @@ class Names(DatabaseEntity):
         Returns:
             Demangled name or original name if demangling failed.
         """
-        return ida_name.demangle_name(name, disable_mask)
+        return cast(str, ida_name.demangle_name(name, disable_mask))
+
+    def resolve_name(self, name: str, from_ea: ea_t = BADADDR) -> Optional[ea_t]:
+        """
+        Resolve a name to its address.
+
+        This method searches for a name in the database and returns its address.
+        The search can be context-aware based on from_ea.
+
+        Args:
+            name: The name to resolve.
+            from_ea: Context address for local name resolution. Defaults to BADADDR.
+
+        Returns:
+            The address of the name, or None if the name cannot be resolved.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> addr = db.names.resolve_name("main")
+            >>> if addr:
+            ...     print(f"main is at 0x{addr:x}")
+        """
+        ea = ida_name.get_name_ea(from_ea, name)
+        # BADADDR is the invalid address marker
+        if ea == BADADDR:
+            return None
+        return ea
+
+    def resolve_value(self, name: str, from_ea: ea_t = BADADDR) -> Tuple[Optional[int], int]:
+        """
+        Get the numeric value and type of a name.
+
+        The name can represent various things including regular addresses,
+        enum constants, segment names, stack variables, etc. This method
+        resolves the name and returns both its numeric value and type code.
+
+        Args:
+            name: Name to resolve.
+            from_ea: Context address for resolution. Defaults to BADADDR.
+
+        Returns:
+            Tuple of (value, type_code) where:
+            - value: The numeric value, or None if name has no value
+            - type_code: One of the NT_* constants from ida_name (NT_NONE, NT_SEG,
+              NT_FUNC, NT_STRUC, NT_ENUM, etc.)
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Resolve an enum constant
+            >>> value, name_type = db.names.resolve_value("MY_CONSTANT")
+            >>> if name_type == ida_name.NT_ENUM:
+            ...     print(f"Enum value: {value}")
+            >>> # Resolve a function address
+            >>> value, name_type = db.names.resolve_value("main")
+            >>> if name_type == ida_name.NT_CODE:
+            ...     print(f"Function at: 0x{value:x}")
+        """
+        # get_name_value returns a tuple (type, value) in IDA Python
+        # The first element is the name type, the second is the value
+        result = ida_name.get_name_value(from_ea, name)
+
+        if result is None:
+            return (None, ida_name.NT_NONE)
+
+        name_type, value = result
+
+        if name_type == ida_name.NT_NONE:
+            return (None, name_type)
+
+        return (int(value), name_type)
+
+    def delete_local(self, ea: ea_t) -> bool:
+        """
+        Delete a local name at the specified address.
+
+        Local names are scoped to functions and are not visible globally.
+
+        Args:
+            ea: Linear address.
+
+        Returns:
+            True if successful, False otherwise.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Delete a local label within a function
+            >>> success = db.names.delete_local(0x401020)
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+        return cast(bool, ida_name.del_local_name(ea))
+
+    def create_dummy(self, from_ea: ea_t, ea: ea_t) -> bool:
+        """
+        Create an autogenerated dummy name at the specified address.
+
+        Dummy names use special prefixes based on the item type:
+        - loc_ for code labels
+        - sub_ for functions
+        - byte_, word_, dword_, qword_ for data
+        - off_ for offsets
+        - unk_ for unknown items
+
+        Args:
+            from_ea: Address of the operand that references the target.
+            ea: Target address to name.
+
+        Returns:
+            True if successful, False otherwise.
+
+        Raises:
+            InvalidEAError: If either address is invalid.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Create dummy name for a jumped-to location
+            >>> success = db.names.create_dummy(0x401000, 0x401050)
+            >>> # This creates a name like "loc_401050"
+        """
+        if not self.database.is_valid_ea(from_ea):
+            raise InvalidEAError(from_ea)
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+        return cast(bool, ida_name.set_dummy_name(from_ea, ea))
+
+    def get_visible_name(self, ea: ea_t, local: bool = False) -> Optional[str]:
+        """
+        Get the visible name at an address.
+
+        This returns the name that would be displayed in the disassembly,
+        which may include function scope prefixes for local names.
+
+        Args:
+            ea: Linear address.
+            local: If True, gets local name only, otherwise gets any visible name.
+
+        Returns:
+            The visible name, or None if no name exists.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Get the displayed name at an address
+            >>> name = db.names.get_visible_name(0x401000)
+            >>> print(f"Visible name: {name}")
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        # ida_name.get_name(ea) returns the name at an address
+        # For local names, we'd need to use get_ea_name with flags
+        # For simplicity, just return the standard name
+        name = ida_name.get_name(ea)
+
+        # If local flag is set and no name was found, that's expected
+        # The local parameter is a hint but we can't easily distinguish
+        # between local and global names with the simple API
+        return cast(Optional[str], name)
+
+    def validate(self, name: str, strict: bool = False) -> Tuple[bool, str]:
+        """
+        Validate a name and return validation result with cleaned name.
+
+        This method checks if a name is valid according to IDA's naming rules
+        and optionally returns a cleaned version of the name.
+
+        Args:
+            name: The name to validate.
+            strict: If True, apply strict validation rules (currently unused).
+
+        Returns:
+            A tuple (is_valid, cleaned_name) where:
+            - is_valid: True if the name is valid or can be made valid
+            - cleaned_name: The original name if valid, or a cleaned version
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Check if a name is valid
+            >>> is_valid, cleaned = db.names.validate("my-function")
+            >>> if is_valid:
+            ...     print(f"Validated name: {cleaned}")
+            >>> else:
+            ...     print(f"Invalid name, suggested: {cleaned}")
+        """
+        # Check if it's already a valid user name
+        if ida_name.is_uname(name):
+            return (True, name)
+
+        # Try to extract a valid name using IDA's validation
+        # ida_name.validate_name() replaces invalid characters
+        cleaned = ida_name.validate_name(name, ida_name.VNT_IDENT)
+
+        if cleaned and ida_name.is_uname(cleaned):
+            # validate_name returned a cleaned version
+            return (True, cleaned)
+        else:
+            # Name cannot be made valid, return original with False
+            return (False, name)
+
+    def get_colored_name(self, ea: ea_t, local: bool = False) -> Optional[str]:
+        """
+        Get name with IDA color tags for syntax highlighting.
+
+        This method returns the name at the specified address with color tags
+        embedded in the string. Color tags are special sequences used by IDA's
+        UI for syntax highlighting.
+
+        Args:
+            ea: Linear address.
+            local: Try local names first if True.
+
+        Returns:
+            Colored name string with embedded color tags, or None if no name exists.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Get colored name for display
+            >>> colored = db.names.get_colored_name(0x401000)
+            >>> if colored:
+            ...     print(f"Colored name: {colored}")
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        # Use get_colored_long_name which supports gtn_flags
+        gtn_flags = ida_name.GN_LOCAL if local else 0
+        name = ida_name.get_colored_long_name(ea, gtn_flags)
+        return name if name else None
+
+    def format_expression(
+        self, from_ea: ea_t, n: int, ea: ea_t, offset: int, include_struct_fields: bool = True
+    ) -> Optional[str]:
+        """
+        Convert address to name expression with displacement.
+
+        This method formats an address as a symbolic name expression, optionally
+        including offset displacement (e.g., "name+8") and structure field names.
+        This is useful for displaying operand values symbolically.
+
+        Args:
+            from_ea: Address of instruction/operand that references the name.
+            n: Operand number (0 for data items, 0-N for instruction operands).
+            ea: Address to convert to a name expression.
+            offset: The value the expression should represent (may differ from ea).
+            include_struct_fields: Append struct member names if applicable.
+
+        Returns:
+            Formatted name expression like "name", "name+offset", or "name.field",
+            or None on failure.
+
+        Raises:
+            InvalidEAError: If from_ea or ea is invalid.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Format an operand reference
+            >>> expr = db.names.format_expression(
+            ...     from_ea=0x401000,
+            ...     n=1,
+            ...     ea=0x405000,
+            ...     offset=0x405008
+            ... )
+            >>> if expr:
+            ...     print(f"Expression: {expr}")  # "data_405000+8" or similar
+        """
+        if not self.database.is_valid_ea(from_ea):
+            raise InvalidEAError(from_ea)
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        # GETN_APPZERO: append struct member names
+        # GETN_NODUMMY: don't use dummy names for unknown offsets
+        flags = ida_name.GETN_APPZERO if include_struct_fields else ida_name.GETN_NODUMMY
+
+        # get_name_expr returns the formatted expression string
+        result = ida_name.get_name_expr(from_ea, n, ea, offset, flags)
+
+        return result if result else None

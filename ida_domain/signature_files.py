@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class _MatchCollector(ida_idp.IDB_Hooks):
+class _MatchCollector(ida_idp.IDB_Hooks):  # type: ignore[misc]
     def __init__(self, file_path: str):
         ida_idp.IDB_Hooks.__init__(self)
         self.results = FileInfo(path=file_path)

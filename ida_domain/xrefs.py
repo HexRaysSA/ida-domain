@@ -15,9 +15,26 @@ import ida_typeinf
 import ida_xref
 from ida_funcs import func_t
 from ida_idaapi import BADADDR, ea_t
-from typing_extensions import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, Set, Tuple, Union
+from typing_extensions import (
+    TYPE_CHECKING,
+    Any,
+    Dict,
+    Iterator,
+    List,
+    Optional,
+    Set,
+    Tuple,
+    Union,
+    cast,
+)
 
-from .base import DatabaseEntity, InvalidEAError, check_db_open, decorate_all_methods
+from .base import (
+    DatabaseEntity,
+    InvalidEAError,
+    InvalidParameterError,
+    check_db_open,
+    decorate_all_methods,
+)
 
 if TYPE_CHECKING:
     from .database import Database
@@ -61,6 +78,13 @@ class XrefInfo:
         """Check if this is ordinary flow reference."""
         return self.type == XrefType.ORDINARY_FLOW
 
+    def __repr__(self) -> str:
+        """Return a readable representation with hex addresses."""
+        return (
+            f"XrefInfo(0x{self.from_ea:x} -> 0x{self.to_ea:x}, "
+            f"{self.type.name}, {'code' if self.is_code else 'data'})"
+        )
+
 
 @dataclass
 class CallerInfo:
@@ -70,6 +94,11 @@ class CallerInfo:
     name: str  # Name of the calling function (if available)
     xref_type: XrefType  # Type of the xref (always a call type)
     function_ea: Optional[ea_t] = None  # Start address of calling function (if in a function)
+
+    def __repr__(self) -> str:
+        """Return a readable representation with hex address and caller name."""
+        func_part = f", func=0x{self.function_ea:x}" if self.function_ea else ""
+        return f"CallerInfo(0x{self.ea:x}, '{self.name}', {self.xref_type.name}{func_part})"
 
 
 class XrefType(IntEnum):
@@ -132,6 +161,31 @@ class XrefType(IntEnum):
         return self in self._get_data_refs()
 
 
+class XrefKind(str, Enum):
+    """Filter kind for cross-reference queries."""
+
+    ALL = "all"
+    """All cross-references"""
+
+    CODE = "code"
+    """Code cross-references only"""
+
+    DATA = "data"
+    """Data cross-references only"""
+
+    CALLS = "calls"
+    """Call cross-references only"""
+
+    JUMPS = "jumps"
+    """Jump cross-references only"""
+
+    READS = "reads"
+    """Read cross-references only"""
+
+    WRITES = "writes"
+    """Write cross-references only"""
+
+
 class XrefsFlags(IntFlag):
     """Flags for xref iteration control."""
 
@@ -150,7 +204,7 @@ class XrefsFlags(IntFlag):
     def to_ida_flags(self) -> int:
         """Convert to IDA's xref flags."""
         if self == XrefsFlags.ALL:
-            return ida_xref.XREF_ALL
+            return cast(int, ida_xref.XREF_ALL)
         ida_flags = 0
         if self & XrefsFlags.NOFLOW:
             ida_flags |= ida_xref.XREF_NOFLOW
@@ -159,7 +213,7 @@ class XrefsFlags(IntFlag):
         elif self & XrefsFlags.CODE:
             ida_flags |= ida_xref.XREF_CODE
         else:
-            ida_flags = ida_xref.XREF_ALL
+            ida_flags = cast(int, ida_xref.XREF_ALL)
         return ida_flags
 
 
@@ -461,3 +515,510 @@ class Xrefs(DatabaseEntity):
         for xref in self.to_ea(data_ea, XrefsFlags.DATA):
             if xref.is_write:
                 yield xref.from_ea
+
+    def has_any_refs_to(self, ea: ea_t) -> bool:
+        """
+        Check if any references to this address exist.
+
+        This is more efficient than iterating all xrefs when you only need
+        to know if at least one exists.
+
+        Args:
+            ea: Address to check
+
+        Returns:
+            True if any xrefs to this address exist, False otherwise
+
+        Raises:
+            InvalidEAError: If the effective address is invalid
+
+        Example:
+            >>> db = Database.open_current()
+            >>> if not db.xrefs.has_any_refs_to(ea):
+            ...     print("Unreferenced address (dead code/data?)")
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        # Use xrefblk_t to check for any xref
+        xb = ida_xref.xrefblk_t()
+        return cast(bool, xb.first_to(ea, ida_xref.XREF_ALL))
+
+    def has_any_refs_from(self, ea: ea_t) -> bool:
+        """
+        Check if any references from this address exist.
+
+        This is more efficient than iterating all xrefs when you only need
+        to know if at least one exists.
+
+        Args:
+            ea: Address to check
+
+        Returns:
+            True if any xrefs from this address exist, False otherwise
+
+        Raises:
+            InvalidEAError: If the effective address is invalid
+
+        Example:
+            >>> db = Database.open_current()
+            >>> if db.xrefs.has_any_refs_from(insn_ea):
+            ...     print("Instruction references other code/data")
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        # Use xrefblk_t to check for any xref
+        xb = ida_xref.xrefblk_t()
+        return cast(bool, xb.first_from(ea, ida_xref.XREF_ALL))
+
+    def has_code_refs_to(self, ea: ea_t) -> bool:
+        """
+        Check if any code references to this address exist.
+
+        This is useful for identifying unreferenced functions or code blocks.
+
+        Args:
+            ea: Address to check
+
+        Returns:
+            True if any code xrefs to this address exist, False otherwise
+
+        Raises:
+            InvalidEAError: If the effective address is invalid
+
+        Example:
+            >>> db = Database.open_current()
+            >>> if not db.xrefs.has_code_refs_to(func_ea):
+            ...     print("Function is never called (potential dead code)")
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        # Use xrefblk_t to check for code xref
+        xb = ida_xref.xrefblk_t()
+        return cast(bool, xb.first_to(ea, ida_xref.XREF_CODE))
+
+    def has_data_refs_to(self, ea: ea_t) -> bool:
+        """
+        Check if any data references to this address exist.
+
+        This is useful for identifying unused data or global variables.
+
+        Args:
+            ea: Address to check
+
+        Returns:
+            True if any data xrefs to this address exist, False otherwise
+
+        Raises:
+            InvalidEAError: If the effective address is invalid
+
+        Example:
+            >>> db = Database.open_current()
+            >>> if not db.xrefs.has_data_refs_to(data_ea):
+            ...     print("Data is never accessed")
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        # Use xrefblk_t to check for data xref
+        xb = ida_xref.xrefblk_t()
+        return cast(bool, xb.first_to(ea, ida_xref.XREF_DATA))
+
+    def count_refs_to(self, ea: ea_t, flags: XrefsFlags = XrefsFlags.ALL) -> int:
+        """
+        Count cross-references to an address.
+
+        This iterates through all xrefs and counts them. For better performance
+        when you only need to check existence, use has_any_refs_to().
+
+        Args:
+            ea: Target address
+            flags: Filter flags (default: all xrefs)
+
+        Returns:
+            Number of xrefs to this address
+
+        Raises:
+            InvalidEAError: If the effective address is invalid
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Count function callers
+            >>> num_callers = db.xrefs.count_refs_to(func_ea, XrefsFlags.CODE_NOFLOW)
+            >>> print(f"Function has {num_callers} callers")
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        # Count by iterating
+        count = 0
+        for _ in self.to_ea(ea, flags):
+            count += 1
+        return count
+
+    def count_refs_from(self, ea: ea_t, flags: XrefsFlags = XrefsFlags.ALL) -> int:
+        """
+        Count cross-references from an address.
+
+        This iterates through all xrefs and counts them. For better performance
+        when you only need to check existence, use has_any_refs_from().
+
+        Args:
+            ea: Source address
+            flags: Filter flags (default: all xrefs)
+
+        Returns:
+            Number of xrefs from this address
+
+        Raises:
+            InvalidEAError: If the effective address is invalid
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Count instruction references
+            >>> num_refs = db.xrefs.count_refs_from(insn_ea)
+            >>> print(f"Instruction has {num_refs} references")
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        # Count by iterating
+        count = 0
+        for _ in self.from_ea(ea, flags):
+            count += 1
+        return count
+
+    # ========================================================================
+    # LLM-Friendly API Methods
+    # ========================================================================
+
+    def get_refs_to(
+        self, ea: ea_t, kind: Union[XrefKind, str] = XrefKind.ALL
+    ) -> Iterator[Union[XrefInfo, ea_t]]:
+        """
+        Get cross-references to an address (LLM-friendly unified interface).
+
+        This method provides a simplified interface for querying cross-references.
+
+        Args:
+            ea: Target address
+            kind: Filter for reference type. Use XrefKind enum:
+                - XrefKind.ALL: All references (default, returns XrefInfo objects)
+                - XrefKind.CODE: Code references only (returns addresses)
+                - XrefKind.DATA: Data references only (returns addresses)
+                - XrefKind.CALLS: Call references only (returns addresses)
+                - XrefKind.JUMPS: Jump references only (returns addresses)
+                - XrefKind.READS: Read references only (returns addresses)
+                - XrefKind.WRITES: Write references only (returns addresses)
+                String values also accepted for backward compatibility.
+
+        Yields:
+            XrefInfo for XrefKind.ALL, otherwise ea_t addresses
+
+        Raises:
+            InvalidEAError: If the effective address is invalid
+            InvalidParameterError: If kind is not recognized
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Get all references to a function
+            >>> for ref in db.xrefs.get_refs_to(func_ea, XrefKind.ALL):
+            ...     print(f"{ref.from_ea:x} -> {ref.to_ea:x}")
+            >>> # Get just call sites
+            >>> for caller_ea in db.xrefs.get_refs_to(func_ea, XrefKind.CALLS):
+            ...     print(f"Called from 0x{caller_ea:x}")
+        """
+        # Normalize string to enum
+        if isinstance(kind, str):
+            try:
+                kind = XrefKind(kind.lower())
+            except ValueError:
+                raise InvalidParameterError(
+                    'kind',
+                    kind,
+                    f'must be one of: {", ".join(e.value for e in XrefKind)}',
+                )
+
+        if kind == XrefKind.ALL:
+            yield from self.to_ea(ea)
+        elif kind == XrefKind.CODE:
+            yield from self.code_refs_to_ea(ea)
+        elif kind == XrefKind.DATA:
+            yield from self.data_refs_to_ea(ea)
+        elif kind == XrefKind.CALLS:
+            yield from self.calls_to_ea(ea)
+        elif kind == XrefKind.JUMPS:
+            yield from self.jumps_to_ea(ea)
+        elif kind == XrefKind.READS:
+            yield from self.reads_of_ea(ea)
+        elif kind == XrefKind.WRITES:
+            yield from self.writes_to_ea(ea)
+
+    def get_refs_from(
+        self, ea: ea_t, kind: Union[XrefKind, str] = XrefKind.ALL
+    ) -> Iterator[Union[XrefInfo, ea_t]]:
+        """
+        Get cross-references from an address (LLM-friendly unified interface).
+
+        This method provides a simplified interface for querying cross-references.
+
+        Args:
+            ea: Source address
+            kind: Filter for reference type. Use XrefKind enum:
+                - XrefKind.ALL: All references (default, returns XrefInfo objects)
+                - XrefKind.CODE: Code references only (returns addresses)
+                - XrefKind.DATA: Data references only (returns addresses)
+                - XrefKind.CALLS: Call references only (returns addresses)
+                - XrefKind.JUMPS: Jump references only (returns addresses)
+                Note: XrefKind.READS and XrefKind.WRITES are not valid for get_refs_from.
+                String values also accepted for backward compatibility.
+
+        Yields:
+            XrefInfo for XrefKind.ALL, otherwise ea_t addresses
+
+        Raises:
+            InvalidEAError: If the effective address is invalid
+            InvalidParameterError: If kind is not recognized or not valid for this method
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Get all references from an instruction
+            >>> for ref in db.xrefs.get_refs_from(insn_ea, XrefKind.ALL):
+            ...     print(f"{ref.from_ea:x} -> {ref.to_ea:x}")
+            >>> # Get just call targets
+            >>> for target_ea in db.xrefs.get_refs_from(insn_ea, XrefKind.CALLS):
+            ...     print(f"Calls 0x{target_ea:x}")
+        """
+        # Normalize string to enum
+        if isinstance(kind, str):
+            try:
+                kind = XrefKind(kind.lower())
+            except ValueError:
+                raise InvalidParameterError(
+                    'kind',
+                    kind,
+                    f'must be one of: {", ".join(e.value for e in XrefKind)}',
+                )
+
+        if kind == XrefKind.ALL:
+            yield from self.from_ea(ea)
+        elif kind == XrefKind.CODE:
+            yield from self.code_refs_from_ea(ea)
+        elif kind == XrefKind.DATA:
+            yield from self.data_refs_from_ea(ea)
+        elif kind == XrefKind.CALLS:
+            yield from self.calls_from_ea(ea)
+        elif kind == XrefKind.JUMPS:
+            yield from self.jumps_from_ea(ea)
+        else:
+            # READS and WRITES are not valid for get_refs_from
+            raise InvalidParameterError(
+                'kind',
+                kind.value,
+                'must be one of: all, code, data, calls, jumps',
+            )
+
+    def has_refs_to(self, ea: ea_t, kind: Union[XrefKind, str] = XrefKind.ALL) -> bool:
+        """
+        Check if references to an address exist (LLM-friendly unified interface).
+
+        This method provides a simplified interface for checking cross-reference existence.
+
+        Args:
+            ea: Target address
+            kind: Filter for reference type. Use XrefKind enum:
+                - XrefKind.ALL: Any references (default)
+                - XrefKind.CODE: Code references only
+                - XrefKind.DATA: Data references only
+                Note: XrefKind.CALLS, JUMPS, READS, WRITES are not valid for has_refs_to.
+                String values also accepted for backward compatibility.
+
+        Returns:
+            True if references of the specified kind exist
+
+        Raises:
+            InvalidEAError: If the effective address is invalid
+            InvalidParameterError: If kind is not recognized or not valid for this method
+
+        Example:
+            >>> db = Database.open_current()
+            >>> if db.xrefs.has_refs_to(func_ea, XrefKind.CODE):
+            ...     print("Function is called")
+        """
+        # Normalize string to enum
+        if isinstance(kind, str):
+            try:
+                kind = XrefKind(kind.lower())
+            except ValueError:
+                raise InvalidParameterError(
+                    'kind',
+                    kind,
+                    f'must be one of: {", ".join(e.value for e in XrefKind)}',
+                )
+
+        if kind == XrefKind.ALL:
+            return self.has_any_refs_to(ea)
+        elif kind == XrefKind.CODE:
+            return self.has_code_refs_to(ea)
+        elif kind == XrefKind.DATA:
+            return self.has_data_refs_to(ea)
+        else:
+            # CALLS, JUMPS, READS, WRITES are not valid for has_refs_to
+            raise InvalidParameterError(
+                'kind',
+                kind.value,
+                'must be one of: all, code, data',
+            )
+
+    def has_refs_from(self, ea: ea_t, kind: Union[XrefKind, str] = XrefKind.ALL) -> bool:
+        """
+        Check if references from an address exist (LLM-friendly unified interface).
+
+        This method provides a simplified interface for checking cross-reference existence.
+
+        Args:
+            ea: Source address
+            kind: Filter for reference type. Use XrefKind enum:
+                - XrefKind.ALL: Any references (default)
+                Note: Only XrefKind.ALL is currently supported for has_refs_from.
+                String values also accepted for backward compatibility.
+
+        Returns:
+            True if references of the specified kind exist
+
+        Raises:
+            InvalidEAError: If the effective address is invalid
+            InvalidParameterError: If kind is not recognized or not valid for this method
+
+        Example:
+            >>> db = Database.open_current()
+            >>> if db.xrefs.has_refs_from(insn_ea, XrefKind.ALL):
+            ...     print("Instruction has outgoing references")
+        """
+        # Normalize string to enum
+        if isinstance(kind, str):
+            try:
+                kind = XrefKind(kind.lower())
+            except ValueError:
+                raise InvalidParameterError(
+                    'kind',
+                    kind,
+                    f'must be one of: {", ".join(e.value for e in XrefKind)}',
+                )
+
+        if kind == XrefKind.ALL:
+            return self.has_any_refs_from(ea)
+        else:
+            # Only ALL is valid for has_refs_from
+            raise InvalidParameterError(
+                'kind',
+                kind.value,
+                'must be one of: all',
+            )
+
+    # ========================================================================
+    # Xref Mutation Methods
+    # ========================================================================
+
+    def add_code_xref(self, from_ea: ea_t, to_ea: ea_t, xref_type: XrefType) -> None:
+        """
+        Add a code cross-reference between two addresses.
+
+        Args:
+            from_ea: Source address (typically an instruction).
+            to_ea: Target address (typically a function or code label).
+            xref_type: Type of code reference (CALL_NEAR, CALL_FAR, JUMP_NEAR, etc.).
+
+        Raises:
+            InvalidEAError: If either address is invalid.
+            InvalidParameterError: If xref_type is not a code reference type.
+
+        Example:
+            >>> db.xrefs.add_code_xref(call_insn_ea, target_func_ea, XrefType.CALL_NEAR)
+        """
+        if not self.database.is_valid_ea(from_ea):
+            raise InvalidEAError(from_ea)
+        if not self.database.is_valid_ea(to_ea):
+            raise InvalidEAError(to_ea)
+
+        if not xref_type.is_code_ref():
+            raise InvalidParameterError(
+                'xref_type', xref_type, 'must be a code reference type'
+            )
+
+        ida_xref.add_cref(from_ea, to_ea, xref_type)
+
+    def add_data_xref(self, from_ea: ea_t, to_ea: ea_t, xref_type: XrefType) -> None:
+        """
+        Add a data cross-reference between two addresses.
+
+        Args:
+            from_ea: Source address (typically code that references data).
+            to_ea: Target address (typically a data location).
+            xref_type: Type of data reference (READ, WRITE, OFFSET, etc.).
+
+        Raises:
+            InvalidEAError: If either address is invalid.
+            InvalidParameterError: If xref_type is not a data reference type.
+
+        Example:
+            >>> db.xrefs.add_data_xref(insn_ea, global_var_ea, XrefType.READ)
+        """
+        if not self.database.is_valid_ea(from_ea):
+            raise InvalidEAError(from_ea)
+        if not self.database.is_valid_ea(to_ea):
+            raise InvalidEAError(to_ea)
+
+        if not xref_type.is_data_ref():
+            raise InvalidParameterError(
+                'xref_type', xref_type, 'must be a data reference type'
+            )
+
+        ida_xref.add_dref(from_ea, to_ea, xref_type)
+
+    def delete_xref(self, from_ea: ea_t, to_ea: ea_t) -> bool:
+        """
+        Delete a cross-reference between two addresses.
+
+        Removes both code and data xrefs from from_ea to to_ea.
+
+        Args:
+            from_ea: Source address of the xref.
+            to_ea: Target address of the xref.
+
+        Returns:
+            True if an xref was found and deleted, False if no xref existed.
+
+        Raises:
+            InvalidEAError: If either address is invalid.
+
+        Example:
+            >>> db.xrefs.delete_xref(from_ea, to_ea)
+        """
+        if not self.database.is_valid_ea(from_ea):
+            raise InvalidEAError(from_ea)
+        if not self.database.is_valid_ea(to_ea):
+            raise InvalidEAError(to_ea)
+
+        # Check if any xref exists before deletion
+        had_xref = any(
+            xref.from_ea == from_ea
+            for xref in self.to_ea(to_ea)
+        )
+
+        # Try deleting code xref
+        ida_xref.del_cref(from_ea, to_ea, 0)
+
+        # Also try deleting data xref
+        ida_xref.del_dref(from_ea, to_ea)
+
+        # Check if xref still exists after deletion
+        still_has_xref = any(
+            xref.from_ea == from_ea
+            for xref in self.to_ea(to_ea)
+        )
+
+        # Return True if we had an xref and it's now gone
+        return had_xref and not still_has_xref

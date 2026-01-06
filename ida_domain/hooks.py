@@ -2387,7 +2387,7 @@ class ProcessorHooks(_BaseHooks, IDP_Hooks):
         Returns:
             PyObject*: 1 if success, 0 if not implemented or failed.
         """
-        return 0
+        return IDP_Hooks.ev_decorate_name(self, name, mangle, cc, optional_type)
 
     def ev_arch_changed(self) -> int:
         """
@@ -4190,12 +4190,12 @@ class DecompilerHooks(_BaseHooks, Hexrays_Hooks):
         """
         return Hexrays_Hooks.flowchart(self, fc, mba, reachable_blocks, decomp_flags)
 
-    def stkpnts(self, mba: 'mba_t', *sps: 'stkpnts*t *') -> int:
+    def stkpnts(self, mba: 'mba_t', *sps: 'stkpnts_t *') -> int:
         """
         SP change points have been calculated.
         Args:
             mba (mba_t): The microcode basic block array.
-            *sps (stkpnts*t *): Stack pointer change points.
+            *sps (stkpnts_t *): Stack pointer change points.
         Returns:
             int: Microcode error codes code.
                 This event is generated for each inlined range as well.

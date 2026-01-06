@@ -8,7 +8,7 @@ import ida_bytes
 import ida_nalt
 import ida_strlist
 from ida_idaapi import ea_t
-from typing_extensions import TYPE_CHECKING, Iterator, Optional, Tuple, Union
+from typing_extensions import TYPE_CHECKING, Iterator, List, Optional, Tuple, Union, cast
 
 from .base import (
     DatabaseEntity,
@@ -16,6 +16,7 @@ from .base import (
     InvalidParameterError,
     check_db_open,
     decorate_all_methods,
+    deprecated,
 )
 
 if TYPE_CHECKING:
@@ -68,14 +69,16 @@ class StringItem:
         Returns internal IDA string encoding, e.g. 'iso-8859-1'.
         Note that retrieved string contents will always be utf-8 encoded.
         """
-        return ida_nalt.encoding_from_strtype(self.internal_type)
+        return cast(str, ida_nalt.encoding_from_strtype(self.internal_type))
 
     @property
     def contents(self) -> bytes:
         """
         Returns utf-8 encoded string contents.
         """
-        return ida_bytes.get_strlit_contents(self.address, self.length, self.internal_type)
+        return cast(
+            bytes, ida_bytes.get_strlit_contents(self.address, self.length, self.internal_type)
+        )
 
     def __str__(self) -> str:
         return self.contents.decode('utf-8')
@@ -116,33 +119,47 @@ class Strings(DatabaseEntity):
         return self.get_all()
 
     def __getitem__(self, index: int) -> StringItem:
-        return self.get_at_index(index)
+        result = self.get_by_index(index)
+        if result is None:
+            raise IndexError(f'String index {index} out of range [0, {len(self)})')
+        return result
 
     def __len__(self) -> int:
         """
         Returns the total number of extracted strings.
         """
-        return ida_strlist.get_strlist_qty()
+        return cast(int, ida_strlist.get_strlist_qty())
 
-    def get_at_index(self, index: int) -> StringItem:
+    def get_by_index(self, index: int) -> Optional[StringItem]:
         """
-        Retrieves the string at the specified index.
+        Get string by index.
 
         Args:
-            index: Index of the string to retrieve.
+            index: The index of the string.
 
         Returns:
-            A StringItem object at the given index.
-            In case of error, returns None.
+            The StringItem if found, None if index is out of range.
         """
-        if 0 <= index < len(self):
-            if ida_strlist.get_strlist_item(self._si, index):
-                return StringItem(
-                    address=self._si.ea,
-                    length=self._si.length,
-                    internal_type=self._si.type,
-                )
-        raise IndexError(f'String index {index} out of range [0, {len(self)})')
+        if index < 0 or index >= len(self):
+            return None
+        if ida_strlist.get_strlist_item(self._si, index):
+            return StringItem(
+                address=self._si.ea,
+                length=self._si.length,
+                internal_type=self._si.type,
+            )
+        return None
+
+    @deprecated("Use get_by_index() instead")
+    def get_at_index(self, index: int) -> StringItem:
+        """Deprecated: Use get_by_index() instead.
+
+        Raises IndexError for compatibility with old behavior.
+        """
+        result = self.get_by_index(index)
+        if result is None:
+            raise IndexError(f'String index {index} out of range [0, {len(self)})')
+        return result
 
     def get_at(self, ea: ea_t) -> Optional[StringItem]:
         """
@@ -174,7 +191,64 @@ class Strings(DatabaseEntity):
         Returns:
             An iterator over all strings.
         """
-        return (self.get_at_index(index) for index in range(0, ida_strlist.get_strlist_qty()))
+        count = ida_strlist.get_strlist_qty()
+        for i in range(count):
+            item = self.get_by_index(i)
+            if item is not None:
+                yield item
+
+    def get_page(self, offset: int = 0, limit: int = 100) -> List[StringItem]:
+        """
+        Get a page of strings for random access patterns.
+
+        Unlike get_all() which returns an iterator, this returns a list
+        suitable for indexing and length checks. Useful for pagination in UIs.
+
+        Args:
+            offset: Number of strings to skip (default: 0).
+            limit: Maximum number of strings to return (default: 100).
+
+        Returns:
+            List of strings, may be shorter than limit if fewer remain.
+
+        Example:
+            >>> # Display page 3 of strings (25 per page)
+            >>> page = db.strings.get_page(offset=50, limit=25)
+            >>> for s in page:
+            ...     print(str(s))
+        """
+        import itertools
+
+        return list(itertools.islice(self.get_all(), offset, offset + limit))
+
+    def get_chunked(self, chunk_size: int = 1000) -> Iterator[List[StringItem]]:
+        """
+        Yield strings in chunks for batch processing.
+
+        Useful for processing large numbers of strings with periodic
+        progress updates or commits.
+
+        Args:
+            chunk_size: Maximum strings per chunk (default: 1000).
+
+        Yields:
+            Lists of strings, each at most chunk_size items.
+
+        Example:
+            >>> # Process in batches with progress
+            >>> for i, chunk in enumerate(db.strings.get_chunked(100)):
+            ...     print(f"Processing batch {i+1}: {len(chunk)} strings")
+            ...     for s in chunk:
+            ...         process(s)
+        """
+        chunk: List[StringItem] = []
+        for s in self.get_all():
+            chunk.append(s)
+            if len(chunk) >= chunk_size:
+                yield chunk
+                chunk = []
+        if chunk:
+            yield chunk
 
     def get_between(self, start_ea: ea_t, end_ea: ea_t) -> Iterator[StringItem]:
         """

@@ -7,7 +7,7 @@ from typing import Any
 import ida_gdl
 from ida_gdl import qbasic_block_t, qflow_chart_t
 from ida_ua import insn_t
-from typing_extensions import TYPE_CHECKING, Iterator, Optional
+from typing_extensions import TYPE_CHECKING, Iterator, Optional, Tuple, cast
 
 from .base import (
     DatabaseEntity,
@@ -23,6 +23,7 @@ if TYPE_CHECKING:
 
     from .database import Database
 
+__all__ = ['FlowChart', 'BasicBlock', 'FlowChartFlags']
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +37,7 @@ class FlowChartFlags(IntFlag):
 
 
 @decorate_all_methods(check_db_open)
-class BasicBlock(ida_gdl.BasicBlock, DatabaseEntity):
+class BasicBlock(ida_gdl.BasicBlock, DatabaseEntity):  # type: ignore[misc]
     """
     Provides access to basic block properties and navigation
     between connected blocks within a control flow graph.
@@ -62,11 +63,11 @@ class BasicBlock(ida_gdl.BasicBlock, DatabaseEntity):
 
     def get_successors(self) -> Iterator[BasicBlock]:
         """Iterator over successor blocks."""
-        return self.succs()
+        return cast(Iterator[BasicBlock], self.succs())
 
     def get_predecessors(self) -> Iterator[BasicBlock]:
         """Iterator over predecessor blocks."""
-        return self.preds()
+        return cast(Iterator[BasicBlock], self.preds())
 
     def count_successors(self) -> int:
         """Count the number of successor blocks."""
@@ -76,7 +77,7 @@ class BasicBlock(ida_gdl.BasicBlock, DatabaseEntity):
         """Count the number of predecessor blocks."""
         return sum(1 for _ in self.preds())
 
-    def get_instructions(self) -> Optional[Iterator[insn_t]]:
+    def get_instructions(self) -> Iterator[insn_t]:
         """
         Retrieves all instructions within this basic block.
 
@@ -87,7 +88,7 @@ class BasicBlock(ida_gdl.BasicBlock, DatabaseEntity):
 
 
 @decorate_all_methods(check_db_open)
-class FlowChart(ida_gdl.FlowChart, DatabaseEntity):
+class FlowChart(ida_gdl.FlowChart, DatabaseEntity):  # type: ignore[misc]
     """
     Provides analysis and iteration over basic blocks within
     functions or address ranges.
@@ -96,8 +97,8 @@ class FlowChart(ida_gdl.FlowChart, DatabaseEntity):
     def __init__(
         self,
         database: Optional[Database],
-        func: func_t = None,
-        bounds: Optional[tuple[ea_t, ea_t]] = None,
+        func: Optional[func_t] = None,
+        bounds: Optional[Tuple[ea_t, ea_t]] = None,
         flags: FlowChartFlags = FlowChartFlags.NONE,
     ) -> None:
         """
@@ -161,4 +162,4 @@ class FlowChart(ida_gdl.FlowChart, DatabaseEntity):
         Returns:
             int: Number of basic blocks.
         """
-        return self.size
+        return cast(int, self.size)

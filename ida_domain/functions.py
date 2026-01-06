@@ -14,7 +14,7 @@ from ida_funcs import func_t
 from ida_idaapi import BADADDR, ea_t
 from ida_typeinf import tinfo_t
 from ida_ua import insn_t
-from typing_extensions import TYPE_CHECKING, Any, Iterator, List, Optional
+from typing_extensions import TYPE_CHECKING, Any, Iterator, List, Optional, Tuple, cast
 
 import ida_domain
 import ida_domain.flowchart
@@ -25,6 +25,7 @@ from .base import (
     InvalidParameterError,
     check_db_open,
     decorate_all_methods,
+    deprecated,
 )
 from .flowchart import FlowChart, FlowChartFlags
 
@@ -251,7 +252,7 @@ _ASSIGNMENT_OPS = (
 )
 
 
-class _LVarRefsVisitor(ida_hexrays.ctree_parentee_t):
+class _LVarRefsVisitor(ida_hexrays.ctree_parentee_t):  # type: ignore[misc]
     """Visitor to find references to a specific local variable in pseudocode.
 
     Uses ctree_parentee_t which properly maintains parent information.
@@ -359,7 +360,7 @@ class _LVarRefsVisitor(ida_hexrays.ctree_parentee_t):
                 stack.append(current.z)
         return False
 
-    def _find_assignment_in_ancestors(self) -> tuple:
+    def _find_assignment_in_ancestors(self) -> Tuple[Any, bool]:
         """Find an assignment operator in the ancestor chain.
 
         Traverses from the immediate parent upward through the ancestor chain
@@ -550,7 +551,40 @@ class Functions(DatabaseEntity):
         Returns:
             int: The number of functions in the program.
         """
-        return ida_funcs.get_func_qty()
+        return cast(int, ida_funcs.get_func_qty())
+
+    def count(self) -> int:
+        """
+        Get the total number of functions in the database.
+
+        Returns:
+            int: The total function count.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> print(f"Database has {db.functions.count()} functions")
+        """
+        return len(self)
+
+    def exists_at(self, ea: ea_t) -> bool:
+        """
+        Check if a function exists at the given address.
+
+        Args:
+            ea: Address to check.
+
+        Returns:
+            bool: True if a function exists at or contains the address,
+                  False if no function exists or if the address is invalid.
+
+        Example:
+            >>> if db.functions.exists_at(0x401000):
+            ...     func = db.functions.get_at(0x401000)
+        """
+        try:
+            return self.get_at(ea) is not None
+        except InvalidEAError:
+            return False
 
     def get_between(self, start_ea: ea_t, end_ea: ea_t) -> Iterator[func_t]:
         """
@@ -586,6 +620,29 @@ class Functions(DatabaseEntity):
             if start_ea <= func.start_ea < end_ea:
                 yield func
 
+    def get_in_range(self, start: ea_t, end: ea_t) -> Iterator[func_t]:
+        """
+        Get functions in the specified address range.
+
+        This is an LLM-friendly alias for get_between().
+
+        Args:
+            start: Start address of the range (inclusive).
+            end: End address of the range (exclusive).
+
+        Yields:
+            Function objects whose start address falls within the specified range.
+
+        Raises:
+            InvalidEAError: If the start/end are specified but they are not
+            in the database range.
+
+        Example:
+            >>> for func in db.functions.get_in_range(0x401000, 0x410000):
+            ...     print(db.functions.get_name(func))
+        """
+        return self.get_between(start, end)
+
     def get_all(self) -> Iterator[func_t]:
         """
         Retrieves all functions in the database.
@@ -594,6 +651,59 @@ class Functions(DatabaseEntity):
             An iterator over all functions in the database.
         """
         return self.get_between(self.database.minimum_ea, self.database.maximum_ea)
+
+    def get_page(self, offset: int = 0, limit: int = 100) -> List[func_t]:
+        """
+        Get a page of functions for random access patterns.
+
+        Unlike get_all() which returns an iterator, this returns a list
+        suitable for indexing and length checks. Useful for pagination in UIs.
+
+        Args:
+            offset: Number of functions to skip (default: 0).
+            limit: Maximum number of functions to return (default: 100).
+
+        Returns:
+            List of functions, may be shorter than limit if fewer remain.
+
+        Example:
+            >>> # Display page 3 of functions (25 per page)
+            >>> page = db.functions.get_page(offset=50, limit=25)
+            >>> for func in page:
+            ...     print(db.functions.get_name(func))
+        """
+        import itertools
+
+        return list(itertools.islice(self.get_all(), offset, offset + limit))
+
+    def get_chunked(self, chunk_size: int = 1000) -> Iterator[List[func_t]]:
+        """
+        Yield functions in chunks for batch processing.
+
+        Useful for processing large numbers of functions with periodic
+        progress updates or commits.
+
+        Args:
+            chunk_size: Maximum functions per chunk (default: 1000).
+
+        Yields:
+            Lists of functions, each at most chunk_size items.
+
+        Example:
+            >>> # Process in batches with progress
+            >>> for i, chunk in enumerate(db.functions.get_chunked(100)):
+            ...     print(f"Processing batch {i+1}: {len(chunk)} functions")
+            ...     for func in chunk:
+            ...         process(func)
+        """
+        chunk: List[func_t] = []
+        for func in self.get_all():
+            chunk.append(func)
+            if len(chunk) >= chunk_size:
+                yield chunk
+                chunk = []
+        if chunk:
+            yield chunk
 
     def get_at(self, ea: ea_t) -> Optional[func_t]:
         """
@@ -632,7 +742,7 @@ class Functions(DatabaseEntity):
             raise InvalidParameterError('name', name, 'The name parameter cannot be empty')
 
         flags = ida_name.SN_NOCHECK if auto_correct else ida_name.SN_CHECK
-        return ida_name.set_name(func.start_ea, name, flags)
+        return cast(bool, ida_name.set_name(func.start_ea, name, flags))
 
     def get_flowchart(
         self, func: func_t, flags: FlowChartFlags = FlowChartFlags.NONE
@@ -748,7 +858,7 @@ class Functions(DatabaseEntity):
             The function signature as a string,
             or empty string if unavailable or function is invalid.
         """
-        return ida_typeinf.idc_get_type(func.start_ea)
+        return cast(str, ida_typeinf.idc_get_type(func.start_ea))
 
     def get_name(self, func: func_t) -> str:
         """
@@ -763,7 +873,7 @@ class Functions(DatabaseEntity):
         name = self.database.names.get_at(func.start_ea)
         return name if name is not None else ''
 
-    def create(self, ea: ea_t) -> bool:
+    def create_at(self, ea: ea_t) -> bool:
         """
         Creates a new function at the specified address.
 
@@ -778,7 +888,12 @@ class Functions(DatabaseEntity):
         """
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
-        return ida_funcs.add_func(ea)
+        return cast(bool, ida_funcs.add_func(ea))
+
+    @deprecated("Use create_at() instead")
+    def create(self, ea: ea_t) -> bool:
+        """Deprecated: Use create_at() instead."""
+        return self.create_at(ea)
 
     def remove(self, ea: ea_t) -> bool:
         """
@@ -795,9 +910,31 @@ class Functions(DatabaseEntity):
         """
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
-        return ida_funcs.del_func(ea)
+        return cast(bool, ida_funcs.del_func(ea))
 
-    def get_next(self, ea: int) -> Optional[func_t]:
+    def delete(self, ea: ea_t) -> bool:
+        """
+        Deletes the function at the specified address.
+
+        This is an LLM-friendly alias for remove().
+
+        Args:
+            ea: The effective address of the function to delete.
+
+        Returns:
+            True if the function was successfully deleted, False otherwise.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> if db.functions.delete(0x401000):
+            ...     print("Function deleted successfully")
+        """
+        return self.remove(ea)
+
+    def get_next(self, ea: ea_t) -> Optional[func_t]:
         """
         Get the next function after the given address.
 
@@ -814,7 +951,66 @@ class Functions(DatabaseEntity):
             raise InvalidEAError(ea)
         return ida_funcs.get_next_func(ea)
 
-    def get_chunk_at(self, ea: int) -> Optional[func_t]:
+    def get_previous(self, ea: ea_t) -> Optional[func_t]:
+        """
+        Get the previous function before the given address.
+
+        Args:
+            ea: Address to search from
+
+        Returns:
+            Previous function before ea, or None if no previous function
+
+        Raises:
+            InvalidEAError: If the effective address is invalid
+
+        Example:
+            >>> # Get previous function
+            >>> current_func = db.functions.get_at(0x402000)
+            >>> if current_func:
+            ...     prev_func = db.functions.get_previous(current_func.start_ea)
+            ...     if prev_func:
+            ...         print(f"Previous function: {db.functions.get_name(prev_func)}")
+        """
+        if not self.database.is_valid_ea(ea, strict_check=False):
+            raise InvalidEAError(ea)
+        return ida_funcs.get_prev_func(ea)
+
+
+
+
+
+
+    def reanalyze(self, func: func_t) -> bool:
+        """
+        Force function re-analysis.
+
+        Triggers a complete re-analysis of the function, including control flow,
+        stack analysis, and type propagation.
+
+        Args:
+            func: The function to reanalyze
+
+        Returns:
+            True if reanalysis was initiated, False otherwise
+
+        Example:
+            >>> # Reanalyze function after patching
+            >>> func = db.functions.get_at(0x401000)
+            >>> if func:
+            ...     # Patch some bytes
+            ...     db.bytes.patch_bytes(0x401050, b'\\x90\\x90\\x90')
+            ...
+            ...     # Trigger reanalysis
+            ...     if db.functions.reanalyze(func):
+            ...         print("Function reanalysis initiated")
+        """
+        # Call reanalyze_function with default parameters
+        # Using BADADDR for start/end means analyze entire function
+        ida_funcs.reanalyze_function(func, BADADDR, BADADDR, False)
+        return True
+
+    def get_chunk_at(self, ea: ea_t) -> Optional[func_t]:
         """
         Get function chunk at exact address.
 
@@ -841,7 +1037,7 @@ class Functions(DatabaseEntity):
         Returns:
             True if this is an entry chunk, False otherwise
         """
-        return ida_funcs.is_func_entry(chunk)
+        return cast(bool, ida_funcs.is_func_entry(chunk))
 
     def is_tail_chunk(self, chunk: func_t) -> bool:
         """
@@ -853,7 +1049,7 @@ class Functions(DatabaseEntity):
         Returns:
             True if this is a tail chunk, False otherwise
         """
-        return ida_funcs.is_func_tail(chunk)
+        return cast(bool, ida_funcs.is_func_tail(chunk))
 
     def get_flags(self, func: func_t) -> FunctionFlags:
         """
@@ -877,7 +1073,7 @@ class Functions(DatabaseEntity):
         Returns:
             True if function is far, False otherwise
         """
-        return func.is_far()
+        return cast(bool, func.is_far())
 
     def does_return(self, func: func_t) -> bool:
         """
@@ -889,7 +1085,7 @@ class Functions(DatabaseEntity):
         Returns:
             True if function returns, False if it's noreturn
         """
-        return func.does_return()
+        return cast(bool, func.does_return())
 
     def get_callers(self, func: func_t) -> List[func_t]:
         """
@@ -1019,6 +1215,8 @@ class Functions(DatabaseEntity):
 
         return TailInfo(owner_ea=chunk.owner, owner_name=owner_name)
 
+
+
     def get_data_items(self, func: func_t) -> Iterator[ea_t]:
         """
         Iterate over data items within the function.
@@ -1093,7 +1291,7 @@ class Functions(DatabaseEntity):
         Returns:
             True if successful, False otherwise.
         """
-        return ida_funcs.set_func_cmt(func, comment, repeatable)
+        return cast(bool, ida_funcs.set_func_cmt(func, comment, repeatable))
 
     def get_comment(self, func: func_t, repeatable: bool = False) -> str:
         """
@@ -1182,14 +1380,12 @@ class Functions(DatabaseEntity):
             name: Variable name to search for.
 
         Returns:
-            LocalVariable if found
+            The LocalVariable if found, None otherwise.
 
         Raises:
             RuntimeError: If decompilation fails for the function.
-            KeyError: If the variable is not found
         """
-        lvars = self.get_local_variables(func)
-        for lvar in lvars:
+        for lvar in self.get_local_variables(func):
             if lvar.name == name:
                 return lvar
-        raise KeyError(f'Variable {name} could not be located')
+        return None

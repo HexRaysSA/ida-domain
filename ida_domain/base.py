@@ -1,7 +1,48 @@
+"""
+Base classes and utilities for ida-domain entities.
+
+API Return Conventions
+----------------------
+
+The ida-domain API follows these return conventions:
+
+**get_* methods:**
+- Return `Optional[T]` - the item if found, or None if not found
+- Some return `Iterator[T]` when multiple items are possible at one location
+- Never raise exceptions for "not found" cases
+- Raise `InvalidEAError` for invalid addresses
+
+**create_* methods:**
+- Most return `bool` - True on success, False on failure
+- Factory methods may return the created object instead
+- May raise exceptions for invalid parameters
+
+**set_* methods:**
+- Most return `bool` - True on success, False on failure
+- Some return `None` (rely on exceptions for failure)
+
+**has_* / is_* methods:**
+- Return `bool` - True if condition is met, False otherwise
+- Raise `InvalidEAError` for invalid addresses
+
+**count_* methods:**
+- Return `int` - the count (0 if none found)
+- Raise `InvalidEAError` for invalid addresses
+
+Example:
+    >>> func = db.functions.get_at(ea)  # Returns Optional[func_t]
+    >>> if func is None:
+    ...     print("No function at address")
+    >>>
+    >>> success = db.bytes.create_dword_at(ea)  # Returns bool
+    >>> if not success:
+    ...     print("Failed to create dword")
+"""
 from __future__ import annotations
 
 import functools
 import logging
+import warnings
 from collections.abc import Callable
 
 from ida_idaapi import ea_t
@@ -102,6 +143,31 @@ def decorate_all_methods(decorator: Callable[[F], F]) -> Callable[[C], C]:
         return cls
 
     return decorate
+
+
+def deprecated(reason: str) -> Callable[[F], F]:
+    """
+    Decorator to mark functions as deprecated.
+
+    Args:
+        reason: Message explaining what to use instead.
+
+    Example:
+        @deprecated("Use get_in_range instead")
+        def get_between(self, start, end):
+            ...
+    """
+    def decorator(func: F) -> F:
+        @functools.wraps(func)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            warnings.warn(
+                f"{func.__qualname__} is deprecated. {reason}",
+                DeprecationWarning,
+                stacklevel=2
+            )
+            return func(*args, **kwargs)
+        return cast(F, wrapper)
+    return decorator
 
 
 def check_db_open(fn: Callable[P, R]) -> Callable[P, R]:

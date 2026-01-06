@@ -1,0 +1,310 @@
+"""Tests for Functions entity - navigation methods."""
+
+import os
+import tempfile
+
+import pytest
+
+import ida_domain
+from ida_domain.base import InvalidEAError
+from ida_domain.database import IdaCommandOptions
+
+
+@pytest.fixture(scope='module')
+def functions_test_setup():
+    """Setup for Functions tests - prepares tiny_asm.bin database."""
+    idb_path = os.path.join(tempfile.gettempdir(), 'api_tests_work_dir', 'tiny_asm.bin')
+    os.makedirs(os.path.dirname(idb_path), exist_ok=True)
+
+    # Copy tiny_asm.bin from test resources
+    import shutil
+
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    src_path = os.path.join(current_dir, 'resources', 'tiny_asm.bin')
+    shutil.copy2(src_path, idb_path)
+
+    yield idb_path
+
+    # Cleanup is handled by temp directory
+
+
+@pytest.fixture(scope='function')
+def test_env(functions_test_setup):
+    """Opens tiny_asm database for each test."""
+    ida_options = IdaCommandOptions(new_database=True, auto_analysis=True)
+    db = ida_domain.Database.open(path=functions_test_setup, args=ida_options, save_on_close=False)
+    yield db
+    db.close()
+
+
+class TestFunctionsGetPrevious:
+    """Tests for get_previous() method."""
+
+    def test_get_previous_from_second_function_returns_first(self, test_env):
+        """
+        Test that get_previous() returns the previous function in the binary.
+
+        RATIONALE: This validates that get_previous() correctly navigates backward
+        through functions in the IDA database. In tiny_asm.bin, we have multiple
+        functions in a known order (_start, test_all_operand_types, add_numbers,
+        etc.). By finding a function and calling get_previous(), we should get the
+        preceding function in memory order. This is essential for reverse iteration
+        through function lists and analyzing call hierarchies.
+        """
+        db = test_env
+
+        # Get all functions in order
+        all_funcs = list(db.functions.get_all())
+        assert len(all_funcs) >= 2, 'Need at least 2 functions for this test'
+
+        # Take the second function and find its predecessor
+        second_func = all_funcs[1]
+        prev_func = db.functions.get_previous(second_func.start_ea)
+
+        # The previous function should be the first function
+        assert prev_func is not None
+        assert prev_func.start_ea == all_funcs[0].start_ea
+
+    def test_get_previous_from_first_function_returns_none(self, test_env):
+        """
+        Test that get_previous() returns None when called on the first function.
+
+        RATIONALE: Boundary condition testing is critical for navigation methods.
+        When we're at the first function in the database, there is no previous
+        function, so get_previous() should return None rather than throwing an
+        exception or returning invalid data. This ensures callers can reliably
+        check for the start of the function list.
+        """
+        db = test_env
+
+        # Get the first function
+        all_funcs = list(db.functions.get_all())
+        first_func = all_funcs[0]
+
+        # Get previous from first function should be None
+        prev_func = db.functions.get_previous(first_func.start_ea)
+        assert prev_func is None
+
+    def test_get_previous_with_invalid_ea_raises_error(self, test_env):
+        """
+        Test that get_previous() raises InvalidEAError for invalid addresses.
+
+        RATIONALE: Input validation is crucial for API robustness. Passing an
+        address outside the valid database range (like 0xFFFFFFFF) should be
+        detected early and raise a clear exception. This prevents undefined
+        behavior in the underlying IDA API and gives callers clear error feedback.
+        """
+        db = test_env
+
+        with pytest.raises(InvalidEAError):
+            db.functions.get_previous(0xFFFFFFFFFFFFFFFF)
+
+    def test_get_previous_backward_iteration(self, test_env):
+        """
+        Test backward iteration through all functions using get_previous().
+
+        RATIONALE: This validates that get_previous() can be used reliably for
+        reverse iteration, which is a common pattern when analyzing functions
+        from the end of a binary backwards. We start from the last function
+        and walk backwards, verifying we visit all functions and end at None.
+        This ensures the method integrates correctly with the database's
+        function ordering.
+        """
+        db = test_env
+
+        # Get all functions to know the expected order
+        all_funcs = list(db.functions.get_all())
+
+        # Start from the last function and iterate backwards
+        current_ea = all_funcs[-1].end_ea
+        visited_count = 0
+
+        while True:
+            func = db.functions.get_previous(current_ea)
+            if func is None:
+                break
+            visited_count += 1
+            current_ea = func.start_ea
+
+        # Should have visited all functions
+        assert visited_count == len(all_funcs)
+
+
+class TestFunctionsReanalyze:
+    """Tests for reanalyze() method."""
+
+    def test_reanalyze_executes_without_error(self, test_env):
+        """
+        Test that reanalyze() successfully triggers complete function reanalysis.
+
+        RATIONALE: reanalyze() performs a more comprehensive reanalysis than update(),
+        including control flow, stack analysis, and type propagation. This is useful
+        after significant code modifications or when IDA's initial analysis was
+        incomplete. This test validates that reanalyze() can be called on a function
+        and returns True, indicating the reanalysis was initiated. The method should
+        handle the underlying IDA API call correctly and always return successfully.
+        """
+        db = test_env
+
+        # Get a function
+        all_funcs = list(db.functions.get_all())
+        assert len(all_funcs) > 0, 'Need at least one function for test'
+
+        func = all_funcs[0]
+
+        # Call reanalyze
+        result = db.functions.reanalyze(func)
+
+        # Should return True (indicating reanalysis was initiated)
+        assert result is True
+
+    def test_reanalyze_on_multiple_functions(self, test_env):
+        """
+        Test that reanalyze() works correctly when called on multiple functions.
+
+        RATIONALE: In practice, users may need to reanalyze multiple functions in
+        a loop, for example after applying global patches or signature changes.
+        This test validates that reanalyze() can be called sequentially on different
+        functions without interference or errors. Each call should successfully
+        initiate reanalysis for its target function independently.
+        """
+        db = test_env
+
+        # Get multiple functions
+        all_funcs = list(db.functions.get_all())
+        assert len(all_funcs) >= 2, 'Need at least 2 functions for test'
+
+        # Reanalyze first two functions
+        for i in range(min(2, len(all_funcs))):
+            func = all_funcs[i]
+            result = db.functions.reanalyze(func)
+            assert result is True
+
+class TestFunctionsCount:
+    """Tests for count() method."""
+
+    def test_functions_count(self, test_env):
+        """Test count() returns total function count."""
+        db = test_env
+        count = db.functions.count()
+        assert isinstance(count, int)
+        assert count >= 0
+        # Should match len()
+        assert count == len(db.functions)
+
+
+class TestFunctionsExistsAt:
+    """Tests for exists_at() method."""
+
+    def test_functions_exists_at(self, test_env):
+        """Test exists_at() checks if function exists."""
+        db = test_env
+        # Get a known function address
+        func = next(iter(db.functions.get_all()), None)
+        if func:
+            assert db.functions.exists_at(func.start_ea) is True
+        # Non-function address should return False
+        assert db.functions.exists_at(0xDEADBEEF) is False
+
+
+class TestFunctionsGetInRange:
+    """Tests for get_in_range() method."""
+
+    def test_functions_get_in_range_alias(self, test_env):
+        """Test get_in_range() is alias for get_between()."""
+        db = test_env
+        start = db.minimum_ea
+        end = db.maximum_ea
+
+        between_funcs = list(db.functions.get_between(start, end))
+        range_funcs = list(db.functions.get_in_range(start, end))
+
+        assert len(between_funcs) == len(range_funcs)
+        for f1, f2 in zip(between_funcs, range_funcs):
+            assert f1.start_ea == f2.start_ea
+
+
+class TestFunctionsDelete:
+    """Tests for delete() method."""
+
+    def test_functions_delete_is_alias_for_remove(self, test_env):
+        """
+        Test that delete() is a functional alias for remove().
+
+        RATIONALE: The delete() method should provide identical behavior
+        to remove() for consistency with common programming patterns.
+        """
+        # Find an existing function to test with
+        all_funcs = list(test_env.functions.get_all())
+        assert len(all_funcs) > 0, 'Test binary should have at least one function'
+
+        # Use the last function as our test candidate
+        test_func = all_funcs[-1]
+        test_ea = test_func.start_ea
+
+        # Remove the existing function so we can re-create it
+        removed = test_env.functions.remove(test_ea)
+        assert removed, 'Should be able to remove existing function'
+
+        # Re-create the function
+        created = test_env.functions.create(test_ea)
+        assert created, 'Should be able to re-create function at same address'
+
+        # Verify function exists
+        assert test_env.functions.exists_at(test_ea), (
+            "Created function should exist before deletion"
+        )
+
+        # Test delete() method
+        result = test_env.functions.delete(test_ea)
+        assert result is True, "delete() should return True for successful deletion"
+
+        # Verify function was deleted
+        assert not test_env.functions.exists_at(test_ea), (
+            "Function should not exist after deletion"
+        )
+
+        # Verify delete() and remove() have identical behavior
+        # (both should gracefully handle deleting non-existent function)
+        result_delete = test_env.functions.delete(test_ea)
+        result_remove = test_env.functions.remove(test_ea)
+        assert result_delete == result_remove, (
+            "delete() and remove() should return same result for non-existent function"
+        )
+
+
+class TestPagination:
+    """Tests for pagination methods."""
+
+    def test_get_page_returns_list(self, test_env):
+        """Test that get_page returns a list, not an iterator."""
+        page = test_env.functions.get_page(offset=0, limit=5)
+        assert isinstance(page, list), "get_page should return a list"
+
+    def test_get_page_respects_limit(self, test_env):
+        """Test that get_page returns at most limit items."""
+        page = test_env.functions.get_page(offset=0, limit=2)
+        assert len(page) <= 2, "get_page should respect limit"
+
+    def test_get_page_respects_offset(self, test_env):
+        """Test that get_page skips offset items."""
+        all_funcs = list(test_env.functions.get_all())
+        if len(all_funcs) < 3:
+            pytest.skip("Need at least 3 functions for offset test")
+
+        page_0 = test_env.functions.get_page(offset=0, limit=2)
+        page_1 = test_env.functions.get_page(offset=1, limit=2)
+
+        # Second item of page_0 should be first item of page_1
+        assert page_0[1].start_ea == page_1[0].start_ea
+
+    def test_get_chunked_yields_lists(self, test_env):
+        """Test that get_chunked yields lists."""
+        chunks = list(test_env.functions.get_chunked(chunk_size=2))
+        for chunk in chunks:
+            assert isinstance(chunk, list), "Each chunk should be a list"
+
+    def test_get_chunked_respects_chunk_size(self, test_env):
+        """Test that chunks are at most chunk_size items."""
+        for chunk in test_env.functions.get_chunked(chunk_size=3):
+            assert len(chunk) <= 3, "Chunk should not exceed chunk_size"

@@ -7,7 +7,7 @@ import ida_ida
 import ida_idaapi
 import idc
 from ida_idaapi import ea_t
-from typing_extensions import TYPE_CHECKING, Iterator, Optional
+from typing_extensions import TYPE_CHECKING, Iterator, Optional, Tuple, cast
 
 from .base import (
     DatabaseEntity,
@@ -15,10 +15,13 @@ from .base import (
     InvalidParameterError,
     check_db_open,
     decorate_all_methods,
+    deprecated,
 )
 
 if TYPE_CHECKING:
     from .database import Database
+
+__all__ = ['Heads']
 
 logger = logging.getLogger(__name__)
 
@@ -131,7 +134,7 @@ class Heads(DatabaseEntity):
         if not self.database.is_valid_ea(ea, strict_check=False):
             raise InvalidEAError(ea)
 
-        return idc.is_head(ida_bytes.get_flags(ea))
+        return cast(bool, idc.is_head(ida_bytes.get_flags(ea)))
 
     def is_tail(self, ea: ea_t) -> bool:
         """
@@ -149,9 +152,9 @@ class Heads(DatabaseEntity):
         if not self.database.is_valid_ea(ea, strict_check=False):
             raise InvalidEAError(ea)
 
-        return idc.is_tail(ida_bytes.get_flags(ea))
+        return cast(bool, idc.is_tail(ida_bytes.get_flags(ea)))
 
-    def size(self, ea: ea_t) -> int:
+    def get_size(self, ea: ea_t) -> int:
         """
         Get the size of the item at the given address.
 
@@ -171,9 +174,14 @@ class Heads(DatabaseEntity):
         if not self.is_head(ea):
             raise InvalidParameterError('ea', ea, 'must be a head address')
 
-        return ida_bytes.get_item_size(ea)
+        return cast(int, ida_bytes.get_item_size(ea))
 
-    def bounds(self, ea: ea_t) -> tuple[ea_t, ea_t]:
+    @deprecated("Use get_size() instead")
+    def size(self, ea: ea_t) -> int:
+        """Deprecated: Use get_size() instead."""
+        return self.get_size(ea)
+
+    def get_bounds(self, ea: ea_t) -> Tuple[ea_t, ea_t]:
         """
         Get the bounds (start and end addresses) of the item containing the given address.
 
@@ -198,6 +206,11 @@ class Heads(DatabaseEntity):
         size = ida_bytes.get_item_size(head_ea)
         return (head_ea, head_ea + size)
 
+    @deprecated("Use get_bounds() instead")
+    def bounds(self, ea: ea_t) -> Tuple[ea_t, ea_t]:
+        """Deprecated: Use get_bounds() instead."""
+        return self.get_bounds(ea)
+
     def is_code(self, ea: ea_t) -> bool:
         """
         Check if the item at the given address is code.
@@ -214,7 +227,7 @@ class Heads(DatabaseEntity):
         if not self.database.is_valid_ea(ea, strict_check=False):
             raise InvalidEAError(ea)
 
-        return idc.is_code(ida_bytes.get_flags(ea))
+        return cast(bool, idc.is_code(ida_bytes.get_flags(ea)))
 
     def is_data(self, ea: ea_t) -> bool:
         """
@@ -232,7 +245,7 @@ class Heads(DatabaseEntity):
         if not self.database.is_valid_ea(ea, strict_check=False):
             raise InvalidEAError(ea)
 
-        return idc.is_data(ida_bytes.get_flags(ea))
+        return cast(bool, idc.is_data(ida_bytes.get_flags(ea)))
 
     def is_unknown(self, ea: ea_t) -> bool:
         """

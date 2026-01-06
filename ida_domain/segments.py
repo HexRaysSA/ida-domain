@@ -8,7 +8,7 @@ import ida_segment
 import idautils
 from ida_idaapi import ea_t
 from ida_segment import segment_t
-from typing_extensions import TYPE_CHECKING, Iterator, Optional
+from typing_extensions import TYPE_CHECKING, Iterator, List, Optional, cast
 
 from .base import DatabaseEntity, InvalidEAError, check_db_open, decorate_all_methods
 
@@ -54,6 +54,40 @@ class AddressingMode(IntEnum):
     BIT16 = 0  # 16-bit segment
     BIT32 = 1  # 32-bit segment
     BIT64 = 2  # 64-bit segment
+
+
+class SegmentType(IntEnum):
+    """Segment type enumeration."""
+
+    NORM = ida_segment.SEG_NORM  # Unknown type, no assumptions
+    XTRN = ida_segment.SEG_XTRN  # Segment with 'extern' definitions
+    CODE = ida_segment.SEG_CODE  # Code segment
+    DATA = ida_segment.SEG_DATA  # Data segment
+    IMP = ida_segment.SEG_IMP  # Java: implementation segment
+    GRP = ida_segment.SEG_GRP  # Group of segments
+    NULL = ida_segment.SEG_NULL  # Zero-length segment
+    UNDF = ida_segment.SEG_UNDF  # Undefined segment type
+    BSS = ida_segment.SEG_BSS  # Uninitialized segment
+    ABSSYM = ida_segment.SEG_ABSSYM  # Segment with absolute symbol definitions
+    COMM = ida_segment.SEG_COMM  # Segment with communal definitions
+    IMEM = ida_segment.SEG_IMEM  # Internal processor memory & SFR (8051)
+
+
+class MoveSegmentResult(IntEnum):
+    """Result codes for move/rebase operations."""
+
+    OK = ida_segment.MOVE_SEGM_OK  # Success
+    PARAM = ida_segment.MOVE_SEGM_PARAM  # Segment doesn't exist
+    ROOM = ida_segment.MOVE_SEGM_ROOM  # Not enough free room at target
+    IDP = ida_segment.MOVE_SEGM_IDP  # IDP module forbids moving
+    CHUNK = ida_segment.MOVE_SEGM_CHUNK  # Too many chunks defined
+    LOADER = ida_segment.MOVE_SEGM_LOADER  # Segment moved but loader complained
+    ODD = ida_segment.MOVE_SEGM_ODD  # Can't move by odd number of bytes
+    ORPHAN = ida_segment.MOVE_SEGM_ORPHAN  # Orphan bytes hinder movement
+    DEBUG = ida_segment.MOVE_SEGM_DEBUG  # Debugger segments can't be moved
+    SOURCEFILES = ida_segment.MOVE_SEGM_SOURCEFILES  # Source file ranges hinder movement
+    MAPPING = ida_segment.MOVE_SEGM_MAPPING  # Memory mapping ranges hinder movement
+    INVAL = ida_segment.MOVE_SEGM_INVAL  # Invalid argument
 
 
 @decorate_all_methods(check_db_open)
@@ -106,7 +140,7 @@ class Segments(DatabaseEntity):
         Returns:
             The segment name as a string, or an empty string if unavailable.
         """
-        return ida_segment.get_segm_name(segment)
+        return cast(str, ida_segment.get_segm_name(segment))
 
     def set_name(self, segment: segment_t, name: str) -> bool:
         """
@@ -119,7 +153,7 @@ class Segments(DatabaseEntity):
         Returns:
             True if the rename operation succeeded, False otherwise.
         """
-        return ida_segment.set_segm_name(segment, name)
+        return cast(bool, ida_segment.set_segm_name(segment, name))
 
     def __len__(self) -> int:
         """
@@ -128,7 +162,7 @@ class Segments(DatabaseEntity):
         Returns:
             The total count of segments.
         """
-        return ida_segment.get_segm_qty()
+        return cast(int, ida_segment.get_segm_qty())
 
     def get_all(self) -> Iterator[segment_t]:
         """
@@ -141,6 +175,59 @@ class Segments(DatabaseEntity):
             seg = ida_segment.getnseg(current_index)
             if seg:
                 yield seg
+
+    def get_page(self, offset: int = 0, limit: int = 100) -> List[segment_t]:
+        """
+        Get a page of segments for random access patterns.
+
+        Unlike get_all() which returns an iterator, this returns a list
+        suitable for indexing and length checks. Useful for pagination in UIs.
+
+        Args:
+            offset: Number of segments to skip (default: 0).
+            limit: Maximum number of segments to return (default: 100).
+
+        Returns:
+            List of segments, may be shorter than limit if fewer remain.
+
+        Example:
+            >>> # Display page 3 of segments (25 per page)
+            >>> page = db.segments.get_page(offset=50, limit=25)
+            >>> for seg in page:
+            ...     print(db.segments.get_name(seg))
+        """
+        import itertools
+
+        return list(itertools.islice(self.get_all(), offset, offset + limit))
+
+    def get_chunked(self, chunk_size: int = 1000) -> Iterator[List[segment_t]]:
+        """
+        Yield segments in chunks for batch processing.
+
+        Useful for processing large numbers of segments with periodic
+        progress updates or commits.
+
+        Args:
+            chunk_size: Maximum segments per chunk (default: 1000).
+
+        Yields:
+            Lists of segments, each at most chunk_size items.
+
+        Example:
+            >>> # Process in batches with progress
+            >>> for i, chunk in enumerate(db.segments.get_chunked(100)):
+            ...     print(f"Processing batch {i+1}: {len(chunk)} segments")
+            ...     for seg in chunk:
+            ...         process(seg)
+        """
+        chunk: List[segment_t] = []
+        for seg in self.get_all():
+            chunk.append(seg)
+            if len(chunk) >= chunk_size:
+                yield chunk
+                chunk = []
+        if chunk:
+            yield chunk
 
     def get_by_name(self, name: str) -> Optional[segment_t]:
         """Find segment by name.
@@ -156,6 +243,113 @@ class Segments(DatabaseEntity):
             if seg and ida_segment.get_segm_name(seg) == name:
                 return seg
         return None
+
+    def get_by_index(self, index: int) -> Optional[segment_t]:
+        """
+        Get segment by its index (0-based).
+
+        Args:
+            index: Segment index (0 to len(segments)-1)
+
+        Returns:
+            segment_t if index is valid, None otherwise
+
+        Example:
+            >>> first_seg = db.segments.get_by_index(0)
+            >>> if first_seg:
+            ...     print(f"First segment: {db.segments.get_name(first_seg)}")
+        """
+        if index < 0 or index >= ida_segment.get_segm_qty():
+            return None
+        return ida_segment.getnseg(index)
+
+    def get_index(self, segment: segment_t) -> int:
+        """
+        Get the index of a segment.
+
+        Args:
+            segment: The segment to find the index of
+
+        Returns:
+            Index of the segment (0-based), or -1 if not found
+
+        Example:
+            >>> seg = db.segments.get_by_name(".text")
+            >>> if seg:
+            ...     idx = db.segments.get_index(seg)
+            ...     print(f".text is segment #{idx}")
+        """
+        if not segment:
+            return -1
+        return cast(int, ida_segment.get_segm_num(segment.start_ea))
+
+    def get_first(self) -> Optional[segment_t]:
+        """
+        Get the first segment in the database.
+
+        Returns:
+            First segment_t, or None if no segments exist
+
+        Example:
+            >>> first = db.segments.get_first()
+            >>> if first:
+            ...     print(f"First segment: {db.segments.get_name(first)}")
+        """
+        return ida_segment.get_first_seg()
+
+    def get_last(self) -> Optional[segment_t]:
+        """
+        Get the last segment in the database.
+
+        Returns:
+            Last segment_t, or None if no segments exist
+
+        Example:
+            >>> last = db.segments.get_last()
+            >>> if last:
+            ...     print(f"Last segment: {db.segments.get_name(last)}")
+        """
+        return ida_segment.get_last_seg()
+
+    def get_next(self, segment: segment_t) -> Optional[segment_t]:
+        """
+        Get the next segment after the given segment.
+
+        Args:
+            segment: Current segment
+
+        Returns:
+            Next segment_t, or None if this is the last segment
+
+        Example:
+            >>> seg = db.segments.get_by_name(".text")
+            >>> next_seg = db.segments.get_next(seg)
+            >>> if next_seg:
+            ...     print(f"After .text: {db.segments.get_name(next_seg)}")
+        """
+        if not segment:
+            return None
+        return ida_segment.get_next_seg(segment.end_ea)
+
+    def get_previous(self, segment: segment_t) -> Optional[segment_t]:
+        """
+        Get the previous segment before the given segment.
+
+        Args:
+            segment: Current segment
+
+        Returns:
+            Previous segment_t, or None if this is the first segment
+
+        Example:
+            >>> seg = db.segments.get_by_name(".data")
+            >>> prev_seg = db.segments.get_previous(seg)
+            >>> if prev_seg:
+            ...     print(f"Before .data: {db.segments.get_name(prev_seg)}")
+        """
+        if not segment:
+            return None
+        return ida_segment.get_prev_seg(segment.start_ea)
 
     def add(
         self,
@@ -299,11 +493,11 @@ class Segments(DatabaseEntity):
         Returns:
             True if successful, False otherwise.
         """
-        return ida_segment.set_segm_addressing(segment, int(mode))
+        return cast(bool, ida_segment.set_segm_addressing(segment, int(mode)))
 
     def get_size(self, segment: segment_t) -> int:
         """Calculate segment size in bytes."""
-        return segment.end_ea - segment.start_ea
+        return cast(int, segment.end_ea - segment.start_ea)
 
     def get_bitness(self, segment: segment_t) -> int:
         """Get segment bitness (16/32/64)."""
@@ -319,6 +513,64 @@ class Segments(DatabaseEntity):
         """Get segment class name."""
         cls = ida_segment.get_segm_class(segment)
         return cls if cls else None
+
+    def get_type(self, segment: segment_t) -> SegmentType:
+        """
+        Get segment type (SEG_NORM, SEG_CODE, SEG_DATA, etc.).
+
+        Args:
+            segment: The segment to query
+
+        Returns:
+            SegmentType enum value
+
+        Example:
+            >>> seg = db.segments.get_by_name(".text")
+            >>> seg_type = db.segments.get_type(seg)
+            >>> if seg_type == SegmentType.CODE:
+            ...     print("This is a code segment")
+        """
+        return SegmentType(segment.type)
+
+    def get_paragraph(self, segment: segment_t) -> ea_t:
+        """
+        Get segment base paragraph.
+
+        Segment base paragraph determines the offsets in the segment.
+        For 16-bit programs, this corresponds to the segment register value.
+
+        Args:
+            segment: The segment to query
+
+        Returns:
+            Segment base paragraph value
+
+        Example:
+            >>> seg = db.segments.get_at(0x401000)
+            >>> para = db.segments.get_paragraph(seg)
+            >>> print(f"Paragraph: {para:x}")
+        """
+        return ida_segment.get_segm_para(segment)
+
+    def get_base(self, segment: segment_t) -> ea_t:
+        """
+        Get segment base linear address.
+
+        The virtual address of the first byte of the segment is (start_ea - base_address).
+
+        Args:
+            segment: The segment to query
+
+        Returns:
+            Segment base linear address
+
+        Example:
+            >>> seg = db.segments.get_at(0x401000)
+            >>> base = db.segments.get_base(seg)
+            >>> virtual_addr = seg.start_ea - base
+            >>> print(f"First virtual address: {virtual_addr:x}")
+        """
+        return ida_segment.get_segm_base(segment)
 
     def set_comment(self, segment: segment_t, comment: str, repeatable: bool = False) -> bool:
         """
@@ -349,3 +601,204 @@ class Segments(DatabaseEntity):
             Comment text, or empty string if no comment exists.
         """
         return ida_segment.get_segment_cmt(segment, repeatable) or ''
+
+    def set_class(self, segment: segment_t, sclass: Union[str, PredefinedClass]) -> bool:
+        """
+        Set segment class.
+
+        If segment type is SEG_NORM and class is a predefined name,
+        the type is automatically changed (e.g., "CODE" → SEG_CODE).
+
+        Args:
+            segment: The segment to modify
+            sclass: Segment class (str or PredefinedClass enum)
+
+        Returns:
+            True if successful, False otherwise
+
+        Example:
+            >>> seg = db.segments.get_by_name(".text")
+            >>> success = db.segments.set_class(seg, PredefinedClass.CODE)
+        """
+        if isinstance(sclass, PredefinedClass):
+            sclass_str = sclass.value
+        else:
+            sclass_str = sclass or ''
+
+        return cast(bool, ida_segment.set_segm_class(segment, sclass_str) != 0)
+
+    def set_start(self, segment: segment_t, new_start: ea_t, keep_data: bool = True) -> bool:
+        """
+        Set segment start address.
+
+        The previous segment is trimmed to allow expansion.
+        The kernel may delete the previous segment if necessary.
+
+        Args:
+            segment: The segment to modify
+            new_start: New start address (must be higher than segment base)
+            keep_data: If False, may destroy instructions/data going out of scope
+
+        Returns:
+            True if successful, False otherwise
+
+        Raises:
+            InvalidEAError: If new_start is invalid
+
+        Example:
+            >>> seg = db.segments.get_by_name(".data")
+            >>> success = db.segments.set_start(seg, seg.start_ea - 0x100)
+        """
+        if not self.database.is_valid_ea(new_start, strict_check=False):
+            raise InvalidEAError(new_start)
+
+        flags = ida_segment.SEGMOD_KEEP if keep_data else ida_segment.SEGMOD_KILL
+        return cast(bool, ida_segment.set_segm_start(segment.start_ea, new_start, flags))
+
+    def set_end(self, segment: segment_t, new_end: ea_t, keep_data: bool = True) -> bool:
+        """
+        Set segment end address.
+
+        The next segment is shrunk to allow expansion.
+        The kernel may delete the next segment if necessary.
+
+        Args:
+            segment: The segment to modify
+            new_end: New end address
+            keep_data: If False, may destroy instructions/data going out of scope
+
+        Returns:
+            True if successful, False otherwise
+
+        Raises:
+            InvalidEAError: If new_end is invalid
+
+        Example:
+            >>> seg = db.segments.get_by_name(".text")
+            >>> success = db.segments.set_end(seg, seg.end_ea + 0x1000)
+        """
+        if not self.database.is_valid_ea(new_end, strict_check=False):
+            raise InvalidEAError(new_end)
+
+        flags = ida_segment.SEGMOD_KEEP if keep_data else ida_segment.SEGMOD_KILL
+        return cast(bool, ida_segment.set_segm_end(segment.start_ea, new_end, flags))
+
+    def delete(self, segment: segment_t, keep_data: bool = False) -> bool:
+        """
+        Delete a segment.
+
+        Args:
+            segment: The segment to delete
+            keep_data: If True, preserve instructions/data; if False, disable addresses
+
+        Returns:
+            True if successful, False if segment deletion failed
+
+        Example:
+            >>> seg = db.segments.get_by_name(".debug")
+            >>> if db.segments.delete(seg):
+            ...     print("Debug segment removed")
+        """
+        flags = ida_segment.SEGMOD_KEEP if keep_data else ida_segment.SEGMOD_KILL
+        return cast(bool, ida_segment.del_segm(segment.start_ea, flags))
+
+    def update(self, segment: segment_t) -> bool:
+        """
+        Update segment information after modification.
+
+        Important: Must call this after directly modifying segment_t fields.
+        Not all fields can be modified directly - use specific setter methods where available.
+
+        Args:
+            segment: The segment that was modified
+
+        Returns:
+            True if successful, False otherwise
+
+        Example:
+            >>> seg = db.segments.get_by_name(".text")
+            >>> seg.perm = SegmentPermissions.READ | SegmentPermissions.EXEC
+            >>> db.segments.update(seg)  # Commit the changes
+        """
+        return cast(bool, ida_segment.update_segm(segment))
+
+    def move(
+        self, segment: segment_t, to: ea_t, fix_relocations: bool = True
+    ) -> MoveSegmentResult:
+        """
+        Move segment to a new address.
+
+        This moves all information to the new address and fixes up address-sensitive data.
+        The total effect equals reloading the segment at the target address.
+
+        Args:
+            segment: The segment to move
+            to: New segment start address
+            fix_relocations: If True, call loader to fix relocations
+
+        Returns:
+            MoveSegmentResult indicating success or error reason
+
+        Example:
+            >>> seg = db.segments.get_by_name(".data")
+            >>> result = db.segments.move(seg, 0x500000)
+            >>> if result == MoveSegmentResult.OK:
+            ...     print(f"Moved segment to {seg.start_ea:x}")
+            >>> else:
+            ...     print(f"Move failed: {result}")
+        """
+        flags = 0 if fix_relocations else ida_segment.MSF_NOFIX
+        result = ida_segment.move_segm(segment, to, flags)
+        return MoveSegmentResult(result)
+
+    def rebase(self, delta: int, fix_once: bool = True) -> MoveSegmentResult:
+        """
+        Rebase the entire program by delta bytes.
+
+        Args:
+            delta: Number of bytes to move the program (can be negative)
+            fix_once: If True, call loader only once with special method
+
+        Returns:
+            MoveSegmentResult indicating success or error reason
+
+        Example:
+            >>> # Rebase program from 0x400000 to 0x10000000
+            >>> result = db.segments.rebase(0x10000000 - 0x400000)
+            >>> if result == MoveSegmentResult.OK:
+            ...     print("Program rebased successfully")
+        """
+        flags = ida_segment.MSF_FIXONCE if fix_once else 0
+        result = ida_segment.rebase_program(delta, flags)
+        return MoveSegmentResult(result)
+
+    def set_visible(self, segment: segment_t, visible: bool) -> None:
+        """
+        Set segment visibility in the disassembly view.
+
+        Args:
+            segment: The segment to modify
+            visible: True to show, False to hide
+
+        Example:
+            >>> seg = db.segments.get_by_name(".debug")
+            >>> db.segments.set_visible(seg, False)  # Hide debug segment
+        """
+        ida_segment.set_visible_segm(segment, visible)
+
+    def is_visible(self, segment: segment_t) -> bool:
+        """
+        Check if segment is visible.
+
+        Args:
+            segment: The segment to check
+
+        Returns:
+            True if visible, False if hidden
+
+        Example:
+            >>> seg = db.segments.get_by_name(".text")
+            >>> if db.segments.is_visible(seg):
+            ...     print("Segment is visible in disassembly")
+        """
+        return cast(bool, ida_segment.is_visible_segm(segment))

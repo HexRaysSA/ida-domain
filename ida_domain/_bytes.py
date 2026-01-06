@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import struct
-from enum import IntEnum, IntFlag
+from enum import IntEnum
 
 import ida_bytes
 import ida_hexrays
@@ -13,7 +13,7 @@ import ida_range
 import ida_search
 import idc
 from ida_idaapi import BADADDR, ea_t
-from typing_extensions import TYPE_CHECKING, List, Optional
+from typing_extensions import TYPE_CHECKING, List, Optional, cast
 
 from .base import (
     DatabaseEntity,
@@ -22,163 +22,14 @@ from .base import (
     check_db_open,
     decorate_all_methods,
 )
+
+# Import from submodules for backward compatibility
+from .bytes.exceptions import NoValueError, UnsupportedValueError
+from .bytes.flags import ByteFlags, SearchFlags
 from .strings import StringType
 
 if TYPE_CHECKING:
     from .database import Database
-
-
-class SearchFlags(IntFlag):
-    """Search flags for text and pattern searching."""
-
-    DOWN = ida_search.SEARCH_DOWN
-    """Search towards higher addresses"""
-    UP = ida_search.SEARCH_UP
-    """Search towards lower addresses"""
-    CASE = ida_search.SEARCH_CASE
-    """Case-sensitive search (case-insensitive otherwise)"""
-    REGEX = ida_search.SEARCH_REGEX
-    """Regular expressions in search string"""
-    NOBRK = ida_search.SEARCH_NOBRK
-    """Don't test if the user interrupted the search"""
-    NOSHOW = ida_search.SEARCH_NOSHOW
-    """Don't display the search progress/refresh screen"""
-    IDENT = ida_search.SEARCH_IDENT
-    """Search for an identifier (text search). It means that the
-    characters before and after the match cannot be is_visible_char(). """
-    BRK = ida_search.SEARCH_BRK
-    """Return BADADDR if the search was cancelled."""
-
-
-class ByteFlags(IntFlag):
-    """Byte flag constants for flag checking operations."""
-
-    IVL = ida_bytes.FF_IVL
-    """Byte has value."""
-    MS_VAL = ida_bytes.MS_VAL
-    """Mask for byte value."""
-
-    # Item State Flags
-    CODE = ida_bytes.FF_CODE
-    """Code?"""
-    DATA = ida_bytes.FF_DATA
-    """Data?"""
-    TAIL = ida_bytes.FF_TAIL
-    """Tail?"""
-    UNK = ida_bytes.FF_UNK
-    """Unknown?"""
-
-    # Common State Information
-    COMM = ida_bytes.FF_COMM
-    """Has comment?"""
-    REF = ida_bytes.FF_REF
-    """Has references"""
-    LINE = ida_bytes.FF_LINE
-    """Has next or prev lines?"""
-    NAME = ida_bytes.FF_NAME
-    """Has name?"""
-    LABL = ida_bytes.FF_LABL
-    """Has dummy name?"""
-    FLOW = ida_bytes.FF_FLOW
-    """Exec flow from prev instruction"""
-    SIGN = ida_bytes.FF_SIGN
-    """Inverted sign of operands"""
-    BNOT = ida_bytes.FF_BNOT
-    """Bitwise negation of operands"""
-    UNUSED = ida_bytes.FF_UNUSED
-    """Unused bit"""
-
-    # Data Type Flags
-    BYTE = ida_bytes.FF_BYTE
-    """Byte"""
-    WORD = ida_bytes.FF_WORD
-    """Word"""
-    DWORD = ida_bytes.FF_DWORD
-    """Double word"""
-    QWORD = ida_bytes.FF_QWORD
-    """Quad word"""
-    TBYTE = ida_bytes.FF_TBYTE
-    """TByte"""
-    OWORD = ida_bytes.FF_OWORD
-    """Octaword/XMM word (16 bytes)"""
-    YWORD = ida_bytes.FF_YWORD
-    """YMM word (32 bytes)"""
-    ZWORD = ida_bytes.FF_ZWORD
-    """ZMM word (64 bytes)"""
-    FLOAT = ida_bytes.FF_FLOAT
-    """Float"""
-    DOUBLE = ida_bytes.FF_DOUBLE
-    """Double"""
-    PACKREAL = ida_bytes.FF_PACKREAL
-    """Packed decimal real"""
-    STRLIT = ida_bytes.FF_STRLIT
-    """String literal"""
-    STRUCT = ida_bytes.FF_STRUCT
-    """Struct variable"""
-    ALIGN = ida_bytes.FF_ALIGN
-    """Alignment directive"""
-    CUSTOM = ida_bytes.FF_CUSTOM
-    """Custom data type"""
-
-    # Code-Specific Flags
-    FUNC = ida_bytes.FF_FUNC
-    """Function start?"""
-    IMMD = ida_bytes.FF_IMMD
-    """Has immediate value?"""
-    JUMP = ida_bytes.FF_JUMP
-    """Has jump table or switch_info?"""
-
-    # Composite Flags
-    ANYNAME = ida_bytes.FF_ANYNAME
-    """Has name or dummy name?"""
-
-    # Operand Type Flags (for operand representation)
-    N_VOID = ida_bytes.FF_N_VOID
-    """Void (unknown)?"""
-    N_NUMH = ida_bytes.FF_N_NUMH
-    """Hexadecimal number?"""
-    N_NUMD = ida_bytes.FF_N_NUMD
-    """Decimal number?"""
-    N_CHAR = ida_bytes.FF_N_CHAR
-    """Char ('x')?"""
-    N_SEG = ida_bytes.FF_N_SEG
-    """Segment?"""
-    N_OFF = ida_bytes.FF_N_OFF
-    """Offset?"""
-    N_NUMB = ida_bytes.FF_N_NUMB
-    """Binary number?"""
-    N_NUMO = ida_bytes.FF_N_NUMO
-    """Octal number?"""
-    N_ENUM = ida_bytes.FF_N_ENUM
-    """Enumeration?"""
-    N_FOP = ida_bytes.FF_N_FOP
-    """Forced operand?"""
-    N_STRO = ida_bytes.FF_N_STRO
-    """Struct offset?"""
-    N_STK = ida_bytes.FF_N_STK
-    """Stack variable?"""
-    N_FLT = ida_bytes.FF_N_FLT
-    """Floating point number?"""
-    N_CUST = ida_bytes.FF_N_CUST
-    """Custom representation?"""
-
-
-class NoValueError(ValueError):
-    """
-    Raised when a read operation is attempted on an uninitialized address.
-    """
-
-    def __init__(self, ea: ea_t) -> None:
-        super().__init__(f'The effective address: 0x{ea:x} has no value')
-
-
-class UnsupportedValueError(ValueError):
-    """
-    Raised when a read operation is attempted on a value which has an unsupported format.
-    """
-
-    def __init__(self, message: str) -> None:
-        super().__init__(message)
 
 
 logger = logging.getLogger(__name__)
@@ -221,7 +72,7 @@ class Bytes(DatabaseEntity):
         if not allow_uninitialized and not ida_bytes.is_loaded(ea):
             raise NoValueError(ea)
 
-        return ida_bytes.get_byte(ea)
+        return cast(int, ida_bytes.get_byte(ea))
 
     def get_word_at(self, ea: ea_t, allow_uninitialized: bool = False) -> int:
         """
@@ -245,7 +96,7 @@ class Bytes(DatabaseEntity):
         if not allow_uninitialized and not ida_bytes.is_loaded(ea):
             raise NoValueError(ea)
 
-        return ida_bytes.get_word(ea)
+        return cast(int, ida_bytes.get_word(ea))
 
     def get_dword_at(self, ea: ea_t, allow_uninitialized: bool = False) -> int:
         """
@@ -269,7 +120,7 @@ class Bytes(DatabaseEntity):
         if not allow_uninitialized and not ida_bytes.is_loaded(ea):
             raise NoValueError(ea)
 
-        return ida_bytes.get_dword(ea)
+        return cast(int, ida_bytes.get_dword(ea))
 
     def get_qword_at(self, ea: ea_t, allow_uninitialized: bool = False) -> int:
         """
@@ -293,7 +144,7 @@ class Bytes(DatabaseEntity):
         if not allow_uninitialized and not ida_bytes.is_loaded(ea):
             raise NoValueError(ea)
 
-        return ida_bytes.get_qword(ea)
+        return cast(int, ida_bytes.get_qword(ea))
 
     def _read_floating_point(self, ea: ea_t, data_flags: int) -> float:
         """
@@ -336,10 +187,10 @@ class Bytes(DatabaseEntity):
 
         if size == 4:
             # IEEE 754 single precision (32-bit float)
-            return struct.unpack(f'{endian}f', data)[0]
+            return cast(float, struct.unpack(f'{endian}f', data)[0])
         elif size == 8:
             # IEEE 754 double precision (64-bit double)
-            return struct.unpack(f'{endian}d', data)[0]
+            return cast(float, struct.unpack(f'{endian}d', data)[0])
         else:
             raise UnsupportedValueError(
                 f'Unsupported float value size {size} for floating-point data at 0x{ea:x}'
@@ -433,21 +284,18 @@ class Bytes(DatabaseEntity):
             options |= ida_lines.GENDSM_REMOVE_TAGS
         line = ida_lines.generate_disasm_line(ea, options)
         if line:
-            return line
+            return cast(Optional[str], line)
         else:
             logger.error(f'Failed to generate disassembly line at address 0x{ea:x}')
             return None
 
-    def set_byte_at(self, ea: ea_t, value: int) -> bool:
+    def set_byte_at(self, ea: ea_t, value: int) -> None:
         """
         Sets a byte value at the specified address.
 
         Args:
             ea: The effective address.
             value: Byte value to set.
-
-        Returns:
-            True if successful, False otherwise.
 
         Raises:
             InvalidEAError: If the effective address is invalid.
@@ -459,7 +307,7 @@ class Bytes(DatabaseEntity):
         if value < 0 or value > 0xFF:
             raise InvalidParameterError('value', value, 'must be between 0 and 0xFF')
 
-        return ida_bytes.put_byte(ea, value)
+        ida_bytes.put_byte(ea, value)
 
     def set_word_at(self, ea: ea_t, value: int) -> None:
         """
@@ -566,7 +414,7 @@ class Bytes(DatabaseEntity):
         if not (0 <= value <= 0xFF):
             raise InvalidParameterError('value', value, 'must be between 0 and 0xFF')
 
-        return ida_bytes.patch_byte(ea, value)
+        return cast(bool, ida_bytes.patch_byte(ea, value))
 
     def patch_word_at(self, ea: ea_t, value: int) -> bool:
         """
@@ -590,7 +438,7 @@ class Bytes(DatabaseEntity):
         if value < 0 or value > 0xFFFF:
             raise InvalidParameterError('value', value, 'must be between 0 and 0xFFFF')
 
-        return ida_bytes.patch_word(ea, value)
+        return cast(bool, ida_bytes.patch_word(ea, value))
 
     def patch_dword_at(self, ea: ea_t, value: int) -> bool:
         """
@@ -614,7 +462,7 @@ class Bytes(DatabaseEntity):
         if value < 0 or value > 0xFFFFFFFF:
             raise InvalidParameterError('value', value, 'must be between 0 and 0xFFFFFFFF')
 
-        return ida_bytes.patch_dword(ea, value)
+        return cast(bool, ida_bytes.patch_dword(ea, value))
 
     def patch_qword_at(self, ea: ea_t, value: int) -> bool:
         """
@@ -638,9 +486,9 @@ class Bytes(DatabaseEntity):
         if value < 0 or value > 0xFFFFFFFFFFFFFFFF:
             raise InvalidParameterError('value', value, 'must be between 0 and 0xFFFFFFFFFFFFFFFF')
 
-        return ida_bytes.patch_qword(ea, value)
+        return cast(bool, ida_bytes.patch_qword(ea, value))
 
-    def patch_bytes_at(self, ea: ea_t, data: bytes) -> None:
+    def patch_bytes_at(self, ea: ea_t, data: bytes) -> bool:
         """
         Patch the specified number of bytes of the program.
         Original values are saved and available with get_original_bytes_at().
@@ -648,6 +496,9 @@ class Bytes(DatabaseEntity):
         Args:
             ea: The effective address.
             data: Bytes to patch.
+
+        Returns:
+            True if the database has been modified, False otherwise.
 
         Raises:
             InvalidEAError: If the effective address is invalid.
@@ -662,7 +513,7 @@ class Bytes(DatabaseEntity):
         if len(data) == 0:
             raise InvalidParameterError('data', len(data), 'cannot be empty')
 
-        ida_bytes.patch_bytes(ea, data)
+        return cast(bool, ida_bytes.patch_bytes(ea, data))
 
     def revert_byte_at(self, ea: ea_t) -> bool:
         """
@@ -680,7 +531,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.revert_byte(ea)
+        return cast(bool, ida_bytes.revert_byte(ea))
 
     def get_original_byte_at(self, ea: ea_t) -> Optional[int]:
         """
@@ -698,7 +549,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.get_original_byte(ea)
+        return cast(Optional[int], ida_bytes.get_original_byte(ea))
 
     def get_original_word_at(self, ea: ea_t) -> Optional[int]:
         """
@@ -716,7 +567,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.get_original_word(ea)
+        return cast(Optional[int], ida_bytes.get_original_word(ea))
 
     def get_original_dword_at(self, ea: ea_t) -> Optional[int]:
         """
@@ -734,7 +585,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.get_original_dword(ea)
+        return cast(Optional[int], ida_bytes.get_original_dword(ea))
 
     def get_original_qword_at(self, ea: ea_t) -> Optional[int]:
         """
@@ -752,7 +603,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.get_original_qword(ea)
+        return cast(Optional[int], ida_bytes.get_original_qword(ea))
 
     def find_bytes_between(
         self, pattern: bytes, start_ea: ea_t = None, end_ea: ea_t = None
@@ -793,6 +644,29 @@ class Bytes(DatabaseEntity):
 
         ea = ida_bytes.find_bytes(pattern, start_ea, None, end_ea)
         return ea if ea != BADADDR else None
+
+    def find_bytes_in_range(
+        self, pattern: bytes, start_ea: ea_t = None, end_ea: ea_t = None
+    ) -> Optional[ea_t]:
+        """
+        Finds a byte pattern in a memory range.
+
+        This is an alias for :meth:`find_bytes_between` following the ``*_in_range``
+        naming convention.
+
+        Args:
+            pattern: Byte pattern to search for.
+            start_ea: Search start address; defaults to database minimum ea if None
+            end_ea: Search end address; defaults to database maximum ea if None
+
+        Returns:
+            Address where pattern was found, or None if not found.
+
+        Raises:
+            InvalidParameterError: If pattern or interval are invalid.
+            InvalidEAError: If start_ea or end_ea are specified but invalid.
+        """
+        return self.find_bytes_between(pattern, start_ea, end_ea)
 
     def find_text_between(
         self,
@@ -837,7 +711,11 @@ class Bytes(DatabaseEntity):
             raise InvalidParameterError('start_ea', start_ea, 'must be less than end_ea')
 
         ea = ida_search.find_text(start_ea, 0, 0, text, flags)
-        return ea if ea != BADADDR else None
+
+        # Check if result is within the specified range
+        if ea != BADADDR and start_ea <= ea < end_ea:
+            return ea
+        return None
 
     def find_immediate_between(
         self, value: int, start_ea: ea_t = None, end_ea: ea_t = None
@@ -877,7 +755,9 @@ class Bytes(DatabaseEntity):
         # find_imm returns a tuple (address, operand_number) or None
         if result and isinstance(result, tuple) and len(result) >= 1:
             ea = result[0]
-            return ea if ea != BADADDR else None
+            # Check if result is within the specified range
+            if ea != BADADDR and start_ea <= ea < end_ea:
+                return ea
         return None
 
     def create_byte_at(self, ea: ea_t, count: int = 1, force: bool = False) -> bool:
@@ -904,7 +784,7 @@ class Bytes(DatabaseEntity):
 
         element_size = ida_bytes.get_data_elsize(ea, ida_bytes.byte_flag())
         length = element_size * count
-        return ida_bytes.create_byte(ea, length, force)
+        return cast(bool, ida_bytes.create_byte(ea, length, force))
 
     def create_word_at(self, ea: ea_t, count: int = 1, force: bool = False) -> bool:
         """
@@ -930,7 +810,7 @@ class Bytes(DatabaseEntity):
 
         element_size = ida_bytes.get_data_elsize(ea, ida_bytes.word_flag())
         length = element_size * count
-        return ida_bytes.create_word(ea, length, force)
+        return cast(bool, ida_bytes.create_word(ea, length, force))
 
     def create_dword_at(self, ea: ea_t, count: int = 1, force: bool = False) -> bool:
         """
@@ -956,7 +836,7 @@ class Bytes(DatabaseEntity):
 
         element_size = ida_bytes.get_data_elsize(ea, ida_bytes.dword_flag())
         length = element_size * count
-        return ida_bytes.create_dword(ea, length, force)
+        return cast(bool, ida_bytes.create_dword(ea, length, force))
 
     def create_qword_at(self, ea: ea_t, count: int = 1, force: bool = False) -> bool:
         """
@@ -982,7 +862,7 @@ class Bytes(DatabaseEntity):
 
         element_size = ida_bytes.get_data_elsize(ea, ida_bytes.qword_flag())
         length = element_size * count
-        return ida_bytes.create_qword(ea, length, force)
+        return cast(bool, ida_bytes.create_qword(ea, length, force))
 
     def create_oword_at(self, ea: ea_t, count: int = 1, force: bool = False) -> bool:
         """
@@ -1008,7 +888,7 @@ class Bytes(DatabaseEntity):
 
         element_size = ida_bytes.get_data_elsize(ea, ida_bytes.oword_flag())
         length = element_size * count
-        return ida_bytes.create_oword(ea, length, force)
+        return cast(bool, ida_bytes.create_oword(ea, length, force))
 
     def create_yword_at(self, ea: ea_t, count: int = 1, force: bool = False) -> bool:
         """
@@ -1034,7 +914,7 @@ class Bytes(DatabaseEntity):
 
         element_size = ida_bytes.get_data_elsize(ea, ida_bytes.yword_flag())
         length = element_size * count
-        return ida_bytes.create_yword(ea, length, force)
+        return cast(bool, ida_bytes.create_yword(ea, length, force))
 
     def create_zword_at(self, ea: ea_t, count: int = 1, force: bool = False) -> bool:
         """
@@ -1060,7 +940,7 @@ class Bytes(DatabaseEntity):
 
         element_size = ida_bytes.get_data_elsize(ea, ida_bytes.zword_flag())
         length = element_size * count
-        return ida_bytes.create_zword(ea, length, force)
+        return cast(bool, ida_bytes.create_zword(ea, length, force))
 
     def create_tbyte_at(self, ea: ea_t, count: int = 1, force: bool = False) -> bool:
         """
@@ -1086,7 +966,7 @@ class Bytes(DatabaseEntity):
 
         element_size = ida_bytes.get_data_elsize(ea, ida_bytes.tbyte_flag())
         length = element_size * count
-        return ida_bytes.create_tbyte(ea, length, force)
+        return cast(bool, ida_bytes.create_tbyte(ea, length, force))
 
     def create_float_at(self, ea: ea_t, count: int = 1, force: bool = False) -> bool:
         """
@@ -1112,7 +992,7 @@ class Bytes(DatabaseEntity):
 
         element_size = ida_bytes.get_data_elsize(ea, ida_bytes.float_flag())
         length = element_size * count
-        return ida_bytes.create_float(ea, length, force)
+        return cast(bool, ida_bytes.create_float(ea, length, force))
 
     def create_double_at(self, ea: ea_t, count: int = 1, force: bool = False) -> bool:
         """
@@ -1138,7 +1018,7 @@ class Bytes(DatabaseEntity):
 
         element_size = ida_bytes.get_data_elsize(ea, ida_bytes.double_flag())
         length = element_size * count
-        return ida_bytes.create_double(ea, length, force)
+        return cast(bool, ida_bytes.create_double(ea, length, force))
 
     def create_packed_real_at(self, ea: ea_t, count: int = 1, force: bool = False) -> bool:
         """
@@ -1165,7 +1045,7 @@ class Bytes(DatabaseEntity):
 
         element_size = ida_bytes.get_data_elsize(ea, ida_bytes.packreal_flag())
         length = element_size * count
-        return ida_bytes.create_packed_real(ea, length, force)
+        return cast(bool, ida_bytes.create_packed_real(ea, length, force))
 
     def create_struct_at(self, ea: ea_t, count: int, tid: int, force: bool = False) -> bool:
         """
@@ -1205,7 +1085,7 @@ class Bytes(DatabaseEntity):
             raise InvalidParameterError('tid', tid, 'invalid struct type ID')
 
         length = element_size * count
-        return ida_bytes.create_struct(ea, length, tid, force)
+        return cast(bool, ida_bytes.create_struct(ea, length, tid, force))
 
     def create_alignment_at(self, ea: ea_t, length: int, alignment: int) -> bool:
         """
@@ -1233,7 +1113,7 @@ class Bytes(DatabaseEntity):
         if alignment < 0:
             raise InvalidParameterError('alignment', alignment, 'must be non-negative')
 
-        return ida_bytes.create_align(ea, length, alignment)
+        return cast(bool, ida_bytes.create_align(ea, length, alignment))
 
     def create_string_at(
         self, ea: ea_t, length: Optional[int] = None, string_type: StringType = StringType.C
@@ -1261,9 +1141,9 @@ class Bytes(DatabaseEntity):
 
         if length is None:
             # Auto-detect string length
-            return ida_bytes.create_strlit(ea, 0, string_type)
+            return cast(bool, ida_bytes.create_strlit(ea, 0, string_type))
         else:
-            return ida_bytes.create_strlit(ea, length, string_type)
+            return cast(bool, ida_bytes.create_strlit(ea, length, string_type))
 
     def get_data_size_at(self, ea: ea_t) -> int:
         """
@@ -1281,7 +1161,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.get_item_size(ea)
+        return cast(int, ida_bytes.get_item_size(ea))
 
     def is_value_initialized_at(self, ea: ea_t) -> bool:
         """
@@ -1299,7 +1179,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.is_loaded(ea)
+        return cast(bool, ida_bytes.is_loaded(ea))
 
     def delete_value_at(self, ea: ea_t) -> None:
         """
@@ -1332,7 +1212,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.is_code(ida_bytes.get_flags(ea))
+        return cast(bool, ida_bytes.is_code(ida_bytes.get_flags(ea)))
 
     def is_data_at(self, ea: ea_t) -> bool:
         """
@@ -1350,7 +1230,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.is_data(ida_bytes.get_flags(ea))
+        return cast(bool, ida_bytes.is_data(ida_bytes.get_flags(ea)))
 
     def is_tail_at(self, ea: ea_t) -> bool:
         """
@@ -1368,7 +1248,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.is_tail(ida_bytes.get_flags(ea))
+        return cast(bool, ida_bytes.is_tail(ida_bytes.get_flags(ea)))
 
     def is_not_tail_at(self, ea: ea_t) -> bool:
         """
@@ -1386,7 +1266,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.is_not_tail(ida_bytes.get_flags(ea))
+        return cast(bool, ida_bytes.is_not_tail(ida_bytes.get_flags(ea)))
 
     def is_unknown_at(self, ea: ea_t) -> bool:
         """
@@ -1404,7 +1284,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.is_unknown(ida_bytes.get_flags(ea))
+        return cast(bool, ida_bytes.is_unknown(ida_bytes.get_flags(ea)))
 
     def is_head_at(self, ea: ea_t) -> bool:
         """
@@ -1422,7 +1302,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.is_head(ida_bytes.get_flags(ea))
+        return cast(bool, ida_bytes.is_head(ida_bytes.get_flags(ea)))
 
     def is_flowed_at(self, ea: ea_t) -> bool:
         """
@@ -1440,7 +1320,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.is_flow(ida_bytes.get_flags(ea))
+        return cast(bool, ida_bytes.is_flow(ida_bytes.get_flags(ea)))
 
     def is_byte_at(self, ea: ea_t) -> bool:
         """
@@ -1458,7 +1338,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.is_byte(ida_bytes.get_flags(ea))
+        return cast(bool, ida_bytes.is_byte(ida_bytes.get_flags(ea)))
 
     def is_word_at(self, ea: ea_t) -> bool:
         """
@@ -1476,7 +1356,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.is_word(ida_bytes.get_flags(ea))
+        return cast(bool, ida_bytes.is_word(ida_bytes.get_flags(ea)))
 
     def is_dword_at(self, ea: ea_t) -> bool:
         """
@@ -1494,7 +1374,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.is_dword(ida_bytes.get_flags(ea))
+        return cast(bool, ida_bytes.is_dword(ida_bytes.get_flags(ea)))
 
     def is_qword_at(self, ea: ea_t) -> bool:
         """
@@ -1512,7 +1392,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.is_qword(ida_bytes.get_flags(ea))
+        return cast(bool, ida_bytes.is_qword(ida_bytes.get_flags(ea)))
 
     def is_oword_at(self, ea: ea_t) -> bool:
         """
@@ -1530,7 +1410,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.is_oword(ida_bytes.get_flags(ea))
+        return cast(bool, ida_bytes.is_oword(ida_bytes.get_flags(ea)))
 
     def is_yword_at(self, ea: ea_t) -> bool:
         """
@@ -1548,7 +1428,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.is_yword(ida_bytes.get_flags(ea))
+        return cast(bool, ida_bytes.is_yword(ida_bytes.get_flags(ea)))
 
     def is_zword_at(self, ea: ea_t) -> bool:
         """
@@ -1566,7 +1446,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.is_zword(ida_bytes.get_flags(ea))
+        return cast(bool, ida_bytes.is_zword(ida_bytes.get_flags(ea)))
 
     def is_tbyte_at(self, ea: ea_t) -> bool:
         """
@@ -1584,7 +1464,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.is_tbyte(ida_bytes.get_flags(ea))
+        return cast(bool, ida_bytes.is_tbyte(ida_bytes.get_flags(ea)))
 
     def is_float_at(self, ea: ea_t) -> bool:
         """
@@ -1602,7 +1482,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.is_float(ida_bytes.get_flags(ea))
+        return cast(bool, ida_bytes.is_float(ida_bytes.get_flags(ea)))
 
     def is_double_at(self, ea: ea_t) -> bool:
         """
@@ -1620,7 +1500,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.is_double(ida_bytes.get_flags(ea))
+        return cast(bool, ida_bytes.is_double(ida_bytes.get_flags(ea)))
 
     def is_packed_real_at(self, ea: ea_t) -> bool:
         """
@@ -1638,7 +1518,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.is_pack_real(ida_bytes.get_flags(ea))
+        return cast(bool, ida_bytes.is_pack_real(ida_bytes.get_flags(ea)))
 
     def is_string_literal_at(self, ea: ea_t) -> bool:
         """
@@ -1656,7 +1536,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.is_strlit(ida_bytes.get_flags(ea))
+        return cast(bool, ida_bytes.is_strlit(ida_bytes.get_flags(ea)))
 
     def is_struct_at(self, ea: ea_t) -> bool:
         """
@@ -1674,7 +1554,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.is_struct(ida_bytes.get_flags(ea))
+        return cast(bool, ida_bytes.is_struct(ida_bytes.get_flags(ea)))
 
     def is_alignment_at(self, ea: ea_t) -> bool:
         """
@@ -1692,7 +1572,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.is_align(ida_bytes.get_flags(ea))
+        return cast(bool, ida_bytes.is_align(ida_bytes.get_flags(ea)))
 
     def is_manual_insn_at(self, ea: ea_t) -> bool:
         """
@@ -1710,7 +1590,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.is_manual_insn(ea)
+        return cast(bool, ida_bytes.is_manual_insn(ea))
 
     def is_forced_operand_at(self, ea: ea_t, n: int) -> bool:
         """
@@ -1733,7 +1613,7 @@ class Bytes(DatabaseEntity):
         if n < 0:
             raise InvalidParameterError('n', n, 'operand number must be non-negative')
 
-        return ida_bytes.is_forced_operand(ea, n)
+        return cast(bool, ida_bytes.is_forced_operand(ea, n))
 
     def get_string_at(self, ea: ea_t, max_length: Optional[int] = None) -> Optional[str]:
         """
@@ -1758,11 +1638,18 @@ class Bytes(DatabaseEntity):
                 'max_length', max_length, 'must be positive when specified'
             )
 
+        # Check if this address is actually a string literal
+        flags = ida_bytes.get_full_flags(ea)
+        if not ida_bytes.is_strlit(flags) and max_length is None:
+            # Not a defined string literal, only read if max_length is explicitly provided
+            return None
+
         if max_length is None:
             # Try to get string length from IDA's analysis
             str_len = ida_bytes.get_max_strlit_length(ea, ida_nalt.STRTYPE_C)
             if str_len <= 0:
-                str_len = 256  # Default max length
+                # No string defined at this address
+                return None
         else:
             str_len = max_length
 
@@ -1771,11 +1658,11 @@ class Bytes(DatabaseEntity):
             try:
                 # Decode bytes to string
                 decoded_string = string_data.decode('utf-8')
-                return decoded_string
+                return cast(Optional[str], decoded_string)
             except Exception:
                 # Try latin-1 as fallback
                 decoded_string = string_data.decode('latin-1')
-                return decoded_string
+                return cast(Optional[str], decoded_string)
         else:
             return None
 
@@ -1871,7 +1758,7 @@ class Bytes(DatabaseEntity):
         if size <= 0:
             raise InvalidParameterError('size', size, 'must be positive')
 
-        return ida_bytes.get_bytes(ea, size, ida_bytes.GMB_READALL)
+        return cast(Optional[bytes], ida_bytes.get_bytes(ea, size, ida_bytes.GMB_READALL))
 
     def has_user_name_at(self, ea: ea_t) -> bool:
         """
@@ -1889,7 +1776,7 @@ class Bytes(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        return ida_bytes.has_user_name(ida_bytes.get_flags(ea))
+        return cast(bool, ida_bytes.has_user_name(ida_bytes.get_flags(ea)))
 
     def get_flags_at(self, ea: ea_t) -> ByteFlags:
         """
@@ -1926,6 +1813,93 @@ class Bytes(DatabaseEntity):
             raise InvalidEAError(ea)
 
         return ByteFlags(ida_bytes.get_full_flags(ea))
+
+    def get_item_head_at(self, ea: ea_t) -> ea_t:
+        """
+        Gets the start address of the item containing the specified address.
+
+        If ea is in the middle of an item, returns the head address. If ea is
+        already a head, returns ea itself.
+
+        Args:
+            ea: The effective address.
+
+        Returns:
+            Start address of the item containing ea.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> head = db.bytes.get_item_head_at(0x401002)
+            >>> print(f"Item head: 0x{head:x}")
+            >>> size = db.bytes.get_item_size_at(head)
+            >>> print(f"Item size: {size} bytes")
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        # ida_bytes.get_item_head() is an inline function that returns:
+        # is_head(get_flags(ea)) ? ea : prev_head(ea, 0)
+        flags = ida_bytes.get_flags(ea)
+        if ida_bytes.is_head(flags):
+            return ea
+        else:
+            return ida_bytes.prev_head(ea, 0)
+
+    def get_item_end_at(self, ea: ea_t) -> ea_t:
+        """
+        Gets the end address of the item containing the specified address.
+
+        The end address is the address immediately after the last byte of the
+        item (exclusive).
+
+        Args:
+            ea: The effective address.
+
+        Returns:
+            End address of the item containing ea (exclusive).
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> head = db.bytes.get_item_head_at(ea)
+            >>> end = db.bytes.get_item_end_at(ea)
+            >>> size = end - head
+            >>> print(f"Item: 0x{head:x} - 0x{end:x} (size: {size})")
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        return ida_bytes.get_item_end(ea)
+
+    def get_item_size_at(self, ea: ea_t) -> int:
+        """
+        Gets the size of the item at the specified address.
+
+        Equivalent to get_item_end_at(ea) - get_item_head_at(ea).
+
+        Args:
+            ea: The effective address.
+
+        Returns:
+            Size of the item in bytes.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> size = db.bytes.get_item_size_at(0x401000)
+            >>> print(f"Item size: {size} bytes")
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        return int(ida_bytes.get_item_size(ea))
 
     def get_next_head(self, ea: ea_t, max_ea: ea_t = None) -> Optional[ea_t]:
         """
@@ -2033,7 +2007,7 @@ class Bytes(DatabaseEntity):
             raise InvalidEAError(ea)
 
         flags = ida_bytes.get_flags(ea)
-        return (flags & flag_mask) == flag_mask
+        return cast(bool, (flags & flag_mask) == flag_mask)
 
     def has_any_flags_at(self, ea: ea_t, flag_mask: ByteFlags) -> bool:
         """
@@ -2053,7 +2027,7 @@ class Bytes(DatabaseEntity):
             raise InvalidEAError(ea)
 
         flags = ida_bytes.get_flags(ea)
-        return (flags & flag_mask) != 0
+        return cast(bool, (flags & flag_mask) != 0)
 
     def find_binary_sequence(
         self, pattern: bytes, start_ea: ea_t = None, end_ea: ea_t = None
@@ -2095,6 +2069,186 @@ class Bytes(DatabaseEntity):
             results.append(ea)
             ea = ida_bytes.find_bytes(pattern, ea + 1, None, end_ea)
         return results
+
+    def find_pattern(
+        self, pattern: str, start_ea: ea_t = None, end_ea: ea_t = None
+    ) -> Optional[ea_t]:
+        """
+        Find first occurrence of a byte pattern with wildcard support.
+
+        Supports IDA-style patterns like "CC ?? 90 ??" where ?? matches any byte.
+
+        Args:
+            pattern: Hex string pattern with optional ?? wildcards.
+                     Example: "48 89 ?? ?? 48 8B" or "CC ?? 90"
+            start_ea: Search start address; defaults to database minimum ea if None.
+            end_ea: Search end address; defaults to database maximum ea if None.
+
+        Returns:
+            Address where pattern was found, or None if not found.
+
+        Raises:
+            InvalidParameterError: If pattern is invalid.
+            InvalidEAError: If start_ea or end_ea are specified but invalid.
+        """
+        if not isinstance(pattern, str):
+            raise InvalidParameterError('pattern', type(pattern), 'must be string')
+
+        if len(pattern.strip()) == 0:
+            raise InvalidParameterError('pattern', pattern, 'cannot be empty')
+
+        if start_ea is None:
+            start_ea = self.database.minimum_ea
+        elif not self.database.is_valid_ea(start_ea, strict_check=False):
+            raise InvalidEAError(start_ea)
+
+        if end_ea is None:
+            end_ea = self.database.maximum_ea
+        elif not self.database.is_valid_ea(end_ea, strict_check=False):
+            raise InvalidEAError(end_ea)
+
+        if start_ea >= end_ea:
+            raise InvalidParameterError('start_ea', start_ea, 'must be less than end_ea')
+
+        try:
+            pattern_bytes, mask = self._parse_wildcard_pattern(pattern)
+        except ValueError as e:
+            raise InvalidParameterError('pattern', pattern, str(e))
+
+        return self._find_pattern_with_mask(pattern_bytes, mask, start_ea, end_ea)
+
+    def find_pattern_all(
+        self, pattern: str, start_ea: ea_t = None, end_ea: ea_t = None
+    ) -> List[ea_t]:
+        """
+        Find all occurrences of a byte pattern with wildcard support.
+
+        Args:
+            pattern: Hex string pattern with optional ?? wildcards.
+            start_ea: Search start address; defaults to database minimum ea if None.
+            end_ea: Search end address; defaults to database maximum ea if None.
+
+        Returns:
+            List of addresses where pattern was found.
+
+        Raises:
+            InvalidParameterError: If pattern is invalid.
+            InvalidEAError: If start_ea or end_ea are specified but invalid.
+        """
+        if not isinstance(pattern, str):
+            raise InvalidParameterError('pattern', type(pattern), 'must be string')
+
+        if len(pattern.strip()) == 0:
+            raise InvalidParameterError('pattern', pattern, 'cannot be empty')
+
+        if start_ea is None:
+            start_ea = self.database.minimum_ea
+        elif not self.database.is_valid_ea(start_ea, strict_check=False):
+            raise InvalidEAError(start_ea)
+
+        if end_ea is None:
+            end_ea = self.database.maximum_ea
+        elif not self.database.is_valid_ea(end_ea, strict_check=False):
+            raise InvalidEAError(end_ea)
+
+        if start_ea >= end_ea:
+            raise InvalidParameterError('start_ea', start_ea, 'must be less than end_ea')
+
+        results: List[ea_t] = []
+
+        try:
+            pattern_bytes, mask = self._parse_wildcard_pattern(pattern)
+        except ValueError as e:
+            raise InvalidParameterError('pattern', pattern, str(e))
+
+        current_ea = start_ea
+        while current_ea < end_ea:
+            found_ea = self._find_pattern_with_mask(pattern_bytes, mask, current_ea, end_ea)
+            if found_ea is None:
+                break
+            results.append(found_ea)
+            current_ea = found_ea + 1
+
+        return results
+
+    def _parse_wildcard_pattern(self, pattern: str) -> tuple:
+        """
+        Parse a hex pattern string with wildcards into bytes and mask.
+
+        Args:
+            pattern: Hex string like "48 89 ?? ?? 48"
+
+        Returns:
+            Tuple of (pattern_bytes, mask_bytes) where mask is 0xFF for
+            literal bytes and 0x00 for wildcards.
+
+        Raises:
+            ValueError: If pattern contains invalid hex values.
+        """
+        pattern_bytes = []
+        mask_bytes = []
+
+        tokens = pattern.strip().split()
+
+        for token in tokens:
+            token = token.strip()
+            if not token:
+                continue
+
+            if token in ('??', '?'):
+                pattern_bytes.append(0)
+                mask_bytes.append(0)
+            else:
+                if len(token) != 2:
+                    raise ValueError(f'invalid hex byte: {token}')
+                try:
+                    byte_val = int(token, 16)
+                    pattern_bytes.append(byte_val)
+                    mask_bytes.append(0xFF)
+                except ValueError:
+                    raise ValueError(f'invalid hex byte: {token}')
+
+        if not pattern_bytes:
+            raise ValueError('pattern is empty')
+
+        return bytes(pattern_bytes), bytes(mask_bytes)
+
+    def _find_pattern_with_mask(
+        self, pattern: bytes, mask: bytes, start_ea: ea_t, end_ea: ea_t
+    ) -> Optional[ea_t]:
+        """
+        Find pattern with mask in memory range.
+
+        Args:
+            pattern: Bytes to search for.
+            mask: Mask bytes (0xFF = must match, 0x00 = wildcard).
+            start_ea: Start address.
+            end_ea: End address.
+
+        Returns:
+            Address of first match, or None if not found.
+        """
+        pattern_len = len(pattern)
+        current_ea = start_ea
+
+        while current_ea + pattern_len <= end_ea:
+            data = ida_bytes.get_bytes(current_ea, pattern_len)
+            if data is None:
+                current_ea += 1
+                continue
+
+            match = True
+            for i in range(pattern_len):
+                if mask[i] != 0 and data[i] != pattern[i]:
+                    match = False
+                    break
+
+            if match:
+                return current_ea
+
+            current_ea += 1
+
+        return None
 
     def get_microcode_between(
         self, start_ea: ea_t, end_ea: ea_t, remove_tags: bool = True
@@ -2150,3 +2304,398 @@ class Bytes(DatabaseEntity):
                     microcode.append(line.strip())
 
         return microcode
+
+    def set_operand_hex(self, ea: ea_t, n: int) -> bool:
+        """
+        Set operand representation to hexadecimal.
+
+        This method changes how an operand is displayed in the disassembly.
+        The value remains the same, only the display representation changes.
+
+        Args:
+            ea: The effective address of the instruction.
+            n: Operand number (0-based). 0 is first operand, 1 is second, etc.
+
+        Returns:
+            True if successful, False otherwise.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+            InvalidParameterError: If operand number is negative.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Display first operand as hexadecimal
+            >>> db.bytes.set_operand_hex(0x401000, 0)
+            True
+            >>> # Before: add eax, 255
+            >>> # After:  add eax, 0xFF
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        if n < 0:
+            raise InvalidParameterError('n', n, 'operand number must be non-negative')
+
+        # op_hex is inline in IDA SDK: set_op_type(ea, hex_flag(), n)
+        return bool(ida_bytes.set_op_type(ea, ida_bytes.hex_flag(), n))
+
+    def set_operand_decimal(self, ea: ea_t, n: int) -> bool:
+        """
+        Set operand representation to decimal.
+
+        This method changes how an operand is displayed in the disassembly.
+        The value remains the same, only the display representation changes.
+
+        Args:
+            ea: The effective address of the instruction.
+            n: Operand number (0-based). 0 is first operand, 1 is second, etc.
+
+        Returns:
+            True if successful, False otherwise.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+            InvalidParameterError: If operand number is negative.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Display first operand as decimal
+            >>> db.bytes.set_operand_decimal(0x401000, 0)
+            True
+            >>> # Before: add eax, 0xFF
+            >>> # After:  add eax, 255
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        if n < 0:
+            raise InvalidParameterError('n', n, 'operand number must be non-negative')
+
+        # op_dec is inline in IDA SDK: set_op_type(ea, dec_flag(), n)
+        return bool(ida_bytes.set_op_type(ea, ida_bytes.dec_flag(), n))
+
+    def set_operand_octal(self, ea: ea_t, n: int) -> bool:
+        """
+        Set operand representation to octal.
+
+        This method changes how an operand is displayed in the disassembly.
+        The value remains the same, only the display representation changes.
+
+        Args:
+            ea: The effective address of the instruction.
+            n: Operand number (0-based). 0 is first operand, 1 is second, etc.
+
+        Returns:
+            True if successful, False otherwise.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+            InvalidParameterError: If operand number is negative.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Display first operand as octal
+            >>> db.bytes.set_operand_octal(0x401000, 0)
+            True
+            >>> # Before: add eax, 255
+            >>> # After:  add eax, 0377
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        if n < 0:
+            raise InvalidParameterError('n', n, 'operand number must be non-negative')
+
+        # op_oct is inline in IDA SDK: set_op_type(ea, oct_flag(), n)
+        return bool(ida_bytes.set_op_type(ea, ida_bytes.oct_flag(), n))
+
+    def set_operand_binary(self, ea: ea_t, n: int) -> bool:
+        """
+        Set operand representation to binary.
+
+        This method changes how an operand is displayed in the disassembly.
+        The value remains the same, only the display representation changes.
+
+        Args:
+            ea: The effective address of the instruction.
+            n: Operand number (0-based). 0 is first operand, 1 is second, etc.
+
+        Returns:
+            True if successful, False otherwise.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+            InvalidParameterError: If operand number is negative.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Display first operand as binary
+            >>> db.bytes.set_operand_binary(0x401000, 0)
+            True
+            >>> # Before: add eax, 255
+            >>> # After:  add eax, 0b11111111
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        if n < 0:
+            raise InvalidParameterError('n', n, 'operand number must be non-negative')
+
+        # op_bin is inline in IDA SDK: set_op_type(ea, bin_flag(), n)
+        return bool(ida_bytes.set_op_type(ea, ida_bytes.bin_flag(), n))
+
+    def set_operand_char(self, ea: ea_t, n: int) -> bool:
+        """
+        Set operand representation to character.
+
+        This method changes how an operand is displayed in the disassembly.
+        The value remains the same, only the display representation changes.
+        Useful for instructions that operate on ASCII character constants.
+
+        Args:
+            ea: The effective address of the instruction.
+            n: Operand number (0-based). 0 is first operand, 1 is second, etc.
+
+        Returns:
+            True if successful, False otherwise.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+            InvalidParameterError: If operand number is negative.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Display operand as character
+            >>> db.bytes.set_operand_char(0x401000, 1)
+            True
+            >>> # Before: cmp al, 65
+            >>> # After:  cmp al, 'A'
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        if n < 0:
+            raise InvalidParameterError('n', n, 'operand number must be non-negative')
+
+        # op_chr is inline in IDA SDK: set_op_type(ea, char_flag(), n)
+        return bool(ida_bytes.set_op_type(ea, ida_bytes.char_flag(), n))
+
+    def set_operand_enum(self, ea: ea_t, n: int, enum_id: int, serial: int = 0) -> bool:
+        """
+        Set operand to display as an enum member.
+
+        This method changes how an operand is displayed in the disassembly,
+        showing it as an enum member name instead of a numeric value.
+        If multiple enum members have the same value, the serial parameter
+        selects which one to display.
+
+        Args:
+            ea: The effective address of the instruction.
+            n: Operand number (0-based). 0 is first operand, 1 is second, etc.
+            enum_id: The enum type ID to apply to this operand.
+            serial: Serial number for selecting among multiple enum members with
+                the same value (default: 0 for first match).
+
+        Returns:
+            True if successful, False otherwise.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+            InvalidParameterError: If operand number is negative or enum_id is invalid.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Assuming we have an enum "FileMode" with READ=1, WRITE=2, EXECUTE=4
+            >>> enum_id = idc.get_enum("FileMode")
+            >>> db.bytes.set_operand_enum(0x401000, 1, enum_id)
+            True
+            >>> # Before: mov eax, 3
+            >>> # After:  mov eax, READ|WRITE
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        if n < 0:
+            raise InvalidParameterError('n', n, 'operand number must be non-negative')
+
+        if not isinstance(enum_id, int):
+            raise InvalidParameterError('enum_id', enum_id, 'must be an integer')
+
+        if enum_id < 0:
+            raise InvalidParameterError('enum_id', enum_id, 'must be non-negative')
+
+        return bool(ida_bytes.op_enum(ea, n, enum_id, serial))
+
+    def is_offset_operand(self, ea: ea_t, n: int) -> bool:
+        """
+        Check if an operand is displayed as an offset.
+
+        This method determines whether an operand at the specified address is
+        formatted as an offset reference (pointer to another location in the
+        database). Offset operands typically show as addresses or offsets from
+        a base address.
+
+        Args:
+            ea: The effective address of the instruction.
+            n: Operand number (0-based). 0 is first operand, 1 is second, etc.
+
+        Returns:
+            True if the operand is displayed as an offset, False otherwise.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+            InvalidParameterError: If operand number is negative.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Check if operand 0 at address is an offset
+            >>> if db.bytes.is_offset_operand(0x401000, 0):
+            ...     print("Operand 0 is an offset reference")
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        if n < 0:
+            raise InvalidParameterError('n', n, 'operand number must be non-negative')
+
+        flags = ida_bytes.get_flags(ea)
+        return cast(bool, ida_bytes.is_off(flags, n))
+
+    def is_char_operand(self, ea: ea_t, n: int) -> bool:
+        """
+        Check if an operand is displayed as a character.
+
+        This method determines whether an operand at the specified address is
+        formatted as a character literal (e.g., 'A' instead of 65). Character
+        operands display as quoted characters in the disassembly.
+
+        Args:
+            ea: The effective address of the instruction.
+            n: Operand number (0-based). 0 is first operand, 1 is second, etc.
+
+        Returns:
+            True if the operand is displayed as a character, False otherwise.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+            InvalidParameterError: If operand number is negative.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Check if operand 1 is displayed as character
+            >>> if db.bytes.is_char_operand(0x401000, 1):
+            ...     print("Operand 1 is a character literal")
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        if n < 0:
+            raise InvalidParameterError('n', n, 'operand number must be non-negative')
+
+        flags = ida_bytes.get_flags(ea)
+        return cast(bool, ida_bytes.is_char(flags, n))
+
+    def is_enum_operand(self, ea: ea_t, n: int) -> bool:
+        """
+        Check if an operand is displayed as an enum member.
+
+        This method determines whether an operand at the specified address is
+        formatted as an enum member name (e.g., FILE_READ instead of 1).
+        Enum operands display as symbolic enum member names in the disassembly.
+
+        Args:
+            ea: The effective address of the instruction.
+            n: Operand number (0-based). 0 is first operand, 1 is second, etc.
+
+        Returns:
+            True if the operand is displayed as an enum member, False otherwise.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+            InvalidParameterError: If operand number is negative.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Check if operand 1 is an enum member
+            >>> if db.bytes.is_enum_operand(0x401000, 1):
+            ...     print("Operand 1 is an enum member")
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        if n < 0:
+            raise InvalidParameterError('n', n, 'operand number must be non-negative')
+
+        flags = ida_bytes.get_flags(ea)
+        return cast(bool, ida_bytes.is_enum(flags, n))
+
+    def is_struct_offset_operand(self, ea: ea_t, n: int) -> bool:
+        """
+        Check if an operand is displayed as a structure offset.
+
+        This method determines whether an operand at the specified address is
+        formatted as a structure member offset (e.g., MyStruct.field instead
+        of a numeric offset). Structure offset operands show symbolic field
+        names in the disassembly.
+
+        Args:
+            ea: The effective address of the instruction.
+            n: Operand number (0-based). 0 is first operand, 1 is second, etc.
+
+        Returns:
+            True if the operand is displayed as a structure offset, False otherwise.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+            InvalidParameterError: If operand number is negative.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Check if operand 1 is a structure offset
+            >>> if db.bytes.is_struct_offset_operand(0x401000, 1):
+            ...     print("Operand 1 is a structure offset")
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        if n < 0:
+            raise InvalidParameterError('n', n, 'operand number must be non-negative')
+
+        flags = ida_bytes.get_flags(ea)
+        return cast(bool, ida_bytes.is_stroff(flags, n))
+
+    def is_stack_var_operand(self, ea: ea_t, n: int) -> bool:
+        """
+        Check if an operand is a stack variable reference.
+
+        This method determines whether an operand at the specified address
+        references a stack variable (local variable or function argument).
+        Stack variable operands display as symbolic variable names (e.g.,
+        var_10 or arg_0) instead of stack pointer offsets.
+
+        Args:
+            ea: The effective address of the instruction.
+            n: Operand number (0-based). 0 is first operand, 1 is second, etc.
+
+        Returns:
+            True if the operand is a stack variable reference, False otherwise.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+            InvalidParameterError: If operand number is negative.
+
+        Example:
+            >>> db = Database.open_current()
+            >>> # Check if operand 0 is a stack variable
+            >>> if db.bytes.is_stack_var_operand(0x401000, 0):
+            ...     print("Operand 0 is a stack variable")
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        if n < 0:
+            raise InvalidParameterError('n', n, 'operand number must be non-negative')
+
+        flags = ida_bytes.get_flags(ea)
+        return cast(bool, ida_bytes.is_stkvar(flags, n))
