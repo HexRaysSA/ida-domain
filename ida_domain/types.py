@@ -23,7 +23,7 @@ from ida_typeinf import (
     BT_INT32,
     BT_INT64,
     BT_FLOAT,
-    BT_DOUBLE,
+    BTMT_DOUBLE,
     BTF_STRUCT,
     BTF_UNION,
     BT_VOID,
@@ -2097,7 +2097,7 @@ class Types(DatabaseEntity):
             return result
         elif size == 8:
             result = tinfo_t()
-            result.create_simple_type(BT_DOUBLE)
+            result.create_simple_type(BT_FLOAT | BTMT_DOUBLE)
             return result
         else:
             raise InvalidParameterError("size", size, "must be 4 or 8")
