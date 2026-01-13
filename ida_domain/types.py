@@ -2,22 +2,34 @@ from __future__ import annotations
 
 import logging
 import warnings
+from dataclasses import dataclass
 from enum import Enum, EnumMeta, Flag, IntEnum, IntFlag, auto
 from pathlib import Path
 
 import ida_nalt
 import ida_typeinf
 from ida_typeinf import (
+    BT_FLOAT,
+    BT_INT8,
+    BT_INT16,
+    BT_INT32,
+    BT_INT64,
+    BT_VOID,
+    BTF_STRUCT,
+    BTF_UNION,
+    BTMT_DOUBLE,
     array_type_data_t,
     bitfield_type_data_t,
     enum_type_data_t,
     func_type_data_t,
+    funcarg_t,
     ptr_type_data_t,
     til_t,
     tinfo_t,
+    udm_t,
     udt_type_data_t,
 )
-from typing_extensions import TYPE_CHECKING, Callable, Dict, Iterator, Optional, Tuple
+from typing_extensions import TYPE_CHECKING, Callable, Dict, Iterator, List, Optional, Tuple, Union
 
 from . import __ida_version__
 from .base import (
@@ -867,6 +879,477 @@ class TypeDetailsVisitor(ida_typeinf.tinfo_visitor_t):
         return 0
 
 
+# =============================================================================
+# Member Information Dataclasses
+# =============================================================================
+
+
+@dataclass
+class UdtMemberInfo:
+    """Details about a struct/union member."""
+
+    name: str
+    """Member name."""
+
+    type: tinfo_t
+    """Member type information."""
+
+    offset: int
+    """Byte offset within the structure."""
+
+    size: int
+    """Size in bytes."""
+
+    is_bitfield: bool
+    """True if this is a bitfield member."""
+
+    bit_offset: Optional[int] = None
+    """Bit offset within the byte (for bitfields only)."""
+
+    bit_size: Optional[int] = None
+    """Bit size (for bitfields only)."""
+
+
+@dataclass
+class EnumMemberInfo:
+    """Details about an enum member."""
+
+    name: str
+    """Member name."""
+
+    value: int
+    """Numeric value."""
+
+
+@dataclass
+class FuncArgumentInfo:
+    """Details about a function argument."""
+
+    index: int
+    """Argument index (0-based)."""
+
+    name: str
+    """Argument name (may be empty/auto-generated)."""
+
+    type: tinfo_t
+    """Argument type information."""
+
+
+# =============================================================================
+# Type Member Lookup Mode
+# =============================================================================
+
+
+class TypeMemberLookupMode(Enum):
+    """Mode for member lookup operations."""
+
+    NAME = "name"
+    """Look up member by name"""
+
+    OFFSET = "offset"
+    """Look up member by offset (for UDT)"""
+
+    INDEX = "index"
+    """Look up member by index (for enum, func args)"""
+
+    VALUE = "value"
+    """Look up member by value (for enum)"""
+
+
+# =============================================================================
+# Calling Convention Enum
+# =============================================================================
+
+
+class CallingConvention(Enum):
+    """Calling convention for function types."""
+
+    CDECL = "cdecl"
+    STDCALL = "stdcall"
+    FASTCALL = "fastcall"
+    THISCALL = "thiscall"
+    DEFAULT = "default"
+
+
+# =============================================================================
+# Type Builders
+# =============================================================================
+
+
+class StructBuilder:
+    """
+    Builder for creating struct types.
+
+    Example:
+        >>> builder = db.types.create_struct("MyStruct")
+        >>> builder.add_member("x", db.types.create_primitive(4))
+        >>> builder.add_member("y", db.types.create_primitive(4))
+        >>> my_struct = builder.build()
+    """
+
+    def __init__(self, name: str) -> None:
+        """
+        Initialize a struct builder.
+
+        Args:
+            name: Name for the struct type.
+        """
+        self._name = name
+        self._members: List[Tuple[str, tinfo_t, Optional[int]]] = []
+        self._packed = False
+        self._alignment: Optional[int] = None
+
+    def add_member(
+        self,
+        name: str,
+        member_type: tinfo_t,
+        offset: Optional[int] = None
+    ) -> 'StructBuilder':
+        """
+        Add a member to the struct.
+
+        Args:
+            name: Member name.
+            member_type: Member type.
+            offset: Explicit byte offset (auto-calculated if None).
+
+        Returns:
+            Self for method chaining.
+        """
+        self._members.append((name, member_type, offset))
+        return self
+
+    def set_packed(self, packed: bool = True) -> 'StructBuilder':
+        """
+        Set whether the struct is packed (no padding).
+        """
+        self._packed = packed
+        return self
+
+    def set_alignment(self, alignment: int) -> 'StructBuilder':
+        """
+        Set explicit alignment for the struct.
+        """
+        self._alignment = alignment
+        return self
+
+    def build(self) -> tinfo_t:
+        """
+        Build and return the struct type.
+
+        Returns:
+            The constructed tinfo_t.
+
+        Raises:
+            RuntimeError: If struct creation fails.
+        """
+        udt = udt_type_data_t()
+        udt.is_union = False
+
+        for name, member_type, offset in self._members:
+            if offset is not None:
+                udt_member = udt.add_member(name, member_type, offset)
+            else:
+                udt_member = udt.add_member(name, member_type)
+            if udt_member is None:
+                raise RuntimeError(f"Failed to add member '{name}' to struct '{self._name}'")
+
+        result = tinfo_t()
+        if not result.create_udt(udt, BTF_STRUCT):
+            raise RuntimeError(f"Failed to create struct '{self._name}'")
+
+        return result
+
+    def build_and_save(self, library: Optional[til_t] = None) -> tinfo_t:
+        """
+        Build the struct and save it to a type library.
+
+        Args:
+            library: Target library (local library if None).
+
+        Returns:
+            The constructed and saved tinfo_t.
+        """
+        result = self.build()
+        if library is None:
+            library = ida_typeinf.get_idati()
+        if result.set_named_type(library, self._name) < 0:
+            raise RuntimeError(f"Failed to save struct '{self._name}' to library")
+        return result
+
+
+class UnionBuilder:
+    """
+    Builder for creating union types.
+
+    Example:
+        >>> builder = db.types.create_union("MyUnion")
+        >>> builder.add_member("as_int", db.types.create_primitive(4))
+        >>> builder.add_member("as_float", db.types.create_primitive(4))
+        >>> my_union = builder.build()
+    """
+
+    def __init__(self, name: str) -> None:
+        """
+        Initialize a union builder.
+
+        Args:
+            name: Name for the union type.
+        """
+        self._name = name
+        self._members: List[Tuple[str, tinfo_t]] = []
+
+    def add_member(self, name: str, member_type: tinfo_t) -> 'UnionBuilder':
+        """
+        Add a member to the union.
+
+        Args:
+            name: Member name.
+            member_type: Member type.
+
+        Returns:
+            Self for method chaining.
+        """
+        self._members.append((name, member_type))
+        return self
+
+    def build(self) -> tinfo_t:
+        """
+        Build and return the union type.
+
+        Returns:
+            The constructed tinfo_t.
+
+        Raises:
+            RuntimeError: If union creation fails.
+        """
+        udt = udt_type_data_t()
+        udt.is_union = True
+
+        for name, member_type in self._members:
+            udt_member = udt.add_member(name, member_type)
+            if udt_member is None:
+                raise RuntimeError(f"Failed to add member '{name}' to union '{self._name}'")
+
+        result = tinfo_t()
+        if not result.create_udt(udt, BTF_UNION):
+            raise RuntimeError(f"Failed to create union '{self._name}'")
+
+        return result
+
+    def build_and_save(self, library: Optional[til_t] = None) -> tinfo_t:
+        """
+        Build the union and save it to a type library.
+
+        Args:
+            library: Target library (local library if None).
+
+        Returns:
+            The constructed and saved tinfo_t.
+        """
+        result = self.build()
+        if library is None:
+            library = ida_typeinf.get_idati()
+        if result.set_named_type(library, self._name) < 0:
+            raise RuntimeError(f"Failed to save union '{self._name}' to library")
+        return result
+
+
+class EnumBuilder:
+    """
+    Builder for creating enum types.
+
+    Example:
+        >>> builder = db.types.create_enum("FileMode", base_size=4)
+        >>> builder.add_member("READ", 1)
+        >>> builder.add_member("WRITE", 2)
+        >>> builder.add_member("EXEC", 4)
+        >>> file_mode = builder.build()
+    """
+
+    def __init__(self, name: str, base_size: int = 4) -> None:
+        """
+        Initialize an enum builder.
+
+        Args:
+            name: Name for the enum type.
+            base_size: Size in bytes (1, 2, 4, or 8).
+        """
+        self._name = name
+        self._base_size = base_size
+        self._members: List[Tuple[str, int]] = []
+        self._is_bitmask = False
+
+    def add_member(self, name: str, value: int) -> 'EnumBuilder':
+        """
+        Add a member to the enum.
+
+        Args:
+            name: Member name.
+            value: Numeric value.
+
+        Returns:
+            Self for method chaining.
+        """
+        self._members.append((name, value))
+        return self
+
+    def set_bitmask(self, is_bitmask: bool = True) -> 'EnumBuilder':
+        """
+        Set whether this is a bitmask enum.
+        """
+        self._is_bitmask = is_bitmask
+        return self
+
+    def build(self) -> tinfo_t:
+        """
+        Build and return the enum type.
+
+        Returns:
+            The constructed tinfo_t.
+
+        Raises:
+            RuntimeError: If enum creation fails.
+        """
+        enum_data = enum_type_data_t()
+
+        for name, value in self._members:
+            enum_data.add_constant(name, value)
+
+        if self._is_bitmask:
+            enum_data.set_bf(True)
+
+        result = tinfo_t()
+        if not result.create_enum(enum_data):
+            raise RuntimeError(f"Failed to create enum '{self._name}'")
+
+        return result
+
+    def build_and_save(self, library: Optional[til_t] = None) -> tinfo_t:
+        """
+        Build the enum and save it to a type library.
+
+        Args:
+            library: Target library (local library if None).
+
+        Returns:
+            The constructed and saved tinfo_t.
+        """
+        result = self.build()
+        if library is None:
+            library = ida_typeinf.get_idati()
+        if result.set_named_type(library, self._name) < 0:
+            raise RuntimeError(f"Failed to save enum '{self._name}' to library")
+        return result
+
+
+class FuncTypeBuilder:
+    """
+    Builder for creating function types.
+
+    Example:
+        >>> builder = db.types.create_func_type()
+        >>> builder.set_return_type(db.types.create_primitive(4))
+        >>> builder.add_argument("count", db.types.create_primitive(4))
+        >>> builder.add_argument("buffer", db.types.create_pointer(db.types.create_primitive(1)))
+        >>> func_type = builder.build()
+    """
+
+    def __init__(self) -> None:
+        """Initialize a function type builder."""
+        self._return_type: Optional[tinfo_t] = None
+        self._arguments: List[Tuple[str, tinfo_t]] = []
+        self._calling_convention: Optional[CallingConvention] = None
+        self._variadic = False
+
+    def set_return_type(self, ret_type: tinfo_t) -> 'FuncTypeBuilder':
+        """
+        Set the return type.
+
+        Args:
+            ret_type: Return type (void if not set).
+
+        Returns:
+            Self for method chaining.
+        """
+        self._return_type = ret_type
+        return self
+
+    def add_argument(
+        self,
+        name: str,
+        arg_type: tinfo_t
+    ) -> 'FuncTypeBuilder':
+        """
+        Add an argument to the function type.
+
+        Args:
+            name: Argument name.
+            arg_type: Argument type.
+
+        Returns:
+            Self for method chaining.
+        """
+        self._arguments.append((name, arg_type))
+        return self
+
+    def set_calling_convention(self, cc: CallingConvention) -> 'FuncTypeBuilder':
+        """
+        Set the calling convention.
+
+        Args:
+            cc: Calling convention enum value.
+
+        Returns:
+            Self for method chaining.
+        """
+        self._calling_convention = cc
+        return self
+
+    def set_variadic(self, variadic: bool = True) -> 'FuncTypeBuilder':
+        """
+        Set whether function accepts variable arguments.
+
+        Returns:
+            Self for method chaining.
+        """
+        self._variadic = variadic
+        return self
+
+    def build(self) -> tinfo_t:
+        """
+        Build and return the function type.
+
+        Returns:
+            The constructed tinfo_t.
+
+        Raises:
+            RuntimeError: If function type creation fails.
+        """
+        ftd = func_type_data_t()
+
+        # Set return type
+        if self._return_type is not None:
+            ftd.rettype = self._return_type
+        else:
+            void_type = tinfo_t()
+            void_type.create_simple_type(BT_VOID)
+            ftd.rettype = void_type
+
+        # Add arguments
+        for name, arg_type in self._arguments:
+            fa = funcarg_t()
+            fa.name = name
+            fa.type = arg_type
+            ftd.push_back(fa)
+
+        result = tinfo_t()
+        if not result.create_func(ftd):
+            raise RuntimeError("Failed to create function type")
+
+        return result
+
+
 @decorate_all_methods(check_db_open)
 class Types(DatabaseEntity):
     """
@@ -1234,3 +1717,584 @@ class Types(DatabaseEntity):
             Comment text, or empty string if no comment exists.
         """
         return type_info.get_type_cmt() or ''
+
+    # =========================================================================
+    # UDT (Struct/Union) Member Access
+    # =========================================================================
+
+    def get_udt_members(self, type_info: tinfo_t) -> Iterator[UdtMemberInfo]:
+        """
+        Iterate over all members of a struct or union type.
+
+        Args:
+            type_info: A UDT (struct or union) type.
+
+        Returns:
+            Iterator of UdtMemberInfo for each member.
+            Empty iterator if type is not a UDT.
+
+        Example:
+            >>> struct_type = db.types.get_by_name("MyStruct")
+            >>> for member in db.types.get_udt_members(struct_type):
+            ...     print(f"{member.name}: {member.size} bytes at offset {member.offset}")
+        """
+        if not type_info.is_udt():
+            return
+
+        udt_data = udt_type_data_t()
+        if not type_info.get_udt_details(udt_data):
+            return
+
+        for member in udt_data:
+            m: udm_t = member
+            byte_offset = int(m.offset) // 8  # Offsets are in bits
+            is_bitfield = m.type.is_bitfield()
+
+            bit_offset = None
+            bit_size = None
+            if is_bitfield:
+                bit_offset = int(m.offset) % 8
+                bit_size = m.size
+
+            yield UdtMemberInfo(
+                name=m.name,
+                type=m.type,
+                offset=byte_offset,
+                size=m.type.get_size(),
+                is_bitfield=is_bitfield,
+                bit_offset=bit_offset,
+                bit_size=bit_size,
+            )
+
+    def get_udt_member_by_name(
+        self, type_info: tinfo_t, name: str
+    ) -> Optional[UdtMemberInfo]:
+        """
+        Get a specific UDT member by name.
+
+        Args:
+            type_info: A UDT (struct or union) type.
+            name: Member name to find.
+
+        Returns:
+            UdtMemberInfo if found, None otherwise.
+        """
+        for member in self.get_udt_members(type_info):
+            if member.name == name:
+                return member
+        return None
+
+    def get_udt_member_by_offset(
+        self, type_info: tinfo_t, offset: int
+    ) -> Optional[UdtMemberInfo]:
+        """
+        Get a UDT member at the specified byte offset.
+
+        Args:
+            type_info: A UDT (struct or union) type.
+            offset: Byte offset within the structure.
+
+        Returns:
+            UdtMemberInfo if found, None otherwise.
+        """
+        for member in self.get_udt_members(type_info):
+            if member.offset == offset:
+                return member
+        return None
+
+    def get_udt_member_count(self, type_info: tinfo_t) -> int:
+        """
+        Get the number of members in a UDT.
+
+        Args:
+            type_info: A UDT type.
+
+        Returns:
+            Member count, or 0 if not a UDT.
+        """
+        if not type_info.is_udt():
+            return 0
+        return type_info.get_udt_nmembers()
+
+    # =========================================================================
+    # Enum Member Access
+    # =========================================================================
+
+    def get_enum_members(self, type_info: tinfo_t) -> Iterator[EnumMemberInfo]:
+        """
+        Iterate over all members of an enum type.
+
+        Args:
+            type_info: An enum type.
+
+        Returns:
+            Iterator of EnumMemberInfo for each member.
+            Empty iterator if type is not an enum.
+
+        Example:
+            >>> enum_type = db.types.get_by_name("FileMode")
+            >>> for member in db.types.get_enum_members(enum_type):
+            ...     print(f"{member.name} = {member.value}")
+        """
+        if not type_info.is_enum():
+            return
+
+        for e in type_info.iter_enum():
+            yield EnumMemberInfo(name=e.name, value=e.value)
+
+    def get_enum_member_by_name(
+        self, type_info: tinfo_t, name: str
+    ) -> Optional[EnumMemberInfo]:
+        """
+        Get a specific enum member by name.
+
+        Args:
+            type_info: An enum type.
+            name: Member name to find.
+
+        Returns:
+            EnumMemberInfo if found, None otherwise.
+        """
+        for member in self.get_enum_members(type_info):
+            if member.name == name:
+                return member
+        return None
+
+    def get_enum_member_by_value(
+        self, type_info: tinfo_t, value: int
+    ) -> Optional[EnumMemberInfo]:
+        """
+        Get a specific enum member by value.
+
+        Args:
+            type_info: An enum type.
+            value: Numeric value to find.
+
+        Returns:
+            EnumMemberInfo if found, None otherwise.
+        """
+        for member in self.get_enum_members(type_info):
+            if member.value == value:
+                return member
+        return None
+
+    def get_enum_member_count(self, type_info: tinfo_t) -> int:
+        """
+        Get the number of members in an enum.
+
+        Args:
+            type_info: An enum type.
+
+        Returns:
+            Member count, or 0 if not an enum.
+        """
+        if not type_info.is_enum():
+            return 0
+
+        enum_data = enum_type_data_t()
+        if type_info.get_enum_details(enum_data):
+            return enum_data.size()
+        return 0
+
+    # =========================================================================
+    # Function Type Access
+    # =========================================================================
+
+    def get_func_arguments(self, type_info: tinfo_t) -> Iterator[FuncArgumentInfo]:
+        """
+        Iterate over all arguments of a function type.
+
+        Args:
+            type_info: A function type.
+
+        Returns:
+            Iterator of FuncArgumentInfo for each argument.
+            Empty iterator if type is not a function.
+
+        Example:
+            >>> func_type = db.types.get_at(0x401000)
+            >>> for arg in db.types.get_func_arguments(func_type):
+            ...     print(f"Arg {arg.index}: {arg.name}")
+        """
+        if not type_info.is_func():
+            return
+
+        for i, arg in enumerate(type_info.iter_func()):
+            arg_name = arg.name if arg.name else f"arg{i}"
+            yield FuncArgumentInfo(index=i, name=arg_name, type=arg.type)
+
+    def get_func_argument_by_index(
+        self, type_info: tinfo_t, index: int
+    ) -> Optional[FuncArgumentInfo]:
+        """
+        Get a specific function argument by index.
+
+        Args:
+            type_info: A function type.
+            index: Argument index (0-based).
+
+        Returns:
+            FuncArgumentInfo if found, None otherwise.
+        """
+        for arg in self.get_func_arguments(type_info):
+            if arg.index == index:
+                return arg
+        return None
+
+    def get_func_argument_count(self, type_info: tinfo_t) -> int:
+        """
+        Get the number of arguments in a function type.
+
+        Args:
+            type_info: A function type.
+
+        Returns:
+            Argument count, or 0 if not a function type.
+        """
+        if not type_info.is_func():
+            return 0
+
+        func_data = func_type_data_t()
+        if type_info.get_func_details(func_data):
+            return len(func_data)
+        return 0
+
+    def get_return_type(self, type_info: tinfo_t) -> Optional[tinfo_t]:
+        """
+        Get the return type of a function type.
+
+        Args:
+            type_info: A function type.
+
+        Returns:
+            The return type, or None if not a function type.
+        """
+        if not type_info.is_func():
+            return None
+        return type_info.get_rettype()
+
+    # =========================================================================
+    # Pointer/Array Type Access
+    # =========================================================================
+
+    def get_pointed_type(self, type_info: tinfo_t) -> Optional[tinfo_t]:
+        """
+        Get the type pointed to by a pointer type.
+
+        Args:
+            type_info: A pointer type.
+
+        Returns:
+            The pointed-to type, or None if not a pointer.
+
+        Example:
+            >>> ptr_type = db.types.get_at(0x401000)  # char*
+            >>> base = db.types.get_pointed_type(ptr_type)  # char
+        """
+        if not type_info.is_ptr() and not type_info.is_funcptr():
+            return None
+        return type_info.get_pointed_object()
+
+    def get_array_element_type(self, type_info: tinfo_t) -> Optional[tinfo_t]:
+        """
+        Get the element type of an array type.
+
+        Args:
+            type_info: An array type.
+
+        Returns:
+            The element type, or None if not an array.
+        """
+        if not type_info.is_array():
+            return None
+
+        array_data = array_type_data_t()
+        if type_info.get_array_details(array_data):
+            return array_data.elem_type
+        return None
+
+    def get_array_length(self, type_info: tinfo_t) -> Optional[int]:
+        """
+        Get the number of elements in an array type.
+
+        Args:
+            type_info: An array type.
+
+        Returns:
+            The array length, or None if not an array.
+        """
+        if not type_info.is_array():
+            return None
+
+        array_data = array_type_data_t()
+        if type_info.get_array_details(array_data):
+            return array_data.nelems
+        return None
+
+    # =========================================================================
+    # Type Creation Methods
+    # =========================================================================
+
+    def create_void(self) -> tinfo_t:
+        """
+        Create a void type.
+
+        Returns:
+            A void tinfo_t.
+        """
+        result = tinfo_t()
+        result.create_simple_type(BT_VOID)
+        return result
+
+    def create_primitive(self, size: int, signed: bool = True) -> tinfo_t:
+        """
+        Create a primitive integer type.
+
+        Args:
+            size: Size in bytes (1, 2, 4, or 8).
+            signed: True for signed, False for unsigned.
+
+        Returns:
+            The primitive type.
+
+        Raises:
+            InvalidParameterError: If size is not 1, 2, 4, or 8.
+
+        Example:
+            >>> int32 = db.types.create_primitive(4, signed=True)
+            >>> uint8 = db.types.create_primitive(1, signed=False)
+        """
+        size_to_type = {
+            1: BT_INT8,
+            2: BT_INT16,
+            4: BT_INT32,
+            8: BT_INT64,
+        }
+
+        if size not in size_to_type:
+            raise InvalidParameterError("size", size, "must be 1, 2, 4, or 8")
+
+        result = tinfo_t()
+        result.create_simple_type(size_to_type[size])
+        return result
+
+    def create_float(self, size: int = 4) -> tinfo_t:
+        """
+        Create a floating-point type.
+
+        Args:
+            size: 4 for float, 8 for double.
+
+        Returns:
+            The floating-point type.
+
+        Raises:
+            InvalidParameterError: If size is not 4 or 8.
+        """
+        if size == 4:
+            result = tinfo_t()
+            result.create_simple_type(BT_FLOAT)
+            return result
+        elif size == 8:
+            result = tinfo_t()
+            result.create_simple_type(BT_FLOAT | BTMT_DOUBLE)
+            return result
+        else:
+            raise InvalidParameterError("size", size, "must be 4 or 8")
+
+    def create_pointer(self, target: tinfo_t) -> tinfo_t:
+        """
+        Create a pointer type.
+
+        Args:
+            target: The type being pointed to.
+
+        Returns:
+            A pointer to the target type.
+
+        Example:
+            >>> char_type = db.types.create_primitive(1)
+            >>> char_ptr = db.types.create_pointer(char_type)
+        """
+        result = tinfo_t()
+        result.create_ptr(target)
+        return result
+
+    def create_array(self, element_type: tinfo_t, count: int) -> tinfo_t:
+        """
+        Create an array type.
+
+        Args:
+            element_type: Type of array elements.
+            count: Number of elements.
+
+        Returns:
+            The array type.
+
+        Example:
+            >>> char_type = db.types.create_primitive(1)
+            >>> buffer = db.types.create_array(char_type, 256)
+        """
+        array_data = array_type_data_t()
+        array_data.elem_type = element_type
+        array_data.nelems = count
+        array_data.base = 0
+
+        result = tinfo_t()
+        result.create_array(array_data)
+        return result
+
+    # =========================================================================
+    # Builder Factory Methods
+    # =========================================================================
+
+    def create_struct(self, name: str) -> StructBuilder:
+        """
+        Create a struct builder.
+
+        Args:
+            name: Name for the struct.
+
+        Returns:
+            A StructBuilder for constructing the type.
+
+        Example:
+            >>> point = db.types.create_struct("Point") \\
+            ...     .add_member("x", db.types.create_primitive(4)) \\
+            ...     .add_member("y", db.types.create_primitive(4)) \\
+            ...     .build()
+        """
+        return StructBuilder(name)
+
+    def create_union(self, name: str) -> UnionBuilder:
+        """
+        Create a union builder.
+
+        Args:
+            name: Name for the union.
+
+        Returns:
+            A UnionBuilder for constructing the type.
+        """
+        return UnionBuilder(name)
+
+    def create_enum(self, name: str, base_size: int = 4) -> EnumBuilder:
+        """
+        Create an enum builder.
+
+        Args:
+            name: Name for the enum.
+            base_size: Underlying integer size (1, 2, 4, or 8).
+
+        Returns:
+            An EnumBuilder for constructing the type.
+        """
+        return EnumBuilder(name, base_size)
+
+    def create_func_type(self) -> FuncTypeBuilder:
+        """
+        Create a function type builder.
+
+        Returns:
+            A FuncTypeBuilder for constructing the type.
+        """
+        return FuncTypeBuilder()
+
+    # =========================================================================
+    # Unified LLM-Friendly Interface
+    # =========================================================================
+
+    def get_member(
+        self,
+        type_info: tinfo_t,
+        key: Union[str, int],
+        by: Union[TypeMemberLookupMode, str] = TypeMemberLookupMode.NAME
+    ) -> Optional[Union[UdtMemberInfo, EnumMemberInfo, FuncArgumentInfo]]:
+        """
+        Get a type member (LLM-friendly unified interface).
+
+        Works for struct/union members, enum members, and function arguments.
+
+        Args:
+            type_info: The type to inspect.
+            key: Lookup key (name, offset, index, or value depending on 'by').
+            by: Lookup mode:
+                - "name": Look up by member/argument name
+                - "offset": Look up by byte offset (UDT only)
+                - "index": Look up by index (enum, func args)
+                - "value": Look up by enum value (enum only)
+
+        Returns:
+            The member info if found, None otherwise.
+
+        Example:
+            >>> # Get struct member by name
+            >>> member = db.types.get_member(struct_type, "x", by="name")
+            >>> # Get struct member by offset
+            >>> member = db.types.get_member(struct_type, 4, by="offset")
+            >>> # Get function argument by index
+            >>> arg = db.types.get_member(func_type, 0, by="index")
+        """
+        # Normalize mode
+        if isinstance(by, str):
+            by = TypeMemberLookupMode(by)
+
+        if by == TypeMemberLookupMode.NAME:
+            if not isinstance(key, str):
+                raise InvalidParameterError("key", key, "must be a string when by='name'")
+            if type_info.is_udt():
+                return self.get_udt_member_by_name(type_info, key)
+            elif type_info.is_enum():
+                return self.get_enum_member_by_name(type_info, key)
+            # Function arguments don't typically have meaningful names to search by
+            return None
+
+        elif by == TypeMemberLookupMode.OFFSET:
+            if not isinstance(key, int):
+                raise InvalidParameterError("key", key, "must be an int when by='offset'")
+            if type_info.is_udt():
+                return self.get_udt_member_by_offset(type_info, key)
+            return None
+
+        elif by == TypeMemberLookupMode.INDEX:
+            if not isinstance(key, int):
+                raise InvalidParameterError("key", key, "must be an int when by='index'")
+            if type_info.is_func():
+                return self.get_func_argument_by_index(type_info, key)
+            return None
+
+        elif by == TypeMemberLookupMode.VALUE:
+            if not isinstance(key, int):
+                raise InvalidParameterError("key", key, "must be an int when by='value'")
+            if type_info.is_enum():
+                return self.get_enum_member_by_value(type_info, key)
+            return None
+
+        return None
+
+    def get_members(
+        self,
+        type_info: tinfo_t
+    ) -> Iterator[Union[UdtMemberInfo, EnumMemberInfo, FuncArgumentInfo]]:
+        """
+        Get all members of a type (LLM-friendly unified interface).
+
+        Works for struct/union types, enum types, and function types.
+
+        Args:
+            type_info: The type to inspect.
+
+        Returns:
+            Iterator of member info objects.
+            Empty iterator if type has no members.
+
+        Example:
+            >>> for member in db.types.get_members(struct_type):
+            ...     print(f"{member.name}")
+        """
+        if type_info.is_udt():
+            yield from self.get_udt_members(type_info)
+        elif type_info.is_enum():
+            yield from self.get_enum_members(type_info)
+        elif type_info.is_func():
+            yield from self.get_func_arguments(type_info)
