@@ -586,6 +586,87 @@ def test_entries(test_env):
     assert no_code_entry.name == 'no_code'
 
 
+def test_imports(test_env):
+    db = test_env
+    import ida_domain.imports
+
+    assert db.imports.get_module_count() == 0
+    assert len(db.imports) == 0
+
+    count = 0
+    for _ in db.imports:
+        count += 1
+    assert count == 0
+
+    assert list(db.imports.get_all_modules()) == []
+    assert list(db.imports.get_all_imports()) == []
+    assert list(db.imports.get_module_names()) == []
+    assert list(db.imports.get_import_names()) == []
+    assert list(db.imports.get_import_addresses()) == []
+    assert db.imports.get_import_count() == 0
+
+    assert db.imports.get_module_by_name('kernel32.dll') is None
+    assert db.imports.get_import_by_name('kernel32.dll!CreateFileW') is None
+    assert db.imports.get_import_by_name('kernel32.dll!#42') is None
+    assert db.imports.get_import_by_name('CreateFileW') is None  # missing module prefix
+    assert db.imports.get_import_at(0x1000) is None
+    assert db.imports.exists('kernel32.dll!CreateFileW') is False
+
+    with pytest.raises(IndexError):
+        db.imports.get_module_at_index(-1)
+
+    with pytest.raises(IndexError):
+        db.imports.get_module_at_index(0)
+
+    with pytest.raises(IndexError):
+        db.imports.get_module_at_index(999)
+
+    with pytest.raises(IndexError):
+        _ = db.imports[0]
+
+    with pytest.raises(IndexError):
+        list(db.imports.get_imports_for_module(-1))
+
+    with pytest.raises(IndexError):
+        list(db.imports.get_imports_for_module(0))
+
+    imp_info = ida_domain.imports.ImportInfo(
+        address=0x1000,
+        name='TestFunc',
+        ordinal=1,
+        module_index=0,
+        module_name='test.dll',
+    )
+    assert imp_info.has_name() is True
+    assert imp_info.address == 0x1000
+    assert imp_info.name == 'TestFunc'
+    assert imp_info.ordinal == 1
+    assert imp_info.module_index == 0
+    assert imp_info.module_name == 'test.dll'
+
+    imp_ordinal_only = ida_domain.imports.ImportInfo(
+        address=0x2000,
+        name=None,
+        ordinal=42,
+        module_index=0,
+        module_name='test.dll',
+    )
+    assert imp_ordinal_only.has_name() is False
+
+    imp_empty_name = ida_domain.imports.ImportInfo(
+        address=0x3000,
+        name='',
+        ordinal=43,
+        module_index=0,
+        module_name='test.dll',
+    )
+    assert imp_empty_name.has_name() is False
+
+    mod_info = ida_domain.imports.ImportModuleInfo(index=0, name='kernel32.dll')
+    assert mod_info.index == 0
+    assert mod_info.name == 'kernel32.dll'
+
+
 def test_heads(test_env):
     db = test_env
 
