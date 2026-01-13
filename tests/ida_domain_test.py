@@ -2749,7 +2749,7 @@ def test_complex_variable_access(tiny_c_env):
 
     db = tiny_c_env
 
-    func = db.functions.get_function_by_name('complex_assignments')
+    func = db.functions.get_by_name('complex_assignments')
     assert func is not None
 
     v9 = db.functions.get_local_variable_by_name(func, 'v9')

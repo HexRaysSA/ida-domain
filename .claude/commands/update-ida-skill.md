@@ -1,107 +1,52 @@
 ---
 description: Update the ida-domain-scripting skill when the API changes
-allowed-tools: Read, Write, Edit, Glob, Grep, Bash(ls:*), Bash(wc:*)
+allowed-tools: Bash(uv:*), Read, Write, Edit
 argument-hint: [ida-domain-path]
 ---
 
 # Update IDA Domain Scripting Skill
 
-Update the ida-domain-scripting skill to reflect changes in the ida-domain API.
+Automatically regenerate the ida-domain-scripting skill documentation from source code.
 
-## Source Code Location
+## Quick Update
 
-The ida-domain source code is at: **$ARGUMENTS**
+Run the auto-generator:
 
-If no path provided, use the current working directory.
+```bash
+uv run python .claude/skills/ida-domain-scripting/generate_skill_docs.py --ida-domain-path $ARGUMENTS
+```
 
-## Current Skill Files
+If no path provided, use current directory:
 
-The skill is located at `~/.claude/skills/ida-domain-scripting/` or `.claude/skills/ida-domain-scripting`:
-- `SKILL.md` - Main skill file with overview, handlers table, conventions
-- `references/api-handlers.md` - Complete handler method reference
-- `references/enums-types.md` - Enum values reference
-- `references/patterns.md` - Code patterns and examples
+```bash
+uv run python .claude/skills/ida-domain-scripting/generate_skill_docs.py --ida-domain-path .
+```
 
-## Update Process
+## What Gets Generated
 
-### Step 1: Analyze Source Changes
+The generator parses Python source using AST (no runtime needed) and creates:
 
-Read the ida-domain source files to identify:
+- `SKILL.md` - Main skill file with handlers table
+- `references/api-handlers.md` - All handler methods with signatures
+- `references/enums-types.md` - All enum values
 
-1. **All handlers** in `database.py`:
-   - Look for `@property` methods returning handler classes
-   - Each handler is accessed via `db.<handler_name>`
+## Manual Updates Still Needed
 
-2. **Handler methods** in each handler file (e.g., `functions.py`, `xrefs.py`):
-   - Public methods (not starting with `_`)
-   - Method signatures and return types
-   - Docstrings for descriptions
+The generator does NOT update:
+- `references/patterns.md` - Code examples and patterns (update manually)
+- Docstring descriptions for enum values (add to source code)
 
-3. **Enums and types**:
-   - `xrefs.py`: XrefType, XrefKind
-   - `operands.py`: OperandType, OperandDataType, AccessType
-   - `functions.py`: FunctionFlags, LocalVariableAccessType, LocalVariableContext
-   - `search.py`: SearchDirection, SearchTarget
-   - Any new enums added
+## After Regeneration
 
-4. **New patterns** from:
-   - Examples in `examples/` directory if present
-   - Test files showing usage patterns
-   - Docstrings with code examples
+1. Review the generated files for accuracy
+2. Update `references/patterns.md` if new features were added
+3. Test a few API calls to verify documentation matches reality
 
-### Step 2: Compare with Current Skill
+## Troubleshooting
 
-Read the current skill files and identify:
-- Missing handlers (new handlers not documented)
-- Missing methods (new methods on existing handlers)
-- Missing enum values
-- Outdated information
+If generator misses methods:
+- Check the handler class inherits from `DatabaseEntity`
+- Check the class name matches handler name (e.g., `Functions` for `functions`)
+- Methods starting with `_` are excluded (private)
 
-### Step 3: Update Skill Files
-
-Update each file as needed:
-
-#### SKILL.md
-- Update the handlers table if new handlers added
-- Update API conventions if patterns changed
-- Keep it concise (<200 lines)
-
-#### references/api-handlers.md
-- Add new handlers with their methods
-- Add new methods to existing handlers
-- Update method signatures if changed
-- Keep the table format consistent
-
-#### references/enums-types.md
-- Add new enum values
-- Add entirely new enums
-- Update descriptions if changed
-
-#### references/patterns.md
-- Add patterns for new functionality
-- Update existing patterns if API changed
-- Add new sections for major new features
-
-### Step 4: Verify Updates
-
-After updates, verify:
-- All handlers from database.py are in SKILL.md
-- All public methods are in api-handlers.md
-- All enum values are in enums-types.md
-- Code examples use correct API
-
-## Important Guidelines
-
-1. **Preserve structure** - Keep the existing file organization
-2. **Be accurate** - Extract info directly from source code, don't guess
-3. **Stay concise** - Don't bloat files with unnecessary details
-4. **Document new features** - Any new handler or significant method needs coverage
-5. **Maintain consistency** - Use same formatting as existing content
-
-## Output
-
-After completing updates, summarize:
-- Number of new handlers added
-- Number of new methods documented
-- Number of new enum values added
-- Any significant API changes noted
+To debug, add print statements in `generate_skill_docs.py`.

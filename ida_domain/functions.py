@@ -1147,7 +1147,7 @@ class Functions(DatabaseEntity):
 
         return callees
 
-    def get_function_by_name(self, name: str) -> Optional[func_t]:
+    def get_by_name(self, name: str) -> Optional[func_t]:
         """
         Find a function by its name.
 

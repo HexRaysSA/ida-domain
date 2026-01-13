@@ -79,7 +79,7 @@ class Entity:
 | `get_at` | `[PRE-FORK]` `[KEEP]` | `get_at(ea) -> func_t \| None` | Get function containing address |
 | `get_all` | `[PRE-FORK]` `[KEEP]` | `get_all() -> Iterator[func_t]` | Iterate all functions |
 | `get_between` | `[PRE-FORK]` `[KEEP]` | `get_between(start, end) -> Iterator[func_t]` | Functions in range |
-| `get_function_by_name` | `[PRE-FORK]` `[KEEP]` | `get_function_by_name(name) -> func_t \| None` | Find by name |
+| `get_by_name` | `[PRE-FORK]` `[KEEP]` | `get_by_name(name) -> func_t \| None` | Find by name |
 | `create` | `[PRE-FORK]` `[KEEP]` | `create(ea) -> bool` | Create function |
 | `remove` | `[PRE-FORK]` `[KEEP]` | `remove(ea) -> bool` | Delete function |
 | `get_next` | `[PRE-FORK]` `[KEEP]` | `get_next(ea) -> func_t \| None` | Get next function |
@@ -855,7 +855,6 @@ def get_between(self, start: ea_t, end: ea_t) -> Iterator[func_t]:
 |--------|-----------------|-----------|
 | Functions | `get_between` | `get_in_range` |
 | Functions | `remove` | `delete` |
-| Functions | `get_function_by_name` | `get_by_name` |
 | Bytes | `find_bytes_between` | `find_bytes` |
 | Bytes | `find_text_between` | `find_text` |
 | Names | `get_count` | `count` |
