@@ -2,12 +2,22 @@ from __future__ import annotations
 
 import logging
 import warnings
+from dataclasses import dataclass
 from enum import Enum, EnumMeta, Flag, IntEnum, IntFlag, auto
 from pathlib import Path
 
 import ida_nalt
 import ida_typeinf
 from ida_typeinf import (
+    BT_FLOAT,
+    BT_INT8,
+    BT_INT16,
+    BT_INT32,
+    BT_INT64,
+    BT_VOID,
+    BTF_STRUCT,
+    BTF_UNION,
+    BTMT_DOUBLE,
     array_type_data_t,
     bitfield_type_data_t,
     enum_type_data_t,
@@ -16,19 +26,9 @@ from ida_typeinf import (
     ptr_type_data_t,
     til_t,
     tinfo_t,
-    udt_type_data_t,
     udm_t,
-    BT_INT8,
-    BT_INT16,
-    BT_INT32,
-    BT_INT64,
-    BT_FLOAT,
-    BTMT_DOUBLE,
-    BTF_STRUCT,
-    BTF_UNION,
-    BT_VOID,
+    udt_type_data_t,
 )
-from dataclasses import dataclass
 from typing_extensions import TYPE_CHECKING, Callable, Dict, Iterator, List, Optional, Tuple, Union
 
 from . import __ida_version__
