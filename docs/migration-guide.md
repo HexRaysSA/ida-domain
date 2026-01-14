@@ -20,7 +20,7 @@ This guide documents the migration from the low-level IDA Python SDK to the IDA 
 
 The IDA Domain API (`ida_domain`) provides a cleaner, more Pythonic interface to IDA Pro's functionality. Key benefits:
 
-- **Explicit dependencies**: All functions receive a `Database` handle instead of using global state
+- **Explicit dependencies**: All functions receive a [`Database`](ref/database.md) handle instead of using global state
 - **Organized namespaces**: Functions grouped logically (`db.functions.*`, `db.bytes.*`, etc.)
 - **Simplified version handling**: No need for version-specific code paths (IDA 7.5/8/9)
 - **Better testability**: Dependency injection enables mocking
@@ -34,17 +34,17 @@ The IDA Domain API organizes functionality into logical namespaces:
 
 | Namespace         | Purpose                                                   |
 | ----------------- | --------------------------------------------------------- |
-| `db.bytes`        | Binary data operations (find, read, check initialization) |
-| `db.functions`    | Function enumeration, properties, flowcharts, comments    |
-| `db.segments`     | Segment enumeration and lookup                            |
-| `db.heads`        | Head (item) navigation                                    |
-| `db.instructions` | Instruction decoding, mnemonic, disassembly               |
-| `db.xrefs`        | Cross-reference navigation                                |
-| `db.names`        | Name/symbol operations                                    |
-| `db.comments`     | Comment retrieval                                         |
-| `db.entries`      | Entry point enumeration                                   |
+| [`db.bytes`](ref/bytes.md)        | Binary data operations (find, read, check initialization) |
+| [`db.functions`](ref/functions.md)    | Function enumeration, properties, flowcharts, comments    |
+| [`db.segments`](ref/segments.md)     | Segment enumeration and lookup                            |
+| [`db.heads`](ref/heads.md)        | Head (item) navigation                                    |
+| [`db.instructions`](ref/instructions.md) | Instruction decoding, mnemonic, disassembly               |
+| [`db.xrefs`](ref/xrefs.md)        | Cross-reference navigation                                |
+| [`db.names`](ref/names.md)        | Name/symbol operations                                    |
+| [`db.comments`](ref/comments.md)     | Comment retrieval                                         |
+| [`db.entries`](ref/entries.md)      | Entry point enumeration                                   |
 
-Root-level properties and methods:
+[Root-level properties and methods](ref/database.md):
 
 - `db.md5`, `db.sha256` - File hashes
 - `db.base_address` - Image base
@@ -57,7 +57,7 @@ Root-level properties and methods:
 
 ## Aside: Dependency Injection
 
-A fundamental change is that all functions now receive a `db: Database` parameter as their first argument. Rather than relying on global accessors, we access entities through a database reference. This may allow us to work on multiple databases in parallel, sometime in the future.
+A fundamental change is that all functions now receive a `db: Database` parameter as their first argument. Rather than relying on global accessors, we access entities through a [Database](ref/database.md) reference. This may allow us to work on multiple databases in parallel, sometime in the future.
 
 **Before (implicit global state):**
 ```python
@@ -78,7 +78,7 @@ def get_functions(db: Database):
 
 ## High-Level API Mapping Table
 
-### Database Properties
+### [Database Properties](ref/database.md)
 
 | Old API | New API | Description |
 |---------|---------|-------------|
@@ -90,7 +90,7 @@ def get_functions(db: Database):
 | `idaapi.get_inf_structure().is_64bit()` (IDA<9) / `idaapi.inf_is_64bit()` (IDA9+) | `db.bitness == 64` | Check 64-bit mode |
 | `idaapi.get_inf_structure().is_32bit()` (IDA<9) / `idaapi.inf_is_32bit_exactly()` (IDA9+) | `db.bitness == 32` | Check 32-bit mode |
 
-### Function Operations (`db.functions`)
+### [Function Operations](ref/functions.md) (`db.functions`)
 
 | Old API | New API | Description |
 |---------|---------|-------------|
@@ -103,7 +103,7 @@ def get_functions(db: Database):
 | `ida_funcs.get_func_cmt(f, False)` | `db.functions.get_comment(f, False)` | Get function comment |
 | `idaapi.FlowChart(f, flags=...)` | `db.functions.get_flowchart(f, flags=...)` | Get flowchart |
 
-### Byte Operations (`db.bytes`)
+### [Byte Operations](ref/bytes.md) (`db.bytes`)
 
 | Old API | New API | Description |
 |---------|---------|-------------|
@@ -112,7 +112,7 @@ def get_functions(db: Database):
 | `idc.is_loaded(ea)` | `db.bytes.is_value_initialized_at(ea)` | Check if byte is initialized |
 | `ida_bytes.bin_search()` + patterns | `db.bytes.find_binary_sequence(seq, start, end)` | Binary search |
 
-### Segment Operations (`db.segments`)
+### [Segment Operations](ref/segments.md) (`db.segments`)
 
 | Old API | New API | Description |
 |---------|---------|-------------|
@@ -121,7 +121,7 @@ def get_functions(db: Database):
 | `idc.get_segm_end(ea)` | `db.segments.get_at(ea).end_ea` | Get segment end |
 | `idaapi.get_segm_name(seg)` | `db.segments.get_name(seg)` | Get segment name |
 
-### Head/Instruction Operations
+### Head/Instruction Operations ([Heads](ref/heads.md), [Instructions](ref/instructions.md))
 
 | Old API | New API | Description |
 |---------|---------|-------------|
@@ -134,7 +134,7 @@ def get_functions(db: Database):
 | `idaapi.is_ret_insn(insn)` | `db.instructions.breaks_sequential_flow(insn)` | Check if breaks flow |
 | `insn.itype == idaapi.NN_xor` | `db.instructions.get_mnemonic(insn) == "xor"` | Check mnemonic |
 
-### Cross-Reference Operations (`db.xrefs`)
+### [Cross-Reference Operations](ref/xrefs.md) (`db.xrefs`)
 
 | Old API | New API | Description |
 |---------|---------|-------------|
@@ -142,19 +142,19 @@ def get_functions(db: Database):
 | `idautils.CodeRefsFrom(ea, False)` | `db.xrefs.code_refs_from_ea(ea, flow=False)` | Code refs from address |
 | `idautils.DataRefsFrom(ea)` | `db.xrefs.data_refs_from_ea(ea)` | Data refs from address |
 
-### Name Operations (`db.names`)
+### [Name Operations](ref/names.md) (`db.names`)
 
 | Old API | New API | Description |
 |---------|---------|-------------|
 | `idaapi.get_name(ea)` | `db.names.get_at(ea)` | Get name at address |
 
-### Comment Operations (`db.comments`)
+### [Comment Operations](ref/comments.md) (`db.comments`)
 
 | Old API | New API | Description |
 |---------|---------|-------------|
 | `ida_bytes.get_cmt(ea, False)` | `db.comments.get_at(ea)` | Get comment (returns object) |
 
-### Entry Point Operations (`db.entries`)
+### [Entry Point Operations](ref/entries.md) (`db.entries`)
 
 | Old API | New API | Description |
 |---------|---------|-------------|
