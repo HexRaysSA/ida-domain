@@ -80,92 +80,92 @@ def get_functions(db: Database):
 
 ### [Database Properties](ref/database.md)
 
-| Old API | New API | Description |
-|---------|---------|-------------|
-| `ida_nalt.retrieve_input_file_md5()` | `db.md5` | MD5 hash of input file |
-| `ida_nalt.retrieve_input_file_sha256()` | `db.sha256` | SHA256 hash of input file |
-| `idaapi.get_imagebase()` | `db.base_address` | Image base address |
-| `ida_loader.get_file_type_name()` | `db.format` | File format string ("PE", "ELF") |
-| `idaapi.get_inf_structure().procname` (IDA<9) / `idc.get_processor_name()` (IDA9+) | `db.architecture` | Processor name ("metapc") |
-| `idaapi.get_inf_structure().is_64bit()` (IDA<9) / `idaapi.inf_is_64bit()` (IDA9+) | `db.bitness == 64` | Check 64-bit mode |
-| `idaapi.get_inf_structure().is_32bit()` (IDA<9) / `idaapi.inf_is_32bit_exactly()` (IDA9+) | `db.bitness == 32` | Check 32-bit mode |
+| Old API | New API |
+|---------|---------|
+| `ida_nalt.retrieve_input_file_md5()` | `db.md5` |
+| `ida_nalt.retrieve_input_file_sha256()` | `db.sha256` |
+| `idaapi.get_imagebase()` | `db.base_address` |
+| `ida_loader.get_file_type_name()` | `db.format` |
+| `idaapi.get_inf_structure().procname` (IDA<9) / `idc.get_processor_name()` (IDA9+) | `db.architecture` |
+| `idaapi.get_inf_structure().is_64bit()` (IDA<9) / `idaapi.inf_is_64bit()` (IDA9+) | `db.bitness == 64` |
+| `idaapi.get_inf_structure().is_32bit()` (IDA<9) / `idaapi.inf_is_32bit_exactly()` (IDA9+) | `db.bitness == 32` |
 
 ### [Function Operations](ref/functions.md) (`db.functions`)
 
-| Old API | New API | Description |
-|---------|---------|-------------|
-| `idautils.Functions()` | `db.functions.get_all()` | Iterate all functions |
-| `idautils.Functions(start, end)` | `db.functions.get_between(start, end)` | Functions in range |
-| `idaapi.get_func(ea)` | `db.functions.get_at(ea)` | Get function at address |
-| `idaapi.get_func_name(ea)` | `db.functions.get_name(f)` | Get function name |
-| `f.flags & idaapi.FUNC_THUNK` | `db.functions.get_flags(f) & FunctionFlags.THUNK` | Check thunk flag |
-| `f.flags & idaapi.FUNC_LIB` | `db.functions.get_flags(f) & FunctionFlags.LIB` | Check library flag |
-| `ida_funcs.get_func_cmt(f, False)` | `db.functions.get_comment(f, False)` | Get function comment |
-| `idaapi.FlowChart(f, flags=...)` | `db.functions.get_flowchart(f, flags=...)` | Get flowchart |
+| Old API | New API |
+|---------|---------|
+| `idautils.Functions()` | `db.functions.get_all()` |
+| `idautils.Functions(start, end)` | `db.functions.get_between(start, end)` |
+| `idaapi.get_func(ea)` | `db.functions.get_at(ea)` |
+| `idaapi.get_func_name(ea)` | `db.functions.get_name(f)` |
+| `f.flags & idaapi.FUNC_THUNK` | `db.functions.get_flags(f) & FunctionFlags.THUNK` |
+| `f.flags & idaapi.FUNC_LIB` | `db.functions.get_flags(f) & FunctionFlags.LIB` |
+| `ida_funcs.get_func_cmt(f, False)` | `db.functions.get_comment(f, False)` |
+| `idaapi.FlowChart(f, flags=...)` | `db.functions.get_flowchart(f, flags=...)` |
 
 ### [Byte Operations](ref/bytes.md) (`db.bytes`)
 
-| Old API | New API | Description |
-|---------|---------|-------------|
-| `idc.get_bytes(ea, count)` | `db.bytes.get_bytes_at(ea, count)` | Read bytes |
-| `idaapi.get_bytes(ea, sz)` | `db.bytes.get_bytes_at(ea, sz)` | Read bytes |
-| `idc.is_loaded(ea)` | `db.bytes.is_value_initialized_at(ea)` | Check if byte is initialized |
-| `ida_bytes.bin_search()` + patterns | `db.bytes.find_binary_sequence(seq, start, end)` | Binary search |
+| Old API | New API |
+|---------|---------|
+| `idc.get_bytes(ea, count)` | `db.bytes.get_bytes_at(ea, count)` |
+| `idaapi.get_bytes(ea, sz)` | `db.bytes.get_bytes_at(ea, sz)` |
+| `idc.is_loaded(ea)` | `db.bytes.is_value_initialized_at(ea)` |
+| `ida_bytes.bin_search()` + patterns | `db.bytes.find_binary_sequence(seq, start, end)` |
 
 ### [Segment Operations](ref/segments.md) (`db.segments`)
 
-| Old API | New API | Description |
-|---------|---------|-------------|
-| `idaapi.get_segm_qty()` + `idaapi.getnseg(n)` | `db.segments.get_all()` | Iterate all segments |
-| `idaapi.getseg(ea)` | `db.segments.get_at(ea)` | Get segment at address |
-| `idc.get_segm_end(ea)` | `db.segments.get_at(ea).end_ea` | Get segment end |
-| `idaapi.get_segm_name(seg)` | `db.segments.get_name(seg)` | Get segment name |
+| Old API | New API |
+|---------|---------|
+| `idaapi.get_segm_qty()` + `idaapi.getnseg(n)` | `db.segments.get_all()` |
+| `idaapi.getseg(ea)` | `db.segments.get_at(ea)` |
+| `idc.get_segm_end(ea)` | `db.segments.get_at(ea).end_ea` |
+| `idaapi.get_segm_name(seg)` | `db.segments.get_name(seg)` |
 
 ### Head/Instruction Operations ([Heads](ref/heads.md), [Instructions](ref/instructions.md))
 
-| Old API | New API | Description |
-|---------|---------|-------------|
-| `idautils.Heads(start, end)` | `db.heads.get_between(start, end)` | Iterate heads |
-| `idc.prev_head(ea)` | `db.heads.get_previous(ea)` | Previous head |
-| `idautils.DecodeInstruction(head)` | `db.instructions.get_at(head)` | Decode instruction |
-| `insn.get_canon_mnem()` | `db.instructions.get_mnemonic(insn)` | Get mnemonic |
-| `idc.GetDisasm(ea)` | `db.instructions.get_disassembly(insn)` | Get disassembly |
-| `idaapi.is_call_insn(insn)` | `db.instructions.is_call_instruction(insn)` | Check if call |
-| `idaapi.is_ret_insn(insn)` | `db.instructions.breaks_sequential_flow(insn)` | Check if breaks flow |
-| `insn.itype == idaapi.NN_xor` | `db.instructions.get_mnemonic(insn) == "xor"` | Check mnemonic |
+| Old API | New API |
+|---------|---------|
+| `idautils.Heads(start, end)` | `db.heads.get_between(start, end)` |
+| `idc.prev_head(ea)` | `db.heads.get_previous(ea)` |
+| `idautils.DecodeInstruction(head)` | `db.instructions.get_at(head)` |
+| `insn.get_canon_mnem()` | `db.instructions.get_mnemonic(insn)` |
+| `idc.GetDisasm(ea)` | `db.instructions.get_disassembly(insn)` |
+| `idaapi.is_call_insn(insn)` | `db.instructions.is_call_instruction(insn)` |
+| `idaapi.is_ret_insn(insn)` | `db.instructions.breaks_sequential_flow(insn)` |
+| `insn.itype == idaapi.NN_xor` | `db.instructions.get_mnemonic(insn) == "xor"` |
 
 ### [Cross-Reference Operations](ref/xrefs.md) (`db.xrefs`)
 
-| Old API | New API | Description |
-|---------|---------|-------------|
-| `idautils.CodeRefsTo(ea, True)` | `db.xrefs.code_refs_to_ea(ea)` | Code refs to address |
-| `idautils.CodeRefsFrom(ea, False)` | `db.xrefs.code_refs_from_ea(ea, flow=False)` | Code refs from address |
-| `idautils.DataRefsFrom(ea)` | `db.xrefs.data_refs_from_ea(ea)` | Data refs from address |
+| Old API | New API |
+|---------|---------|
+| `idautils.CodeRefsTo(ea, True)` | `db.xrefs.code_refs_to_ea(ea)` |
+| `idautils.CodeRefsFrom(ea, False)` | `db.xrefs.code_refs_from_ea(ea, flow=False)` |
+| `idautils.DataRefsFrom(ea)` | `db.xrefs.data_refs_from_ea(ea)` |
 
 ### [Name Operations](ref/names.md) (`db.names`)
 
-| Old API | New API | Description |
-|---------|---------|-------------|
-| `idaapi.get_name(ea)` | `db.names.get_at(ea)` | Get name at address |
+| Old API | New API |
+|---------|---------|
+| `idaapi.get_name(ea)` | `db.names.get_at(ea)` |
 
 ### [Comment Operations](ref/comments.md) (`db.comments`)
 
-| Old API | New API | Description |
-|---------|---------|-------------|
-| `ida_bytes.get_cmt(ea, False)` | `db.comments.get_at(ea)` | Get comment (returns object) |
+| Old API | New API |
+|---------|---------|
+| `ida_bytes.get_cmt(ea, False)` | `db.comments.get_at(ea)` |
 
 ### [Entry Point Operations](ref/entries.md) (`db.entries`)
 
-| Old API | New API | Description |
-|---------|---------|-------------|
-| `idautils.Entries()` | `db.entries.get_all()` | Iterate entry points |
-| `ida_entry.get_entry_forwarder(ordinal)` | `entry.has_forwarder()` / `entry.forwarder_name` | Check forwarder |
+| Old API | New API |
+|---------|---------|
+| `idautils.Entries()` | `db.entries.get_all()` |
+| `ida_entry.get_entry_forwarder(ordinal)` | `entry.has_forwarder()` / `entry.forwarder_name` |
 
 ### Address Validation
 
-| Old API | New API | Description |
-|---------|---------|-------------|
-| `idaapi.is_mapped(ea)` | `db.is_valid_ea(ea)` | Check if address is valid |
+| Old API | New API |
+|---------|---------|
+| `idaapi.is_mapped(ea)` | `db.is_valid_ea(ea)` |
 
 ---
 
@@ -305,61 +305,20 @@ def get_functions(db: Database, skip_thunks=False, skip_libs=False):
         yield f
 ```
 
-### Pattern 3: Cross-Reference Resolution
+### Pattern 3: Entry Point Enumeration
 
-**Before (try/except pattern):**
+The old API returns tuples that require unpacking, while `db.entries.get_all()` yields [`EntryInfo`](ref/entries.md) dataclass objects:
+
 ```python
-for _ in range(THUNK_CHAIN_DEPTH_DELTA):
-    try:
-        ref = tuple(idautils.CodeRefsFrom(ref, False))[0]
-    except IndexError:
-        try:
-            ref = tuple(idautils.DataRefsFrom(ref))[0]
-        except IndexError:
-            break
+@dataclass(frozen=True)
+class EntryInfo:
+    ordinal: int        # export ordinal number
+    address: int        # address of entry point
+    name: str           # entry point name
+    forwarder_name: str # forwarder name (or empty string)
+
+    def has_forwarder(self) -> bool: ...
 ```
-
-**After (explicit boolean checks):**
-```python
-for _ in range(THUNK_CHAIN_DEPTH_DELTA):
-    code_refs = list(db.xrefs.code_refs_from_ea(ref, flow=False))
-    if code_refs:
-        ref = code_refs[0]
-    else:
-        data_refs = list(db.xrefs.data_refs_from_ea(ref))
-        if data_refs:
-            ref = data_refs[0]
-        else:
-            break
-```
-
-### Pattern 4: Reading Bytes with Segment Boundary Check
-
-**Before:**
-```python
-def read_bytes_at(ea: int, count: int) -> bytes:
-    if not idc.is_loaded(ea):
-        return b""
-    segm_end = idc.get_segm_end(ea)
-    if ea + count > segm_end:
-        return idc.get_bytes(ea, segm_end - ea)
-    return idc.get_bytes(ea, count)
-```
-
-**After:**
-```python
-def read_bytes_at(db: Database, ea: int, count: int) -> bytes:
-    if not db.bytes.is_value_initialized_at(ea):
-        return b""
-    seg = db.segments.get_at(ea)
-    if seg is None:
-        return b""
-    if ea + count > seg.end_ea:
-        return db.bytes.get_bytes_at(ea, seg.end_ea - ea) or b""
-    return db.bytes.get_bytes_at(ea, count) or b""
-```
-
-### Pattern 5: Entry Point Enumeration
 
 **Before (tuple unpacking):**
 ```python
@@ -372,7 +331,7 @@ def extract_exports():
             yield Export(forwarded_name), ea
 ```
 
-**After (object properties):**
+**After (EntryInfo properties):**
 ```python
 def extract_exports(db: Database):
     for entry in db.entries.get_all():
@@ -382,7 +341,17 @@ def extract_exports(db: Database):
             yield Export(entry.name), entry.address
 ```
 
-### Pattern 6: Comment Retrieval
+### Pattern 4: Comment Retrieval
+
+The old API returns a string directly, while `db.comments.get_at()` returns a [`CommentInfo`](ref/comments.md) dataclass (or `None`):
+
+```python
+@dataclass(frozen=True)
+class CommentInfo:
+    ea: int        # address of the comment
+    comment: str   # the comment text
+    repeatable: bool  # True if repeatable comment
+```
 
 **Before (returns string):**
 ```python
@@ -390,7 +359,7 @@ if contains_keywords(idaapi.get_cmt(ea, False)):
     return True
 ```
 
-**After (returns object):**
+**After (returns CommentInfo):**
 ```python
 cmt_info = db.comments.get_at(ea)
 cmt = cmt_info.comment if cmt_info else ""
@@ -398,7 +367,7 @@ if contains_keywords(cmt):
     return True
 ```
 
-### Pattern 7: Architecture Detection
+### Pattern 5: Architecture Detection
 
 **Before (version-specific with boolean predicates):**
 ```python
@@ -428,7 +397,7 @@ elif arch == "metapc" and bitness == 32:
     yield Arch(ARCH_I386)
 ```
 
-### Pattern 8: Mnemonic-Based Dispatch
+### Pattern 6: Mnemonic-Based Dispatch
 
 **Before (itype constants):**
 ```python
@@ -453,7 +422,7 @@ Some functionality has no Domain API equivalent yet:
 |----------|---------------------|
 | `get_file_imports()` | `idaapi.get_import_module_qty()`, `idaapi.enum_import_names()`, but https://github.com/HexRaysSA/ida-domain/pull/39 is coming |
 | `find_string_at()` | `idaapi.get_strlit_contents()` |
-| Various operand operations | `idc.get_type()`, `idc.get_operand_value()` |
+| Various operand operations | `idc.get_operand_value()` |
 | FlowChart flags | `idaapi.FC_PREDS`, `idaapi.FC_NOEXT` |
 | Segment type checking | `ida_segment.SEG_XTRN` |
 
@@ -498,34 +467,6 @@ def analyze_file(input_path: Path, save=True):
 | `db_compression` | `str` | Compression: "compress", "pack", or "no_pack" |
 | `script_file` | `str` | Script to execute on database open |
 | `script_args` | `list[str]` | Arguments passed to script |
-
-### Pattern: Low-Level idapro Module (Legacy)
-
-For compatibility or when you need more control, you can still use the `idapro` module directly:
-
-```python
-import idapro
-import ida_auto
-from ida_domain import Database
-
-idapro.enable_console_messages(False)
-
-# Return values: 0=success, 2=cancelled, 4=init failed, -1=generic error
-ret = idapro.open_database(
-    str(input_path),
-    run_auto_analysis=True,
-    args="-Olumina:host=0.0.0.0 -Osecondary_lumina:host=0.0.0.0 -R"
-)
-if ret != 0:
-    raise RuntimeError(f"failed to open database: error code {ret}")
-
-ida_auto.auto_wait()  # Wait for analysis to complete
-db = Database.open()  # Get Domain API handle (no path = current database)
-
-# ... work with db ...
-
-idapro.close_database(save=False)
-```
 
 ---
 
