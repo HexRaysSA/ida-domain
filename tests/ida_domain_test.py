@@ -816,12 +816,14 @@ def test_imports_populated(tiny_imports_env):
     assert len(unique_addresses) == len(addresses), 'Import addresses should be unique'
 
     # === Test get_import_by_name() - find known imports ===
-    # Look for common libc imports. ELF import names include version suffix (e.g., malloc@@GLIBC_2.2.5)
+    # Look for common libc imports. ELF import names include version suffix
+    # (e.g., malloc@@GLIBC_2.2.5)
     known_imports = ['malloc', 'free', 'puts', 'exit']
     found_any = False
 
     for imp in all_imports:
-        # Check if import name starts with any known import (handles version suffixes like @@GLIBC_2.2.5)
+        # Check if import name starts with any known import
+        # (handles version suffixes like @@GLIBC_2.2.5)
         if imp.name:
             for known in known_imports:
                 if imp.name.startswith(known):
