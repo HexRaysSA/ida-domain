@@ -23,6 +23,7 @@ from .entries import Entries
 from .functions import Functions
 from .heads import Heads
 from .hooks import HooksList  # type: ignore
+from .imports import Imports
 from .instructions import Instructions
 from .names import Names
 from .segments import Segments
@@ -856,6 +857,11 @@ class Database:
     def entries(self) -> Entries:
         """Handler that provides access to entries operations."""
         return Entries(self)
+
+    @property
+    def imports(self) -> Imports:
+        """Handler that provides access to import operations."""
+        return Imports(self)
 
     @property
     def heads(self) -> Heads:

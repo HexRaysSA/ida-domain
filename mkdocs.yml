@@ -28,6 +28,7 @@ nav:
       - ref/hooks.md
       - ref/functions.md
       - ref/heads.md
+      - ref/imports.md
       - ref/instructions.md
       - ref/names.md
       - ref/operands.md
