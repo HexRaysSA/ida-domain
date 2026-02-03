@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import warnings
 from dataclasses import dataclass
 from enum import Enum, Flag, IntEnum
 
@@ -951,7 +952,7 @@ class Functions(DatabaseEntity):
 
         return callees
 
-    def get_function_by_name(self, name: str) -> Optional[func_t]:
+    def get_by_name(self, name: str) -> Optional[func_t]:
         """
         Find a function by its name.
 
@@ -966,7 +967,11 @@ class Functions(DatabaseEntity):
             return ida_funcs.get_func(func_ea)
         return None
 
-    get_by_name = get_function_by_name
+    def get_function_by_name(self, name: str) -> Optional[func_t]:
+        warnings.warn(
+            'get_function_by_name deprecated, use get_by_name instead', DeprecationWarning
+        )
+        return self.get_by_name(name)
 
     def get_tails(self, func: func_t) -> List[func_t]:
         """
