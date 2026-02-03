@@ -966,6 +966,8 @@ class Functions(DatabaseEntity):
             return ida_funcs.get_func(func_ea)
         return None
 
+    get_by_name = get_function_by_name
+
     def get_tails(self, func: func_t) -> List[func_t]:
         """
         Get all tail chunks of a function.
