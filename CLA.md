@@ -36,5 +36,3 @@ You agree that your Contribution is voluntary, without expectation of financial 
 This CLA shall be governed by the laws of the jurisdiction in which the project maintainers reside, without regard to conflict of law principles.
 
 ---
-
-

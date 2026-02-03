@@ -12,13 +12,13 @@ The Domain API sits on top of the IDA Python SDK, complementing it rather than r
 
 ## 🚀 Key Features
 
-- **Domain-focused design** – Work directly with core reverse engineering concepts like functions, types, and xrefs as first-class citizens.  
-- **Open source from day one** – Read the code, suggest improvements, or contribute new ideas.  
-- **Pure Python implementation** – No compilation required, works with modern Python versions.  
-- **Compatible by design** – Use alongside the IDA Python SDK without conflicts.  
-- **Developer-centric** – Reduce boilerplate and streamline frequent tasks.  
-- **Independently versioned** – Upgrade at your own pace and pin versions for stability.  
-- **Simple installation** – Get started with a single `pip install`.  
+- **Domain-focused design** – Work directly with core reverse engineering concepts like functions, types, and xrefs as first-class citizens.
+- **Open source from day one** – Read the code, suggest improvements, or contribute new ideas.
+- **Pure Python implementation** – No compilation required, works with modern Python versions.
+- **Compatible by design** – Use alongside the IDA Python SDK without conflicts.
+- **Developer-centric** – Reduce boilerplate and streamline frequent tasks.
+- **Independently versioned** – Upgrade at your own pace and pin versions for stability.
+- **Simple installation** – Get started with a single `pip install`.
 
 ## ⚙️ Quick Example
 

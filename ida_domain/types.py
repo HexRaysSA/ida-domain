@@ -943,16 +943,16 @@ class FuncArgumentInfo:
 class TypeMemberLookupMode(Enum):
     """Mode for member lookup operations."""
 
-    NAME = "name"
+    NAME = 'name'
     """Look up member by name"""
 
-    OFFSET = "offset"
+    OFFSET = 'offset'
     """Look up member by offset (for UDT)"""
 
-    INDEX = "index"
+    INDEX = 'index'
     """Look up member by index (for enum, func args)"""
 
-    VALUE = "value"
+    VALUE = 'value'
     """Look up member by value (for enum)"""
 
 
@@ -964,11 +964,11 @@ class TypeMemberLookupMode(Enum):
 class CallingConvention(Enum):
     """Calling convention for function types."""
 
-    CDECL = "cdecl"
-    STDCALL = "stdcall"
-    FASTCALL = "fastcall"
-    THISCALL = "thiscall"
-    DEFAULT = "default"
+    CDECL = 'cdecl'
+    STDCALL = 'stdcall'
+    FASTCALL = 'fastcall'
+    THISCALL = 'thiscall'
+    DEFAULT = 'default'
 
 
 # =============================================================================
@@ -1000,10 +1000,7 @@ class StructBuilder:
         self._alignment: Optional[int] = None
 
     def add_member(
-        self,
-        name: str,
-        member_type: tinfo_t,
-        offset: Optional[int] = None
+        self, name: str, member_type: tinfo_t, offset: Optional[int] = None
     ) -> 'StructBuilder':
         """
         Add a member to the struct.
@@ -1275,11 +1272,7 @@ class FuncTypeBuilder:
         self._return_type = ret_type
         return self
 
-    def add_argument(
-        self,
-        name: str,
-        arg_type: tinfo_t
-    ) -> 'FuncTypeBuilder':
+    def add_argument(self, name: str, arg_type: tinfo_t) -> 'FuncTypeBuilder':
         """
         Add an argument to the function type.
 
@@ -1345,7 +1338,7 @@ class FuncTypeBuilder:
 
         result = tinfo_t()
         if not result.create_func(ftd):
-            raise RuntimeError("Failed to create function type")
+            raise RuntimeError('Failed to create function type')
 
         return result
 
@@ -1766,9 +1759,7 @@ class Types(DatabaseEntity):
                 bit_size=bit_size,
             )
 
-    def get_udt_member_by_name(
-        self, type_info: tinfo_t, name: str
-    ) -> Optional[UdtMemberInfo]:
+    def get_udt_member_by_name(self, type_info: tinfo_t, name: str) -> Optional[UdtMemberInfo]:
         """
         Get a specific UDT member by name.
 
@@ -1784,9 +1775,7 @@ class Types(DatabaseEntity):
                 return member
         return None
 
-    def get_udt_member_by_offset(
-        self, type_info: tinfo_t, offset: int
-    ) -> Optional[UdtMemberInfo]:
+    def get_udt_member_by_offset(self, type_info: tinfo_t, offset: int) -> Optional[UdtMemberInfo]:
         """
         Get a UDT member at the specified byte offset.
 
@@ -1842,9 +1831,7 @@ class Types(DatabaseEntity):
         for e in type_info.iter_enum():
             yield EnumMemberInfo(name=e.name, value=e.value)
 
-    def get_enum_member_by_name(
-        self, type_info: tinfo_t, name: str
-    ) -> Optional[EnumMemberInfo]:
+    def get_enum_member_by_name(self, type_info: tinfo_t, name: str) -> Optional[EnumMemberInfo]:
         """
         Get a specific enum member by name.
 
@@ -1860,9 +1847,7 @@ class Types(DatabaseEntity):
                 return member
         return None
 
-    def get_enum_member_by_value(
-        self, type_info: tinfo_t, value: int
-    ) -> Optional[EnumMemberInfo]:
+    def get_enum_member_by_value(self, type_info: tinfo_t, value: int) -> Optional[EnumMemberInfo]:
         """
         Get a specific enum member by value.
 
@@ -1920,7 +1905,7 @@ class Types(DatabaseEntity):
             return
 
         for i, arg in enumerate(type_info.iter_func()):
-            arg_name = arg.name if arg.name else f"arg{i}"
+            arg_name = arg.name if arg.name else f'arg{i}'
             yield FuncArgumentInfo(index=i, name=arg_name, type=arg.type)
 
     def get_func_argument_by_index(
@@ -2072,7 +2057,7 @@ class Types(DatabaseEntity):
         }
 
         if size not in size_to_type:
-            raise InvalidParameterError("size", size, "must be 1, 2, 4, or 8")
+            raise InvalidParameterError('size', size, 'must be 1, 2, 4, or 8')
 
         result = tinfo_t()
         result.create_simple_type(size_to_type[size])
@@ -2100,7 +2085,7 @@ class Types(DatabaseEntity):
             result.create_simple_type(BT_FLOAT | BTMT_DOUBLE)
             return result
         else:
-            raise InvalidParameterError("size", size, "must be 4 or 8")
+            raise InvalidParameterError('size', size, 'must be 4 or 8')
 
     def create_pointer(self, target: tinfo_t) -> tinfo_t:
         """
@@ -2208,7 +2193,7 @@ class Types(DatabaseEntity):
         self,
         type_info: tinfo_t,
         key: Union[str, int],
-        by: Union[TypeMemberLookupMode, str] = TypeMemberLookupMode.NAME
+        by: Union[TypeMemberLookupMode, str] = TypeMemberLookupMode.NAME,
     ) -> Optional[Union[UdtMemberInfo, EnumMemberInfo, FuncArgumentInfo]]:
         """
         Get a type member (LLM-friendly unified interface).
@@ -2241,7 +2226,7 @@ class Types(DatabaseEntity):
 
         if by == TypeMemberLookupMode.NAME:
             if not isinstance(key, str):
-                raise InvalidParameterError("key", key, "must be a string when by='name'")
+                raise InvalidParameterError('key', key, "must be a string when by='name'")
             if type_info.is_udt():
                 return self.get_udt_member_by_name(type_info, key)
             elif type_info.is_enum():
@@ -2251,21 +2236,21 @@ class Types(DatabaseEntity):
 
         elif by == TypeMemberLookupMode.OFFSET:
             if not isinstance(key, int):
-                raise InvalidParameterError("key", key, "must be an int when by='offset'")
+                raise InvalidParameterError('key', key, "must be an int when by='offset'")
             if type_info.is_udt():
                 return self.get_udt_member_by_offset(type_info, key)
             return None
 
         elif by == TypeMemberLookupMode.INDEX:
             if not isinstance(key, int):
-                raise InvalidParameterError("key", key, "must be an int when by='index'")
+                raise InvalidParameterError('key', key, "must be an int when by='index'")
             if type_info.is_func():
                 return self.get_func_argument_by_index(type_info, key)
             return None
 
         elif by == TypeMemberLookupMode.VALUE:
             if not isinstance(key, int):
-                raise InvalidParameterError("key", key, "must be an int when by='value'")
+                raise InvalidParameterError('key', key, "must be an int when by='value'")
             if type_info.is_enum():
                 return self.get_enum_member_by_value(type_info, key)
             return None
@@ -2273,8 +2258,7 @@ class Types(DatabaseEntity):
         return None
 
     def get_members(
-        self,
-        type_info: tinfo_t
+        self, type_info: tinfo_t
     ) -> Iterator[Union[UdtMemberInfo, EnumMemberInfo, FuncArgumentInfo]]:
         """
         Get all members of a type (LLM-friendly unified interface).
