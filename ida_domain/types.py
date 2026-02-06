@@ -18,6 +18,8 @@ from ida_typeinf import (
     BTF_STRUCT,
     BTF_UNION,
     BTMT_DOUBLE,
+    PIO_IGNORE_PTRS,
+    PIO_NOATTR_FAIL,
     array_type_data_t,
     bitfield_type_data_t,
     enum_type_data_t,
@@ -29,7 +31,17 @@ from ida_typeinf import (
     udm_t,
     udt_type_data_t,
 )
-from typing_extensions import TYPE_CHECKING, Callable, Dict, Iterator, List, Optional, Tuple, Union
+from typing_extensions import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    Iterator,
+    List,
+    Optional,
+    Tuple,
+    Union,
+)
 
 from . import __ida_version__
 from .base import (
@@ -219,6 +231,19 @@ class TypeFormattingFlags(IntFlag):
     """Do not inspect base tils"""
     HTI_SEMICOLON = ida_typeinf.HTI_SEMICOLON
     """Do not complain if the terminating semicolon is absent"""
+
+
+class ObjectIOFlags(IntFlag):
+    """Flags for object serialization/deserialization operations."""
+
+    NONE = 0
+    """Default behavior"""
+
+    NOATTR_FAIL = PIO_NOATTR_FAIL
+    """Treat missing attributes as failures"""
+
+    IGNORE_PTRS = PIO_IGNORE_PTRS
+    """Don't follow pointers during conversion"""
 
 
 class TypeKind(Enum):
@@ -1636,6 +1661,50 @@ class Types(DatabaseEntity):
             raise InvalidEAError(ea)
         return ida_typeinf.apply_tinfo(ea, type, flags)
 
+    def apply_from_decl(
+        self,
+        ea: ea_t,
+        decl: str,
+        flags: TypeApplyFlags = TypeApplyFlags.GUESSED,
+        library: Optional[til_t] = None,
+    ) -> bool:
+        """
+        Parse a C declaration and apply it to the given address.
+
+        This is a convenience method that combines parsing and applying in one step,
+        equivalent to idc.SetType().
+
+        Args:
+            ea: The effective address to apply the type to.
+            decl: C declaration string (e.g., "int __fastcall foo(int x, int y)").
+            flags: Type apply flags.
+            library: Type library for parsing context, defaults to local library.
+
+        Returns:
+            True if the type was parsed and applied successfully, False otherwise.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+            InvalidParameterError: If the declaration cannot be parsed.
+
+        Example:
+            >>> db.types.apply_from_decl(0x401000, "int __fastcall foo(int x)")
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        if not decl:
+            raise InvalidParameterError('decl', decl, 'cannot be empty')
+
+        if library is None:
+            library = ida_typeinf.get_idati()
+
+        tif = ida_typeinf.tinfo_t()
+        if not ida_typeinf.parse_decl(tif, library, decl, ida_typeinf.PT_SIL):
+            raise InvalidParameterError('decl', decl, 'cannot be parsed')
+
+        return ida_typeinf.apply_tinfo(ea, tif, flags)
+
     def get_all(
         self, library: Optional[til_t] = None, type_kind: TypeKind = TypeKind.NAMED
     ) -> Iterator[ida_typeinf.tinfo_t]:
@@ -2282,3 +2351,224 @@ class Types(DatabaseEntity):
             yield from self.get_enum_members(type_info)
         elif type_info.is_func():
             yield from self.get_func_arguments(type_info)
+
+    # =========================================================================
+    # Object Serialization / Deserialization
+    # =========================================================================
+
+    def _serialize_type(self, type_info: tinfo_t) -> Tuple[bytes, bytes]:
+        """
+        Serialize a tinfo_t to type and fields bytes for pack/unpack functions.
+
+        Args:
+            type_info: The type information to serialize.
+
+        Returns:
+            Tuple of (type_bytes, fields_bytes).
+
+        Raises:
+            InvalidParameterError: If serialization fails.
+        """
+        result = type_info.serialize()
+        if result is None:
+            raise InvalidParameterError(
+                'type_info', type_info, 'failed to serialize type information'
+            )
+        type_bytes, fields_bytes, _ = result
+        return type_bytes, fields_bytes if fields_bytes else b''
+
+    def retrieve_object_at(
+        self, type_info: tinfo_t, ea: ea_t, flags: ObjectIOFlags = ObjectIOFlags.NONE
+    ) -> Dict[str, Any]:
+        """
+        Reconstruct a typed object from a database address.
+
+        Reads memory at the specified address according to the type layout
+        and returns a dictionary representation of the structure.
+
+        Args:
+            type_info: Type describing the structure layout.
+            ea: Effective address to read from.
+            flags: ObjectIOFlags controlling behavior:
+                - NONE: Default behavior
+                - NOATTR_FAIL: Treat missing attributes as failures
+                - IGNORE_PTRS: Don't follow pointers during conversion
+
+        Returns:
+            Dictionary with member names as keys and values extracted
+            according to the type definition.
+
+        Raises:
+            InvalidEAError: If ea is invalid.
+            InvalidParameterError: If type_info cannot be serialized.
+            RuntimeError: If unpacking fails.
+
+        Example:
+            >>> point_type = db.types.get_by_name("Point")
+            >>> data = db.types.retrieve_object_at(point_type, 0x401000)
+            >>> print(data)  # {'x': 10, 'y': 20}
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        type_bytes, fields_bytes = self._serialize_type(type_info)
+        til = ida_typeinf.get_idati()
+
+        result = ida_typeinf.unpack_object_from_idb(til, type_bytes, fields_bytes, ea, int(flags))
+
+        if result is None or (isinstance(result, tuple) and result[0] == 0):
+            error_info = result[1] if isinstance(result, tuple) else 'unknown error'
+            raise RuntimeError(f'Failed to unpack object from address 0x{ea:x}: {error_info}')
+
+        # unpack_object_from_idb returns tuple(1, obj) on success
+        if isinstance(result, tuple):
+            return result[1]
+        return result
+
+    def retrieve_object_from_bytes(
+        self, type_info: tinfo_t, data: bytes, flags: ObjectIOFlags = ObjectIOFlags.NONE
+    ) -> Dict[str, Any]:
+        """
+        Reconstruct a typed object from a packed bytes buffer.
+
+        Deserializes a previously packed buffer according to the type layout
+        and returns a dictionary representation.
+
+        Args:
+            type_info: Type describing the structure layout.
+            data: Packed bytes buffer (typically from store_object_to_bytes).
+            flags: ObjectIOFlags controlling behavior:
+                - NONE: Default behavior
+                - NOATTR_FAIL: Treat missing attributes as failures
+                - IGNORE_PTRS: Don't follow pointers during conversion
+
+        Returns:
+            Dictionary with member names as keys and values.
+
+        Raises:
+            InvalidParameterError: If type_info cannot be serialized or data is empty.
+            RuntimeError: If unpacking fails.
+
+        Example:
+            >>> point_type = db.types.get_by_name("Point")
+            >>> packed = db.types.store_object_to_bytes(point_type, {'x': 10, 'y': 20})
+            >>> data = db.types.retrieve_object_from_bytes(point_type, packed)
+            >>> print(data)  # {'x': 10, 'y': 20}
+        """
+        if not isinstance(data, bytes) or len(data) == 0:
+            raise InvalidParameterError('data', data, 'must be non-empty bytes')
+
+        type_bytes, fields_bytes = self._serialize_type(type_info)
+        til = ida_typeinf.get_idati()
+
+        result = ida_typeinf.unpack_object_from_bv(til, type_bytes, fields_bytes, data, int(flags))
+
+        if result is None or (isinstance(result, tuple) and result[0] == 0):
+            error_info = result[1] if isinstance(result, tuple) else 'unknown error'
+            raise RuntimeError(f'Failed to unpack object from bytes: {error_info}')
+
+        # unpack_object_from_bv returns tuple(1, obj) on success
+        if isinstance(result, tuple):
+            return result[1]
+        return result
+
+    def store_object_at(
+        self,
+        type_info: tinfo_t,
+        ea: ea_t,
+        obj: Dict[str, Any],
+        flags: ObjectIOFlags = ObjectIOFlags.NONE,
+    ) -> None:
+        """
+        Store a typed object to a database address.
+
+        Serializes a dictionary according to the type layout and writes
+        the binary representation to the specified database address.
+
+        Args:
+            type_info: Type describing the structure layout.
+            ea: Effective address to write to.
+            obj: Dictionary with member names and values to store.
+            flags: ObjectIOFlags controlling behavior:
+                - NONE: Default behavior
+                - NOATTR_FAIL: Treat missing attributes as failures
+                - IGNORE_PTRS: Don't follow pointers during conversion
+
+        Raises:
+            InvalidEAError: If ea is invalid.
+            InvalidParameterError: If type_info cannot be serialized or obj is invalid.
+            RuntimeError: If packing fails.
+
+        Example:
+            >>> point_type = db.types.get_by_name("Point")
+            >>> db.types.store_object_at(point_type, 0x401000, {'x': 10, 'y': 20})
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        if not isinstance(obj, dict):
+            raise InvalidParameterError('obj', obj, 'must be a dictionary')
+
+        type_bytes, fields_bytes = self._serialize_type(type_info)
+        til = ida_typeinf.get_idati()
+
+        result = ida_typeinf.pack_object_to_idb(obj, til, type_bytes, fields_bytes, ea, int(flags))
+
+        # pack_object_to_idb returns error_t code (0 = success)
+        if result != 0:
+            raise RuntimeError(f'Failed to pack object to address 0x{ea:x}: error code {result}')
+
+    def store_object_to_bytes(
+        self,
+        type_info: tinfo_t,
+        obj: Dict[str, Any],
+        base_ea: ea_t = 0,
+        flags: ObjectIOFlags = ObjectIOFlags.NONE,
+    ) -> bytes:
+        """
+        Serialize a typed object to a bytes buffer.
+
+        Converts a dictionary to binary representation according to the type
+        layout. The resulting bytes can be stored, transmitted, or later
+        deserialized with retrieve_object_from_bytes.
+
+        Args:
+            type_info: Type describing the structure layout.
+            obj: Dictionary with member names and values to store.
+            base_ea: Base address for pointer relocation (default: 0).
+                     Pointers in the packed object will be relative to this address.
+            flags: ObjectIOFlags controlling behavior:
+                - NONE: Default behavior
+                - NOATTR_FAIL: Treat missing attributes as failures
+                - IGNORE_PTRS: Don't follow pointers during conversion
+
+        Returns:
+            Packed bytes buffer containing the serialized object.
+
+        Raises:
+            InvalidParameterError: If type_info cannot be serialized or obj is invalid.
+            RuntimeError: If packing fails.
+
+        Example:
+            >>> point_type = db.types.get_by_name("Point")
+            >>> packed = db.types.store_object_to_bytes(point_type, {'x': 10, 'y': 20})
+            >>> print(len(packed))  # 8 (two 4-byte integers)
+        """
+        if not isinstance(obj, dict):
+            raise InvalidParameterError('obj', obj, 'must be a dictionary')
+
+        type_bytes, fields_bytes = self._serialize_type(type_info)
+        til = ida_typeinf.get_idati()
+
+        result = ida_typeinf.pack_object_to_bv(
+            obj, til, type_bytes, fields_bytes, base_ea, int(flags)
+        )
+
+        if result is None or (isinstance(result, tuple) and result[0] == 0):
+            error_info = result[1] if isinstance(result, tuple) else 'unknown error'
+            raise RuntimeError(f'Failed to pack object to bytes: {error_info}')
+
+        # pack_object_to_bv returns tuple(1, packed_buf) on success
+        if isinstance(result, tuple):
+            return result[1]
+        return result
