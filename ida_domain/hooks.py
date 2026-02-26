@@ -29,7 +29,7 @@ class _BaseHooks(DatabaseEntity):
         import inspect
 
         if msg:
-            logger.debug('>>> %s: %s' % self.__class__.__name__ % msg)
+            logger.debug('>>> %s: %s', self.__class__.__name__, msg)
         else:
             stack = inspect.stack()
             frame, _, _, _, _, _ = stack[1]
@@ -37,9 +37,9 @@ class _BaseHooks(DatabaseEntity):
             method_name = inspect.getframeinfo(frame)[2]
             argstrs = []
             for arg in args[1:]:
-                argstrs.append('%s=%s' % (arg, str(values[arg])))
+                argstrs.append(f'{arg}={values[arg]}')
             logger.debug(
-                '>>> %s.%s: %s' % (self.__class__.__name__, method_name, ', '.join(argstrs))
+                '>>> %s.%s: %s', self.__class__.__name__, method_name, ', '.join(argstrs)
             )
 
 

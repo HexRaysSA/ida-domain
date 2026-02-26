@@ -831,7 +831,7 @@ class Bytes(DatabaseEntity):
         if end_ea is None:
             end_ea = self.database.maximum_ea
         elif not self.database.is_valid_ea(end_ea, strict_check=False):
-            raise InvalidEAError(start_ea)
+            raise InvalidEAError(end_ea)
 
         if start_ea >= end_ea:
             raise InvalidParameterError('start_ea', start_ea, 'must be less than end_ea')
@@ -868,7 +868,7 @@ class Bytes(DatabaseEntity):
         if end_ea is None:
             end_ea = self.database.maximum_ea
         elif not self.database.is_valid_ea(end_ea, strict_check=False):
-            raise InvalidEAError(start_ea)
+            raise InvalidEAError(end_ea)
 
         if start_ea >= end_ea:
             raise InvalidParameterError('start_ea', start_ea, 'must be less than end_ea')
