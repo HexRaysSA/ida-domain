@@ -2937,8 +2937,8 @@ def test_readme_examples():
     readme_path = Path(__file__).parent.parent / 'README.md'
 
     # Read both files
-    example_content = example_path.read_text().strip()
-    readme_content = readme_path.read_text()
+    example_content = example_path.read_text(encoding='utf-8').strip()
+    readme_content = readme_path.read_text(encoding='utf-8')
 
     # Check if example exists in readme
     assert example_content in readme_content, f'Example from {example_path} not found in README'
