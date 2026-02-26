@@ -597,7 +597,7 @@ class Database:
         """
         compiler_error = ida_idaapi.IDAPython_ExecScript(file_path, globals())
         if compiler_error is not None:
-            raise RuntimeError(f'script execution {str} failed with error {compiler_error}')
+            raise RuntimeError(f'script execution {file_path} failed with error {compiler_error}')
 
     def is_valid_ea(self, ea: ea_t, strict_check: bool = True) -> bool:
         """

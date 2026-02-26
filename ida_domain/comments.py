@@ -128,8 +128,14 @@ class Comments(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        repeatable = comment_kind == CommentKind.REPEATABLE
-        return ida_bytes.set_cmt(ea, comment, repeatable)
+        comment_types = (
+            [False, True]
+            if comment_kind == CommentKind.ALL
+            else [comment_kind == CommentKind.REPEATABLE]
+        )
+        return all(
+            ida_bytes.set_cmt(ea, comment, is_repeatable) for is_repeatable in comment_types
+        )
 
     def delete_at(self, ea: int, comment_kind: CommentKind = CommentKind.REGULAR) -> None:
         """

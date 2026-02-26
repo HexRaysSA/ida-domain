@@ -347,17 +347,21 @@ class Xrefs(DatabaseEntity):
             if xref.is_call:
                 caller_func = ida_funcs.get_func(xref.from_ea)
                 caller_name: Optional[str] = None
-                func_ea = None
+                caller_func_ea = None
 
                 if caller_func:
                     caller_name = self.database.functions.get_name(caller_func)
+                    caller_func_ea = caller_func.start_ea
                 else:
                     caller_name = self.database.names.get_at(xref.from_ea)
                     if not caller_name:
                         caller_name = ida_kernwin.ea2str(xref.from_ea)
 
                 yield CallerInfo(
-                    ea=xref.from_ea, name=caller_name, xref_type=xref.type, function_ea=func_ea
+                    ea=xref.from_ea,
+                    name=caller_name,
+                    xref_type=xref.type,
+                    function_ea=caller_func_ea,
                 )
 
     def calls_to_ea(self, ea: ea_t) -> Iterator[ea_t]:
