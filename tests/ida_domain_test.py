@@ -19,7 +19,7 @@ from ida_domain.database import IdaCommandOptions
 from ida_domain.instructions import Instructions
 from ida_domain.segments import *
 from ida_domain.strings import StringListConfig, StringType
-from ida_domain.types import TypeDetails, TypeKind
+from ida_domain.types import ObjectIOFlags, TypeDetails, TypeKind
 
 idb_path: str = ''
 logger = logging.getLogger(__name__)
@@ -3038,3 +3038,118 @@ def test_complex_variable_access(tiny_c_env):
     assert refs[2].access_type == LocalVariableAccessType.READ
     assert refs[2].context == LocalVariableContext.CALL_ARG
     assert refs[2].code_line == 'use_val(v9);'
+
+
+# =============================================================================
+# Object Serialization / Deserialization Tests
+# =============================================================================
+
+
+def test_store_object_to_bytes_and_retrieve(test_env):
+    """
+    Test storing an object to bytes and retrieving it back.
+    This tests the round-trip serialization without database involvement.
+    """
+    db = test_env
+
+    # Create a simple struct type: struct Point { int x; int y; };
+    point_type = (
+        db.types.create_struct('TestPoint')
+        .add_member('x', db.types.create_primitive(4))
+        .add_member('y', db.types.create_primitive(4))
+        .build()
+    )
+
+    # Create test data
+    test_data = {'x': 42, 'y': 100}
+
+    # Store to bytes
+    packed = db.types.store_object_to_bytes(point_type, test_data)
+    assert packed is not None
+    assert len(packed) == 8  # Two 4-byte integers
+
+    # Retrieve from bytes
+    retrieved = db.types.retrieve_object_from_bytes(point_type, packed)
+    assert retrieved is not None
+    assert retrieved['x'] == 42
+    assert retrieved['y'] == 100
+
+
+def test_store_object_at_and_retrieve(test_env):
+    """
+    Test storing an object to a database address and retrieving it back.
+    This tests the full database integration.
+    """
+    db = test_env
+
+    # Create a simple struct type
+    point_type = (
+        db.types.create_struct('TestPoint2')
+        .add_member('x', db.types.create_primitive(4))
+        .add_member('y', db.types.create_primitive(4))
+        .build()
+    )
+
+    # Find a data address to use for testing
+    # Use an address in the data section
+    test_ea = 0x100
+
+    # Create test data
+    test_data = {'x': 123, 'y': 456}
+
+    # Store to database
+    db.types.store_object_at(point_type, test_ea, test_data)
+
+    # Retrieve from database
+    retrieved = db.types.retrieve_object_at(point_type, test_ea)
+    assert retrieved is not None
+    assert retrieved['x'] == 123
+    assert retrieved['y'] == 456
+
+
+def test_retrieve_object_invalid_ea(test_env):
+    """Test that retrieve_object_at raises InvalidEAError for invalid addresses."""
+    db = test_env
+    from ida_domain.base import InvalidEAError
+
+    point_type = (
+        db.types.create_struct('TestPoint3').add_member('x', db.types.create_primitive(4)).build()
+    )
+
+    with pytest.raises(InvalidEAError):
+        db.types.retrieve_object_at(point_type, BADADDR)
+
+
+def test_store_object_invalid_parameter(test_env):
+    """Test that store_object_to_bytes raises InvalidParameterError for invalid input."""
+    db = test_env
+
+    point_type = (
+        db.types.create_struct('TestPoint4').add_member('x', db.types.create_primitive(4)).build()
+    )
+
+    with pytest.raises(InvalidParameterError):
+        db.types.store_object_to_bytes(point_type, 'not a dict')  # type: ignore
+
+
+def test_retrieve_object_from_bytes_invalid_data(test_env):
+    """Test that retrieve_object_from_bytes raises InvalidParameterError for invalid data."""
+    db = test_env
+
+    point_type = (
+        db.types.create_struct('TestPoint5').add_member('x', db.types.create_primitive(4)).build()
+    )
+
+    with pytest.raises(InvalidParameterError):
+        db.types.retrieve_object_from_bytes(point_type, b'')  # Empty bytes
+
+
+def test_object_io_flags_values():
+    """Test that ObjectIOFlags have the expected values."""
+    assert ObjectIOFlags.NONE == 0
+    assert ObjectIOFlags.NOATTR_FAIL == 4
+    assert ObjectIOFlags.IGNORE_PTRS == 8
+
+    # Test flag combination
+    combined = ObjectIOFlags.NOATTR_FAIL | ObjectIOFlags.IGNORE_PTRS
+    assert combined == 12
