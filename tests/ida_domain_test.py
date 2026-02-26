@@ -7,6 +7,7 @@ import tempfile
 from pathlib import Path
 
 import pytest
+from packaging.version import Version
 
 import ida_domain  # isort: skip
 import ida_typeinf
@@ -2828,7 +2829,7 @@ def test_hooks():
     assert custom_hook2.count == 2
 
     # Check no hooks are installed if open() fails
-    if ida_domain.__ida_version__ >= 920:
+    if ida_domain.__ida_version__ >= Version('9.2'):
         # This does not pass prior 9.2.0 due to IDA killing the process
         # when trying to load an inexisting file
         try:

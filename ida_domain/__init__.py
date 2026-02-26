@@ -31,12 +31,13 @@ __version__ = '0.4.0'
 _load_dependencies()
 
 
-# Keep the ida kernel version as int, eg: 920
-import ida_ida
+# Keep the ida kernel version, eg: Version("9.2")
+import ida_kernwin
+from packaging.version import Version
 
-__ida_version__: int = ida_ida.inf_get_version()
+__ida_version__: Version = Version(ida_kernwin.get_kernel_version())
 
-if __ida_version__ < 910:
+if __ida_version__ < Version('9.1'):
     raise ImportError('IDA Domain requires IDA 9.1.0 or later')
 
 # If we reach this point kernel libraries were successfully loaded
