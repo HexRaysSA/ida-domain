@@ -31,6 +31,7 @@ The Domain API sits on top of the IDA Python SDK, complementing it rather than r
 - **[Getting Started](getting_started.md)** - Installation and your first script
 - **[Examples](examples.md)** - Practical examples for common tasks
 - **[API Reference](usage.md)** - Complete API documentation
+- **[Migration Guide](migration-guide.md)** - Migrate from IDA Python SDK
 
 ## 🔗 Additional Resources
 
