@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.9"
 resolution-markers = [
     "python_full_version >= '3.10'",
@@ -570,11 +570,11 @@ dev = [
 
 [[package]]
 name = "idapro"
-version = "0.0.5"
+version = "0.0.7"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/07/9b/4b1f2788d234043569ade140dd30248e984bf065c8c763b10f49d1c9259a/idapro-0.0.5.tar.gz", hash = "sha256:4f4fe3972b1298b861ec2f67681fac0ff985cca52831bd54346ca0677e9a54a1", size = 1114254, upload-time = "2025-07-17T12:32:26.631Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/da/65/b49019b4713b852349b6516b786c8542930aca7701bb2552b18f4e4a4e25/idapro-0.0.7.tar.gz", hash = "sha256:0b2e184b19e4d8404ea48b1f17f39b21b054931315940ee9716ef8559144988f", size = 966886, upload-time = "2025-10-29T09:07:21.695Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/7d/a9/a908cb0f0985edd3790dfcc94ca89039619bcb14ad909e5d6d128067ab84/idapro-0.0.5-py3-none-any.whl", hash = "sha256:dc94a50272b070f550a00c0eb187e4b9dff1a1a7b5115a90a9c6e2c417d59bea", size = 2316411, upload-time = "2025-07-17T12:32:25.263Z" },
+    { url = "https://files.pythonhosted.org/packages/fb/5d/6e6565d9a1d6ecf1b48a2bea326f0e3dbe4c3199adfc0a5456b83d235f99/idapro-0.0.7-py3-none-any.whl", hash = "sha256:3cb8d48ac21a19e6a0ef65eacd0005a1f9c40a264a7bcb675914eaa20c6e1371", size = 1999440, upload-time = "2025-10-29T09:07:19.998Z" },
 ]
 
 [[package]]
