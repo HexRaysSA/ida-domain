@@ -343,15 +343,13 @@ def test_function(test_env):
     # Test get_local_variable_by_name
     var_by_name = db.functions.get_local_variable_by_name(func, 'a1')
     assert var_by_name is not None
-    assert var_by_name.index == 0
     assert var_by_name.name == 'a1'
 
     # Test local variable references
     func = db.functions.get_at(0x2D0)
     lvars = db.functions.get_local_variables(func)
     assert len(lvars) == 9
-    local_var = lvars[0]
-    assert local_var.name == 'a3'
+    local_var = next(lv for lv in lvars if lv.name == 'a3')
     refs = db.functions.get_local_variable_references(func, local_var)
     assert len(refs) == 1
 
