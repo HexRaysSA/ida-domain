@@ -29,6 +29,7 @@ from ida_typeinf import (
     udm_t,
     udt_type_data_t,
 )
+from packaging.version import Version
 from typing_extensions import TYPE_CHECKING, Callable, Dict, Iterator, List, Optional, Tuple, Union
 
 from . import __ida_version__
@@ -58,7 +59,7 @@ class NotSupportedWarning(Warning):
 warnings.simplefilter('ignore', category=NotSupportedWarning)
 
 _VERSION_SUPPORT_CHECK: Dict[Tuple[str, str], Callable[[], bool]] = {
-    ('UdtAttr', 'TUPLE'): lambda: __ida_version__ >= 920
+    ('UdtAttr', 'TUPLE'): lambda: __ida_version__ >= Version('9.2')
 }
 
 
