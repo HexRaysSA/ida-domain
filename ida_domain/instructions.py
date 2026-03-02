@@ -148,7 +148,10 @@ class Instructions(DatabaseEntity):
             if ida_ua.decode_insn(insn, current) > 0:
                 yield insn
             # Move to next instruction for next call
-            current = ida_bytes.next_head(current, end)
+            next_addr = ida_bytes.next_head(current, end)
+            if next_addr == current or next_addr == ida_idaapi.BADADDR:
+                break
+            current = next_addr
 
     def get_mnemonic(self, insn: insn_t) -> Optional[str]:
         """

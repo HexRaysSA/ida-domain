@@ -31,6 +31,7 @@ from ida_typeinf import (
     udm_t,
     udt_type_data_t,
 )
+from packaging.version import Version
 from typing_extensions import (
     TYPE_CHECKING,
     Any,
@@ -70,7 +71,7 @@ class NotSupportedWarning(Warning):
 warnings.simplefilter('ignore', category=NotSupportedWarning)
 
 _VERSION_SUPPORT_CHECK: Dict[Tuple[str, str], Callable[[], bool]] = {
-    ('UdtAttr', 'TUPLE'): lambda: __ida_version__ >= 920
+    ('UdtAttr', 'TUPLE'): lambda: __ida_version__ >= Version('9.2')
 }
 
 
@@ -1460,7 +1461,7 @@ class Types(DatabaseEntity):
             True if the operation succeeded, False otherwise.
         """
         ida_typeinf.compact_til(library)
-        return ida_typeinf.store_til(library, str(file.parents), str(file))
+        return ida_typeinf.store_til(library, str(file.parent), str(file))
 
     def import_type(self, source: til_t, name: str) -> int:
         """
@@ -1728,7 +1729,7 @@ class Types(DatabaseEntity):
             ida_typeinf.enable_numbered_types(til, True)
             yield from til.numbered_types()
 
-    def traverse(self, type_info: tinfo_t, visitor: ida_typeinf.tinfo_visitor_t) -> None:
+    def traverse(self, type_info: tinfo_t, visitor: ida_typeinf.tinfo_visitor_t) -> bool:
         """
         Traverse the given type using the provided visitor class.
 

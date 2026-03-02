@@ -29,3 +29,22 @@ gcc -O0 -fno-pie -c tiny_c.c -o tiny_c.bin
 ```
 
 After rebuilding, replace `tiny_c.bin` in this folder and update any tests as needed.
+
+---
+
+## Imports Test Binary (tiny_imports)
+
+The `tiny_imports.c` file is a minimal dynamically-linked binary used for
+testing the Imports API with actual import data.
+
+To rebuild:
+```bash
+gcc -O0 -no-pie -fno-stack-protector tiny_imports.c -o tiny_imports.bin
+```
+
+This binary links against libc and imports:
+- `malloc` / `free` - memory allocation
+- `puts` - simple output
+- `exit` - process termination
+
+After rebuilding, replace `tiny_imports.bin` in this folder and update any tests as needed.
