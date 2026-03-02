@@ -1661,7 +1661,7 @@ class Types(DatabaseEntity):
             raise InvalidEAError(ea)
         return ida_typeinf.apply_tinfo(ea, type, flags)
 
-    def apply_from_decl(
+    def apply_from_declaration(
         self,
         ea: ea_t,
         decl: str,
@@ -1688,7 +1688,7 @@ class Types(DatabaseEntity):
             InvalidParameterError: If the declaration cannot be parsed.
 
         Example:
-            >>> db.types.apply_from_decl(0x401000, "int __fastcall foo(int x)")
+            >>> db.types.apply_from_declaration(0x401000, "int __fastcall foo(int x)")
         """
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
