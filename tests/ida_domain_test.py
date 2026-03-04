@@ -3616,8 +3616,8 @@ def test_microcode_block_first_regular_insn(test_env):
 
 
 def test_microcode_block_mba_backref(test_env):
-    """Test that block.mba returns the parent MicroFunction."""
-    from ida_domain.microcode import MicroFunction
+    """Test that block.mba returns the parent MicroBlockArray."""
+    from ida_domain.microcode import MicroBlockArray
 
     db = test_env
     func = db.functions.get_at(0xC4)
@@ -3625,7 +3625,7 @@ def test_microcode_block_mba_backref(test_env):
 
     block = mf[1]
     parent = block.mba
-    assert isinstance(parent, MicroFunction)
+    assert isinstance(parent, MicroBlockArray)
     assert parent.entry_ea == mf.entry_ea
 
 
@@ -3656,7 +3656,7 @@ def test_microcode_verify(test_env):
 
 
 def test_microcode_set_maturity(test_env):
-    """Test set_maturity on MicroFunction."""
+    """Test set_maturity on MicroBlockArray."""
     from ida_domain.microcode import MicroMaturity
 
     db = test_env
@@ -3681,7 +3681,7 @@ def test_microcode_entry_block(test_env):
 
 
 def test_microcode_function_final_type(test_env):
-    """Test final_type and create_helper_call on MicroFunction."""
+    """Test final_type and create_helper_call on MicroBlockArray."""
     db = test_env
     func = db.functions.get_at(0x2BC)
     mf = db.microcode.from_decompilation(func)
@@ -3948,9 +3948,9 @@ def test_microcode_repr(test_env):
     func = db.functions.get_at(0xC4)
     mf = db.microcode.generate(func)
 
-    # MicroFunction repr
+    # MicroBlockArray repr
     r = repr(mf)
-    assert 'MicroFunction' in r
+    assert 'MicroBlockArray' in r
     assert 'GENERATED' in r
 
     # MicroBlock repr
@@ -3982,7 +3982,7 @@ def test_microcode_raw_properties(test_env):
     func = db.functions.get_at(0xC4)
     mf = db.microcode.generate(func)
 
-    # MicroFunction.raw_mba
+    # MicroBlockArray.raw_mba
     assert isinstance(mf.raw_mba, ida_hexrays.mba_t)
 
     # MicroBlock.raw_block
@@ -4204,7 +4204,7 @@ def test_microcode_block_first_regular_insn_empty(test_env):
 
 
 def test_microcode_has_over_chains(test_env):
-    """Test has_over_chains property on MicroFunction."""
+    """Test has_over_chains property on MicroBlockArray."""
     from ida_domain.microcode import MicroMaturity
 
     db = test_env
@@ -4369,7 +4369,7 @@ def test_microcode_block_insert_remove_instruction(test_env):
 
 
 def test_microcode_function_insert_remove_block(test_env):
-    """Test insert_block and remove_block on MicroFunction."""
+    """Test insert_block and remove_block on MicroBlockArray."""
     db = test_env
     func = db.functions.get_at(0x2A3)
     mf = db.microcode.generate(func)
@@ -4388,7 +4388,7 @@ def test_microcode_function_insert_remove_block(test_env):
 
 def test_microcode_mba_serialization(test_env):
     """Test MBA serialize/deserialize roundtrip."""
-    from ida_domain.microcode import MicroFunction, MicroMaturity, MicroOpcode
+    from ida_domain.microcode import MicroBlockArray, MicroMaturity, MicroOpcode
 
     db = test_env
     func = db.functions.get_at(0x2A3)  # add_numbers — small
@@ -4400,8 +4400,8 @@ def test_microcode_mba_serialization(test_env):
     assert len(data) > 0
 
     # Deserialize via domain static method
-    mf2 = MicroFunction.deserialize(data)
-    assert isinstance(mf2, MicroFunction)
+    mf2 = MicroBlockArray.deserialize(data)
+    assert isinstance(mf2, MicroBlockArray)
     assert len(mf2) == len(mf)
     assert mf2.maturity == mf.maturity
 

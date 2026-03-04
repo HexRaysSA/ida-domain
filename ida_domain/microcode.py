@@ -660,7 +660,7 @@ class MicroBlock:
     """
 
     def __init__(
-        self, raw: mblock_t, serial: int = 0, parent_mf: Optional[MicroFunction] = None
+        self, raw: mblock_t, serial: int = 0, parent_mf: Optional[MicroBlockArray] = None
     ):
         self._raw = raw
         self._serial = serial
@@ -728,12 +728,12 @@ class MicroBlock:
         return None
 
     @property
-    def mba(self) -> MicroFunction:
-        """Parent :class:`MicroFunction`."""
+    def mba(self) -> MicroBlockArray:
+        """Parent :class:`MicroBlockArray`."""
         if self._parent_mf is not None:
             return self._parent_mf
         # Lazily wrap the raw mba_t from the block
-        return MicroFunction(self._raw.mba)
+        return MicroBlockArray(self._raw.mba)
 
     # -- query properties --------------------------------------------------
 
@@ -905,14 +905,15 @@ class MicroBlock:
 
 
 # ---------------------------------------------------------------------------
-# MicroFunction — wraps mba_t
+# MicroBlockArray — wraps mba_t
 # ---------------------------------------------------------------------------
 
-class MicroFunction:
-    """Wrapper around an IDA ``mba_t`` function-level microcode container.
+class MicroBlockArray:
+    """Wrapper around an IDA ``mba_t`` (micro block array).
 
-    Supports iteration over blocks, traversal, and access to analysis
-    primitives.
+    An ``mba_t`` can represent a single function or an arbitrary address
+    range.  Supports iteration over blocks, traversal, and access to
+    analysis primitives.
     """
 
     def __init__(self, raw: mba_t):
@@ -1062,10 +1063,10 @@ class MicroFunction:
     # -- serialization -----------------------------------------------------
 
     @staticmethod
-    def deserialize(data: bytes) -> MicroFunction:
+    def deserialize(data: bytes) -> MicroBlockArray:
         """Deserialize a microcode function from bytes."""
         raw = mba_t.deserialize(data)
-        return MicroFunction(raw)
+        return MicroBlockArray(raw)
 
     # -- text / display ----------------------------------------------------
 
@@ -1100,7 +1101,7 @@ class MicroFunction:
         except ValueError:
             mat_name = str(self._raw.maturity)
         return (
-            f'MicroFunction(entry=0x{self._raw.entry_ea:x}, '
+            f'MicroBlockArray(entry=0x{self._raw.entry_ea:x}, '
             f'maturity={mat_name}, blocks={self._raw.qty})'
         )
 
@@ -1385,7 +1386,7 @@ class Microcode(DatabaseEntity):
         maturity: MicroMaturity = MicroMaturity.GENERATED,
         flags: int = ida_hexrays.DECOMP_WARNINGS,
         build_graph: bool = True,
-    ) -> MicroFunction:
+    ) -> MicroBlockArray:
         """Generate microcode for a function.
 
         Args:
@@ -1395,7 +1396,7 @@ class Microcode(DatabaseEntity):
             build_graph: Whether to build the CFG graph after generation.
 
         Returns:
-            A :class:`MicroFunction` wrapping the generated ``mba_t``.
+            A :class:`MicroBlockArray` wrapping the generated ``mba_t``.
 
         Raises:
             MicrocodeError: If microcode generation fails.
@@ -1411,7 +1412,7 @@ class Microcode(DatabaseEntity):
         if build_graph:
             mba.build_graph()
 
-        return MicroFunction(mba)
+        return MicroBlockArray(mba)
 
     def generate_for_range(
         self,
@@ -1420,7 +1421,7 @@ class Microcode(DatabaseEntity):
         maturity: MicroMaturity = MicroMaturity.GENERATED,
         flags: int = ida_hexrays.DECOMP_WARNINGS,
         build_graph: bool = True,
-    ) -> MicroFunction:
+    ) -> MicroBlockArray:
         """Generate microcode for an address range.
 
         Args:
@@ -1431,7 +1432,7 @@ class Microcode(DatabaseEntity):
             build_graph: Whether to build the CFG graph after generation.
 
         Returns:
-            A :class:`MicroFunction` wrapping the generated ``mba_t``.
+            A :class:`MicroBlockArray` wrapping the generated ``mba_t``.
 
         Raises:
             MicrocodeError: If microcode generation fails.
@@ -1448,9 +1449,9 @@ class Microcode(DatabaseEntity):
         if build_graph:
             mba.build_graph()
 
-        return MicroFunction(mba)
+        return MicroBlockArray(mba)
 
-    def from_decompilation(self, func: Any) -> MicroFunction:
+    def from_decompilation(self, func: Any) -> MicroBlockArray:
         """Get microcode from a full decompilation (maturity LVARS).
 
         Uses ``ida_hexrays.decompile()`` and returns the ``mba_t``
@@ -1460,7 +1461,7 @@ class Microcode(DatabaseEntity):
             func: An IDA ``func_t`` object.
 
         Returns:
-            A :class:`MicroFunction` at LVARS maturity.
+            A :class:`MicroBlockArray` at LVARS maturity.
 
         Raises:
             MicrocodeError: If decompilation fails.
@@ -1470,7 +1471,7 @@ class Microcode(DatabaseEntity):
             raise MicrocodeError(
                 f'Failed to decompile function at 0x{func.start_ea:x}'
             )
-        return MicroFunction(cfunc.mba)
+        return MicroBlockArray(cfunc.mba)
 
     def get_text(
         self,
