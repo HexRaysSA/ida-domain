@@ -221,7 +221,9 @@ class MicrocodeError(Exception):
         errea: The address where the error occurred (``None`` if not available).
     """
 
-    def __init__(self, message: str, code: Optional[MicroError] = None, errea: Optional[int] = None):
+    def __init__(
+        self, message: str, code: Optional[MicroError] = None, errea: Optional[int] = None,
+    ):
         self.code = code
         self.errea = errea
         super().__init__(message)

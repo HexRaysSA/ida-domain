@@ -3070,6 +3070,7 @@ def test_microcode_generate(test_env):
 
     # generation failure for bad address
     import pytest
+
     from ida_domain.microcode import MicrocodeError, MicroError
     with pytest.raises(MicrocodeError) as exc_info:
         db.microcode.generate_for_range(0xFFFFFF, 0xFFFFFFF)
@@ -3296,8 +3297,9 @@ def test_microcode_operand_comparisons(test_env):
     assert found_one, 'Expected to find a one constant'
 
     # Empty operand via __bool__
-    from ida_domain.microcode import MicroOperand
     from ida_hexrays import mop_t
+
+    from ida_domain.microcode import MicroOperand
     empty_op = MicroOperand(mop_t())
     assert not empty_op  # __bool__ is False for mop_z
     assert empty_op.is_empty
@@ -3552,7 +3554,8 @@ def test_microcode_block_properties_detailed(test_env):
         assert block.start_ea >= 0
         assert block.end_ea >= block.start_ea
         assert block.instruction_count >= 0
-        assert len(block) >= block.instruction_count  # len counts all, instruction_count skips NOPs
+        # len counts all insns, instruction_count skips NOPs
+        assert len(block) >= block.instruction_count
 
         # is_empty consistency
         if block.head is None:
@@ -3729,7 +3732,8 @@ def test_microcode_get_text(test_env):
 def test_microcode_use_def_analysis(test_env):
     """Test use-def list building and MicroLocationSet operations."""
     import ida_hexrays
-    from ida_domain.microcode import MicroMaturity, MicroLocationSet
+
+    from ida_domain.microcode import MicroLocationSet, MicroMaturity
 
     db = test_env
     func = db.functions.get_at(0x2BC)  # print_number
@@ -3763,8 +3767,9 @@ def test_microcode_use_def_analysis(test_env):
 def test_microcode_location_set_operations(test_env):
     """Test MicroLocationSet set protocol (__and__, __ior__, __isub__, etc.)."""
     import ida_hexrays
-    from ida_domain.microcode import MicroMaturity, MicroLocationSet
     from ida_hexrays import mlist_t
+
+    from ida_domain.microcode import MicroLocationSet, MicroMaturity
 
     db = test_env
     func = db.functions.get_at(0x2BC)
@@ -3815,7 +3820,8 @@ def test_microcode_location_set_operations(test_env):
 def test_microcode_graph(test_env):
     """Test MicroGraph wrapper: iteration, getitem, use-def chain access."""
     import ida_hexrays
-    from ida_domain.microcode import MicroMaturity, MicroGraph, MicroBlock
+
+    from ida_domain.microcode import MicroBlock, MicroGraph, MicroMaturity
 
     db = test_env
     func = db.functions.get_at(0x2BC)
@@ -3969,6 +3975,7 @@ def test_microcode_repr(test_env):
 def test_microcode_raw_properties(test_env):
     """Test raw_* escape-hatch properties on all wrapper classes."""
     import ida_hexrays
+
     from ida_domain.microcode import MicroMaturity
 
     db = test_env
@@ -4023,7 +4030,7 @@ def test_microcode_operand_none_fallbacks(test_env):
 
 def test_microcode_operand_type_check_shortcuts(test_env):
     """Test is_stack_var, is_string, is_pair type-check shortcuts."""
-    from ida_domain.microcode import MicroOperandType, MicroMaturity
+    from ida_domain.microcode import MicroMaturity, MicroOperandType
 
     db = test_env
     func = db.functions.get_at(0xC4)
@@ -4211,6 +4218,7 @@ def test_microcode_has_over_chains(test_env):
 def test_microcode_find_first_use_and_redefinition(test_env):
     """Test find_first_use and find_redefinition on MicroBlock."""
     import ida_hexrays
+
     from ida_domain.microcode import MicroMaturity
 
     db = test_env
@@ -4240,6 +4248,7 @@ def test_microcode_find_first_use_and_redefinition(test_env):
 def test_microcode_location_set_contains(test_env):
     """Test __contains__ on MicroLocationSet."""
     import ida_hexrays
+
     from ida_domain.microcode import MicroMaturity
 
     db = test_env
@@ -4261,8 +4270,10 @@ def test_microcode_location_set_contains(test_env):
 def test_microcode_visitor_classes(test_env):
     """Test MicroInstructionVisitor and MicroOperandVisitor base classes."""
     from ida_domain.microcode import (
-        MicroInstructionVisitor, MicroOperandVisitor,
-        MicroInstruction, MicroOperand,
+        MicroInstruction,
+        MicroInstructionVisitor,
+        MicroOperand,
+        MicroOperandVisitor,
     )
 
     db = test_env
@@ -4304,8 +4315,10 @@ def test_microcode_visitor_classes(test_env):
 def test_microcode_optimizer_base_classes(test_env):
     """Test that optimizer base classes can be instantiated and called."""
     from ida_domain.microcode import (
-        MicroInstructionOptimizer, MicroBlockOptimizer,
-        MicroBlock, MicroInstruction,
+        MicroBlock,
+        MicroBlockOptimizer,
+        MicroInstruction,
+        MicroInstructionOptimizer,
     )
 
     db = test_env
@@ -4329,6 +4342,7 @@ def test_microcode_optimizer_base_classes(test_env):
 def test_microcode_block_insert_remove_instruction(test_env):
     """Test insert_instruction and remove_instruction on MicroBlock."""
     import ida_hexrays
+
     from ida_domain.microcode import MicroOpcode
 
     db = test_env
