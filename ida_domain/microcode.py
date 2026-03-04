@@ -565,6 +565,14 @@ class MicroInstruction:
         """Parent block, if known."""
         return self._parent_block
 
+    @property
+    def is_top_level(self) -> bool:
+        """True if this instruction lives directly in a block's list.
+
+        False for sub-instructions nested inside an operand (``mop_d``).
+        """
+        return self._parent_block is not None
+
     # -- iteration ---------------------------------------------------------
 
     def operands(self) -> Iterator[MicroOperand]:

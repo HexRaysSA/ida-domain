@@ -3336,6 +3336,31 @@ def test_microcode_operand_sub_instruction(test_env):
     assert found, 'Expected to find a sub-instruction operand'
 
 
+def test_microcode_instruction_is_top_level(test_env):
+    """Test is_top_level distinguishes block-level vs nested instructions."""
+    from ida_domain.microcode import MicroOperandType
+
+    db = test_env
+    func = db.functions.get_at(0xC4)
+    mf = db.microcode.generate(func)
+
+    found_nested = False
+    for block in mf.blocks(skip_sentinels=True):
+        for insn in block:
+            # Top-level instructions always have is_top_level == True
+            assert insn.is_top_level
+            for op in insn:
+                if op.type == MicroOperandType.SUB_INSN:
+                    sub = op.sub_instruction
+                    assert sub is not None
+                    assert not sub.is_top_level
+                    found_nested = True
+        if found_nested:
+            break
+
+    assert found_nested, 'Expected to find a nested sub-instruction'
+
+
 def test_microcode_find_instructions(test_env):
     """Test finding instructions by opcode and operand type."""
     from ida_domain.microcode import MicroOpcode, MicroOperandType
