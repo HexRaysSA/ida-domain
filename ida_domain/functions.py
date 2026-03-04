@@ -725,6 +725,10 @@ class Functions(DatabaseEntity):
         """
         Retrieves the microcode of the given function.
 
+        .. deprecated::
+            Use ``db.microcode.get_text(func)`` or
+            ``db.microcode.generate(func)`` instead.
+
         Args:
             func: The function instance.
             remove_tags: If True, removes IDA color/formatting tags from the output.
@@ -736,7 +740,13 @@ class Functions(DatabaseEntity):
         Raises:
             RuntimeError: If microcode generation fails for the function.
         """
-        return self.database.bytes.get_microcode_between(func.start_ea, func.end_ea, remove_tags)
+        warnings.warn(
+            'Functions.get_microcode() is deprecated. '
+            'Use db.microcode.get_text(func) or db.microcode.generate(func) instead.',
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.database.microcode.get_text(func, remove_tags=remove_tags)
 
     def get_signature(self, func: func_t) -> str:
         """

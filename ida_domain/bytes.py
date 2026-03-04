@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import struct
+import warnings
 from enum import IntEnum, IntFlag
 
 import ida_bytes
@@ -2102,6 +2103,9 @@ class Bytes(DatabaseEntity):
         """
         Retrieves the microcode of the given range.
 
+        .. deprecated::
+            Use ``db.microcode.generate_for_range(start_ea, end_ea)`` instead.
+
         Args:
             start_ea: The range start.
             end_ea: The range end.
@@ -2114,39 +2118,14 @@ class Bytes(DatabaseEntity):
         Raises:
             RuntimeError: If microcode generation fails for the range.
         """
-        mbr = ida_hexrays.mba_ranges_t()
-        mbr.ranges.push_back(ida_range.range_t(start_ea, end_ea))
-        hf = ida_hexrays.hexrays_failure_t()
-        ml = ida_hexrays.mlist_t()
-        mba = ida_hexrays.gen_microcode(
-            mbr, hf, ml, ida_hexrays.DECOMP_WARNINGS, ida_hexrays.MMAT_GENERATED
+        warnings.warn(
+            'Bytes.get_microcode_between() is deprecated. '
+            'Use db.microcode.generate_for_range(start_ea, end_ea) instead.',
+            DeprecationWarning,
+            stacklevel=2,
         )
+        from .microcode import Microcode
 
-        if not mba:
-            raise RuntimeError(f'Failed to generate microcode for range {start_ea:x}:{end_ea:x}')
-
-        microcode = []
-        mba.build_graph()
-        total = mba.qty
-        for i in range(total):
-            if i == 0:
-                continue
-
-            block = mba.get_mblock(i)
-            if block.type == ida_hexrays.BLT_STOP:
-                continue
-
-            vp = ida_hexrays.qstring_printer_t(None, True)
-            block._print(vp)
-            lines = vp.get_s().split('\n')
-
-            if not remove_tags:
-                microcode.extend(lines)
-                continue
-
-            for line in lines:
-                line = ida_lines.tag_remove(line)
-                if line:
-                    microcode.append(line.strip())
-
-        return microcode
+        mc = Microcode(self.m_database)
+        mf = mc.generate_for_range(start_ea, end_ea)
+        return mf.to_text(remove_tags=remove_tags)

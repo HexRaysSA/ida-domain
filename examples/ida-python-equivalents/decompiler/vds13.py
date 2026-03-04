@@ -5,6 +5,7 @@ NOTE: Partially migrated - Domain API does not expose user selection
 """
 
 import ida_domain
+from ida_domain.microcode import MicrocodeError
 
 db = ida_domain.Database.open()
 
@@ -13,12 +14,13 @@ func = db.functions.get_at(db.current_ea)
 if func:
     sea, eea = func.start_ea, func.end_ea
     if db.bytes.is_code_at(sea):
-        mcode = db.bytes.get_microcode_between(sea, eea)
-        if mcode:
-            print(f'Successfully generated microcode between  0x{sea:X} and 0x{eea:X}')
-            print(mcode)
+        try:
+            mf = db.microcode.generate_for_range(sea, eea)
+        except MicrocodeError as e:
+            print(f'Failed to generate microcode between  0x{sea:X} and 0x{eea:X}: {e}')
         else:
-            print(f'Failed to generate microcode between  0x{sea:X} and 0x{eea:X}')
+            print(f'Successfully generated microcode between  0x{sea:X} and 0x{eea:X}')
+            print(mf)
     else:
         print('The selected range must start with an instruction')
 else:
