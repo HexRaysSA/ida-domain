@@ -1019,7 +1019,7 @@ class MicroFunction:
             if opcode is not None and insn.opcode != opcode:
                 continue
             if operand_type is not None:
-                has_type = any(op.type == operand_type for op in insn.operands())
+                has_type = any(op.type == operand_type for op in insn)
                 if not has_type:
                     continue
             yield insn
@@ -1076,15 +1076,9 @@ class MicroFunction:
         and whitespace.  Color tags are stripped by default.
         """
         lines: List[str] = []
-        for i in range(self._raw.qty):
-            if i == 0:
-                continue
-            blk = self._raw.get_mblock(i)
-            if blk.type == MicroBlockType.STOP:
-                continue
-
+        for block in self.blocks(skip_sentinels=True):
             vp = ida_hexrays.qstring_printer_t(None, True)
-            blk._print(vp)
+            block.raw_block._print(vp)
             block_lines = vp.get_s().split('\n')
 
             if not remove_tags:
