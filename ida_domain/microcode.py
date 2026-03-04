@@ -9,7 +9,7 @@ import ida_hexrays
 import ida_lines
 import ida_range
 from ida_hexrays import mba_t, mblock_t, minsn_t, mlist_t, mop_t
-from typing_extensions import TYPE_CHECKING, Iterator, List, Optional, Tuple
+from typing_extensions import TYPE_CHECKING, Any, Iterator, List, Optional, Tuple
 
 from .base import DatabaseEntity, check_db_open, decorate_all_methods
 
@@ -348,7 +348,7 @@ class MicroOperand:
         return None
 
     @property
-    def call_info(self):
+    def call_info(self) -> Any:
         """Raw ``mcallinfo_t`` for ``mop_f`` operands, or *None*."""
         if self._raw.t == self._T.CALL_INFO:
             return self._raw.f
@@ -960,7 +960,7 @@ class MicroFunction:
         return self._raw.has_over_chains()
 
     @property
-    def final_type(self):
+    def final_type(self) -> Any:
         """Return type of the function (raw ``tinfo_t``)."""
         return self._raw.final_type
 
@@ -1031,7 +1031,7 @@ class MicroFunction:
         return MicroGraph(self._raw.get_graph())
 
     def find_mop(
-        self, ctx, ea: int, is_dest: bool, locations: MicroLocationSet
+        self, ctx: Any, ea: int, is_dest: bool, locations: MicroLocationSet
     ) -> Optional[MicroOperand]:
         """Find a micro-operand by context, address, and location set."""
         result = self._raw.find_mop(ctx, ea, is_dest, locations._raw)
@@ -1121,11 +1121,11 @@ class MicroGraph:
     Provides iteration and use-def chain access.
     """
 
-    def __init__(self, raw):
+    def __init__(self, raw: Any) -> None:
         self._raw = raw
 
     @property
-    def raw_graph(self):
+    def raw_graph(self) -> Any:
         """Get the underlying ``mbl_graph_t`` object."""
         return self._raw
 
@@ -1139,7 +1139,7 @@ class MicroGraph:
         for i in range(self._raw.node_qty()):
             yield MicroBlock(self._raw.get_mblock(i), i)
 
-    def get_use_def_chains(self, gctype: int):
+    def get_use_def_chains(self, gctype: int) -> Any:
         """Get use-def chains (returns raw ``graph_chains_t``).
 
         Args:
@@ -1147,7 +1147,7 @@ class MicroGraph:
         """
         return self._raw.get_ud(gctype)
 
-    def get_def_use_chains(self, gctype: int):
+    def get_def_use_chains(self, gctype: int) -> Any:
         """Get def-use chains (returns raw ``graph_chains_t``).
 
         Args:
@@ -1260,10 +1260,10 @@ class MicroOperandVisitor(ida_hexrays.mop_visitor_t):
     Override :meth:`visit` instead of ``visit_mop()``.
     """
 
-    def visit_mop(self, op, type_, is_target) -> int:
+    def visit_mop(self, op: Any, type_: Any, is_target: bool) -> int:
         return self.visit(MicroOperand(op), type_, is_target)
 
-    def visit(self, operand: MicroOperand, type_info, is_target: bool) -> int:
+    def visit(self, operand: MicroOperand, type_info: Any, is_target: bool) -> int:
         """Override this. Return 0 to continue, non-zero to stop."""
         return 0
 
@@ -1275,7 +1275,7 @@ class MicroOperandVisitor(ida_hexrays.mop_visitor_t):
 class MicroInstructionOptimizer(ida_hexrays.optinsn_t):
     """Per-instruction optimizer. Override :meth:`optimize`."""
 
-    def func(self, blk, ins, optflags=0):
+    def func(self, blk: Any, ins: Any, optflags: int = 0) -> int:
         mb = MicroBlock(blk, blk.serial)
         mi = MicroInstruction(ins, mb)
         return self.optimize(mb, mi, optflags)
@@ -1288,7 +1288,7 @@ class MicroInstructionOptimizer(ida_hexrays.optinsn_t):
 class MicroBlockOptimizer(ida_hexrays.optblock_t):
     """Per-block optimizer. Override :meth:`optimize`."""
 
-    def func(self, blk):
+    def func(self, blk: Any) -> int:
         mb = MicroBlock(blk, blk.serial)
         return self.optimize(mb)
 
@@ -1352,7 +1352,7 @@ def reg_to_mreg(processor_reg: int) -> int:
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-def _microcode_error_from(hf, location: str) -> MicrocodeError:
+def _microcode_error_from(hf: Any, location: str) -> MicrocodeError:
     """Build a :class:`MicrocodeError` from a ``hexrays_failure_t``."""
     try:
         code = MicroError(hf.code)
@@ -1387,7 +1387,7 @@ class Microcode(DatabaseEntity):
 
     def generate(
         self,
-        func,
+        func: Any,
         maturity: MicroMaturity = MicroMaturity.GENERATED,
         flags: int = ida_hexrays.DECOMP_WARNINGS,
         build_graph: bool = True,
@@ -1456,7 +1456,7 @@ class Microcode(DatabaseEntity):
 
         return MicroFunction(mba)
 
-    def from_decompilation(self, func) -> MicroFunction:
+    def from_decompilation(self, func: Any) -> MicroFunction:
         """Get microcode from a full decompilation (maturity LVARS).
 
         Uses ``ida_hexrays.decompile()`` and returns the ``mba_t``
@@ -1480,7 +1480,7 @@ class Microcode(DatabaseEntity):
 
     def get_text(
         self,
-        func,
+        func: Any,
         maturity: MicroMaturity = MicroMaturity.GENERATED,
         remove_tags: bool = True,
     ) -> List[str]:

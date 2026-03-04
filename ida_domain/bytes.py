@@ -2126,6 +2126,6 @@ class Bytes(DatabaseEntity):
         )
         from .microcode import Microcode
 
-        mc = Microcode(self.m_database)
+        mc = Microcode(self.database)
         mf = mc.generate_for_range(start_ea, end_ea)
         return mf.to_text(remove_tags=remove_tags)
