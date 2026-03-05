@@ -1,6 +1,6 @@
 """
 This is equivalent of log_idb_events.py from IDAPython examples
-Original: https://github.com/idapython/src/blob/master/examples/disassembler/log_idb_events.py
+Original: https://github.com/HexRaysSA/ida-sdk/blob/main/src/plugins/idapython/examples/disassembler/log_idb_events.py
 """
 
 import inspect

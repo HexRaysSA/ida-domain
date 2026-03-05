@@ -1,6 +1,6 @@
 """
 This is equivalent of list_segment_functions.py from IDAPython examples
-Original: https://github.com/idapython/src/blob/master/examples/disassembler/list_segment_functions.py
+Original: https://github.com/HexRaysSA/ida-sdk/blob/main/src/plugins/idapython/examples/disassembler/list_segment_functions.py
 """
 
 import ida_domain

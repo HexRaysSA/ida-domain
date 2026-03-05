@@ -1,6 +1,6 @@
 """
 This is equivalent of create_struct_by_parsing.py from IDAPython examples
-Original: https://github.com/idapython/src/blob/master/examples/types/create_struct_by_parsing.py
+Original: https://github.com/HexRaysSA/ida-sdk/blob/main/src/plugins/idapython/examples/types/create_struct_by_parsing.py
 """
 
 import ida_domain
