@@ -1,6 +1,6 @@
 """
 This is equivalent of dump_extra_comments.py from IDAPython examples
-Original: https://github.com/idapython/src/blob/master/examples/disassembler/dump_extra_comments.py
+Original: https://github.com/HexRaysSA/ida-sdk/blob/main/src/plugins/idapython/examples/disassembler/dump_extra_comments.py
 NOTE: Partially migrated - uses IDA Domain for comments, legacy API for UI actions
 """
 
