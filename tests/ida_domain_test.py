@@ -3057,7 +3057,6 @@ def test_microcode_generate(test_env):
     assert mf.entry_ea == func.start_ea
     assert mf.maturity == MicroMaturity.GENERATED
     assert mf.block_count == 11
-    assert mf.natural_block_count == 9  # 11 - 2 sentinels
 
     # raw_mba escape hatch
     assert mf.raw_mba is not None

@@ -433,16 +433,6 @@ class MicroOperand:
     def is_pair(self) -> bool:
         return self._raw.t == self._T.PAIR
 
-    @property
-    def is_zero(self) -> bool:
-        """True if this is a number operand with value 0."""
-        return self.value == 0
-
-    @property
-    def is_one(self) -> bool:
-        """True if this is a number operand with value 1."""
-        return self.value == 1
-
     # -- query methods -----------------------------------------------------
 
     def is_sub_instruction(self, opcode: Optional[MicroOpcode] = None) -> bool:
@@ -981,11 +971,6 @@ class MicroBlockArray:
         """First block (index 0)."""
         return MicroBlock(self._raw.get_mblock(0), 0, self)
 
-    @property
-    def natural_block_count(self) -> int:
-        """Number of blocks excluding entry/exit sentinels."""
-        return max(0, self._raw.qty - 2)
-
     # -- state queries -----------------------------------------------------
 
     @property
@@ -1382,15 +1367,6 @@ class MicrocodeLifter(ida_hexrays.microcode_filter_t):
 
 
 # ---------------------------------------------------------------------------
-# Module-level helpers
-# ---------------------------------------------------------------------------
-
-def reg_to_mreg(processor_reg: int) -> int:
-    """Convert a processor register number to a micro-register number.
-
-    Wraps ``ida_hexrays.reg2mreg()``.  Essential for instruction lifters.
-    """
-    return ida_hexrays.reg2mreg(processor_reg)
 
 
 # ---------------------------------------------------------------------------
