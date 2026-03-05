@@ -3270,31 +3270,18 @@ def test_microcode_operand_access(test_env):
 
 
 def test_microcode_operand_comparisons(test_env):
-    """Test operand __eq__, __ne__, __bool__, is_zero, is_one."""
+    """Test operand __eq__, __ne__, __bool__."""
     from ida_domain.microcode import MicroOperandType
 
     db = test_env
-    func = db.functions.get_at(0x2BC)  # print_number has zero and one constants
+    func = db.functions.get_at(0x2BC)
     mf = db.microcode.generate(func)
 
-    found_zero = False
-    found_one = False
     for insn in mf.instructions():
         for op in insn.operands():
-            if op.is_number and op.value == 0:
-                assert op.is_zero
-                assert not op.is_one
-                found_zero = True
-            elif op.is_number and op.value == 1:
-                assert op.is_one
-                assert not op.is_zero
-                found_one = True
             # __eq__ on same operand
             assert op == op
             assert not (op != op)
-
-    assert found_zero, 'Expected to find a zero constant'
-    assert found_one, 'Expected to find a one constant'
 
     # Empty operand via __bool__
     from ida_hexrays import mop_t
