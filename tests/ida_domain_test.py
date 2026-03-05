@@ -291,7 +291,8 @@ def test_function(test_env):
     pseudocode_lines = db.functions.get_pseudocode(func)
     assert len(pseudocode_lines) == 4
 
-    microcode_lines = db.functions.get_microcode(func)
+    mf = db.functions.get_microcode(func)
+    microcode_lines = mf.to_text()
     assert len(microcode_lines) == 13
     assert microcode_lines[11] == '1.11 mov    cs.2, seg.2             ; 2AE u=cs.2       d=seg.2'
 
@@ -517,7 +518,8 @@ def test_function(test_env):
     assert empty_comment == ''
 
     func = db.functions.get_at(0x2BC)
-    microcode_lines = db.functions.get_microcode(func)
+    mf = db.functions.get_microcode(func)
+    microcode_lines = mf.to_text()
     assert len(microcode_lines) == 72
     assert microcode_lines[53] == '2.40 jcnd   tt.1, @2                ; 2DE u=tt.1'
     assert microcode_lines[67] == (
@@ -3476,8 +3478,6 @@ def test_microcode_instruction_set_ea(test_env):
 
 def test_microcode_text_output(test_env):
     """Test that to_text() produces output compatible with old get_microcode()."""
-    import warnings as w
-
     db = test_env
     func = db.functions.get_at(0xC4)
 
@@ -3498,14 +3498,9 @@ def test_microcode_text_output(test_env):
     raw_lines = mf.to_text(remove_tags=False)
     assert len(raw_lines) > 0
 
-    # Old API should emit deprecation warning
-    with w.catch_warnings(record=True) as caught:
-        w.simplefilter('always')
-        old_lines = db.functions.get_microcode(func)
-
-    assert len(caught) > 0
-    assert issubclass(caught[0].category, DeprecationWarning)
-    assert len(old_lines) > 0
+    # Old API delegates to microcode module
+    old_mf = db.functions.get_microcode(func)
+    assert len(old_mf.to_text()) > 0
 
 
 def test_microcode_from_decompilation(test_env):
@@ -3700,25 +3695,6 @@ def test_microcode_function_final_type(test_env):
     ft = mf.final_type
     assert ft is not None  # decompiled function should have a return type
 
-
-def test_deprecated_get_microcode_warns(test_env):
-    """Test that deprecated methods emit DeprecationWarning."""
-    import warnings as w
-
-    db = test_env
-    func = db.functions.get_at(0xC4)
-
-    with w.catch_warnings(record=True) as caught:
-        w.simplefilter('always')
-        db.functions.get_microcode(func)
-
-    assert any(issubclass(c.category, DeprecationWarning) for c in caught)
-
-    with w.catch_warnings(record=True) as caught:
-        w.simplefilter('always')
-        db.bytes.get_microcode_between(func.start_ea, func.end_ea)
-
-    assert any(issubclass(c.category, DeprecationWarning) for c in caught)
 
 
 def test_microcode_generate_for_range(test_env):

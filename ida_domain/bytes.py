@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 import struct
-import warnings
 from enum import IntEnum, IntFlag
 
 import ida_bytes
@@ -27,6 +26,7 @@ from .strings import StringType
 
 if TYPE_CHECKING:
     from .database import Database
+    from .microcode import MicroBlockArray
 
 
 class SearchFlags(IntFlag):
@@ -2097,35 +2097,24 @@ class Bytes(DatabaseEntity):
             ea = ida_bytes.find_bytes(pattern, ea + 1, None, end_ea)
         return results
 
-    def get_microcode_between(
-        self, start_ea: ea_t, end_ea: ea_t, remove_tags: bool = True
-    ) -> List[str]:
+    def get_microcode_between(self, start_ea: ea_t, end_ea: ea_t) -> MicroBlockArray:
         """
-        Retrieves the microcode of the given range.
+        Generates microcode for the given address range.
 
-        .. deprecated::
-            Use ``db.microcode.generate_for_range(start_ea, end_ea)`` instead.
+        Delegates to ``db.microcode.generate_for_range()``.
 
         Args:
             start_ea: The range start.
             end_ea: The range end.
-            remove_tags: If True, removes IDA color/formatting tags from the output.
 
         Returns:
-            A list of strings, each representing a line of microcode. Returns empty list if
-            range is invalid or decompilation fails.
+            A :class:`~ida_domain.microcode.MicroBlockArray` representing the
+            generated microcode.
 
         Raises:
-            RuntimeError: If microcode generation fails for the range.
+            MicrocodeError: If microcode generation fails for the range.
         """
-        warnings.warn(
-            'Bytes.get_microcode_between() is deprecated. '
-            'Use db.microcode.generate_for_range(start_ea, end_ea) instead.',
-            DeprecationWarning,
-            stacklevel=2,
-        )
         from .microcode import Microcode
 
         mc = Microcode(self.database)
-        mf = mc.generate_for_range(start_ea, end_ea)
-        return mf.to_text(remove_tags=remove_tags)
+        return mc.generate_for_range(start_ea, end_ea)
