@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import warnings
-from enum import IntEnum
+from enum import IntEnum, IntFlag
 
 import ida_funcs
 import ida_hexrays
@@ -227,6 +227,31 @@ class MicrocodeError(Exception):
         self.code = code
         self.errea = errea
         super().__init__(message)
+
+
+class DecompilationFlags(IntFlag):
+    """Decompilation flags passed to microcode generation (``DECOMP_*``)."""
+
+    NO_WAIT = ida_hexrays.DECOMP_NO_WAIT
+    NO_CACHE = ida_hexrays.DECOMP_NO_CACHE
+    NO_FRAME = ida_hexrays.DECOMP_NO_FRAME
+    WARNINGS = ida_hexrays.DECOMP_WARNINGS
+    ALL_BLKS = ida_hexrays.DECOMP_ALL_BLKS
+    NO_HIDE = ida_hexrays.DECOMP_NO_HIDE
+    GXREFS_DEFLT = ida_hexrays.DECOMP_GXREFS_DEFLT
+    GXREFS_NOUPD = ida_hexrays.DECOMP_GXREFS_NOUPD
+    GXREFS_FORCE = ida_hexrays.DECOMP_GXREFS_FORCE
+    VOID_MBA = ida_hexrays.DECOMP_VOID_MBA
+
+
+class AnalyzeCallsFlags(IntFlag):
+    """Flags for :meth:`MicroBlockArray.analyze_calls` (``ACFL_*``)."""
+
+    LOCOPT = ida_hexrays.ACFL_LOCOPT
+    BLKOPT = ida_hexrays.ACFL_BLKOPT
+    GLBPROP = ida_hexrays.ACFL_GLBPROP
+    GLBDEL = ida_hexrays.ACFL_GLBDEL
+    GUESS = ida_hexrays.ACFL_GUESS
 
 
 # ---------------------------------------------------------------------------
@@ -1035,6 +1060,17 @@ class MicroBlockArray:
 
     # -- graph & analysis --------------------------------------------------
 
+    def analyze_calls(self, flags: AnalyzeCallsFlags = AnalyzeCallsFlags(0)) -> int:
+        """Analyze call instructions and determine calling conventions.
+
+        Args:
+            flags: Analysis flags (e.g. ``AnalyzeCallsFlags.GUESS``).
+
+        Returns:
+            Number of calls analyzed, or negative on failure.
+        """
+        return self._raw.analyze_calls(int(flags))
+
     def get_graph(self) -> MicroGraph:
         """Get the wrapped :class:`MicroGraph`."""
         return MicroGraph(self._raw.get_graph())
@@ -1190,13 +1226,19 @@ class MicroLocationSet:
         search_set -= def_set          # subtract
     """
 
-    def __init__(self, raw: mlist_t):
-        self._raw = raw
+    def __init__(self, raw: Optional[mlist_t] = None):
+        self._raw = raw if raw is not None else ida_hexrays.mlist_t()
 
     @property
     def raw_mlist(self) -> mlist_t:
         """Get the underlying ``mlist_t`` object."""
         return self._raw
+
+    def copy(self) -> MicroLocationSet:
+        """Return a shallow copy of this location set."""
+        new = MicroLocationSet()
+        new._raw.add(self._raw)
+        return new
 
     def add(self, other: MicroLocationSet) -> None:
         """Union this set with *other* in-place."""
@@ -1392,7 +1434,7 @@ class Microcode(DatabaseEntity):
         self,
         func: Any,
         maturity: MicroMaturity = MicroMaturity.GENERATED,
-        flags: int = ida_hexrays.DECOMP_WARNINGS,
+        flags: DecompilationFlags = DecompilationFlags.WARNINGS,
         build_graph: bool = True,
     ) -> MicroBlockArray:
         """Generate microcode for a function.
@@ -1400,7 +1442,7 @@ class Microcode(DatabaseEntity):
         Args:
             func: An IDA ``func_t`` object (e.g. from ``db.functions.get_at()``).
             maturity: The desired maturity level.
-            flags: Decompilation flags (default: ``DECOMP_WARNINGS``).
+            flags: Decompilation flags (default: ``DecompilationFlags.WARNINGS``).
             build_graph: Whether to build the CFG graph after generation.
 
         Returns:
@@ -1412,7 +1454,7 @@ class Microcode(DatabaseEntity):
         mbr = ida_hexrays.mba_ranges_t(func)
         hf = ida_hexrays.hexrays_failure_t()
         ml = ida_hexrays.mlist_t()
-        mba = ida_hexrays.gen_microcode(mbr, hf, ml, flags, int(maturity))
+        mba = ida_hexrays.gen_microcode(mbr, hf, ml, int(flags), int(maturity))
 
         if not mba:
             raise _microcode_error_from(hf, f'0x{func.start_ea:x}')
@@ -1427,7 +1469,7 @@ class Microcode(DatabaseEntity):
         start_ea: int,
         end_ea: int,
         maturity: MicroMaturity = MicroMaturity.GENERATED,
-        flags: int = ida_hexrays.DECOMP_WARNINGS,
+        flags: DecompilationFlags = DecompilationFlags.WARNINGS,
         build_graph: bool = True,
     ) -> MicroBlockArray:
         """Generate microcode for an address range.
@@ -1436,7 +1478,7 @@ class Microcode(DatabaseEntity):
             start_ea: Range start address.
             end_ea: Range end address.
             maturity: The desired maturity level.
-            flags: Decompilation flags.
+            flags: Decompilation flags (default: ``DecompilationFlags.WARNINGS``).
             build_graph: Whether to build the CFG graph after generation.
 
         Returns:
@@ -1449,7 +1491,7 @@ class Microcode(DatabaseEntity):
         mbr.ranges.push_back(ida_range.range_t(start_ea, end_ea))
         hf = ida_hexrays.hexrays_failure_t()
         ml = ida_hexrays.mlist_t()
-        mba = ida_hexrays.gen_microcode(mbr, hf, ml, flags, int(maturity))
+        mba = ida_hexrays.gen_microcode(mbr, hf, ml, int(flags), int(maturity))
 
         if not mba:
             raise _microcode_error_from(hf, f'range 0x{start_ea:x}:0x{end_ea:x}')
