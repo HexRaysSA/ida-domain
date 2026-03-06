@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 import logging
-import warnings
 from enum import IntEnum, IntFlag
 
-import ida_funcs
 import ida_hexrays
 import ida_lines
 import ida_range
@@ -610,14 +608,16 @@ class MicroInstruction:
         """Find the first call in this instruction tree."""
         result = self._raw.find_call(with_helpers)
         if result:
-            return MicroInstruction(result, self._parent_block)
+            parent = self._parent_block if result.obj_id == self._raw.obj_id else None
+            return MicroInstruction(result, parent)
         return None
 
     def find_opcode(self, mcode: MicroOpcode) -> Optional[MicroInstruction]:
         """Find the first sub-instruction with the given opcode."""
         result = self._raw.find_opcode(int(mcode))
         if result:
-            return MicroInstruction(result, self._parent_block)
+            parent = self._parent_block if result.obj_id == self._raw.obj_id else None
+            return MicroInstruction(result, parent)
         return None
 
     # -- mutation ----------------------------------------------------------
@@ -1272,12 +1272,13 @@ class MicroInstructionVisitor(ida_hexrays.minsn_visitor_t):
     Override :meth:`visit` instead of ``visit_minsn()``.
     """
 
-    def __init__(self, parent_block: Optional[MicroBlock] = None):
+    def __init__(self):
         super().__init__()
-        self._block = parent_block
 
     def visit_minsn(self) -> int:
-        return self.visit(MicroInstruction(self.curins, self._block))
+        is_top = self.curins.obj_id == self.topins.obj_id
+        parent = MicroBlock(self.blk) if is_top else None
+        return self.visit(MicroInstruction(self.curins, parent))
 
     def visit(self, insn: MicroInstruction) -> int:
         """Override this. Return 0 to continue, non-zero to stop."""
@@ -1492,7 +1493,7 @@ class Microcode(DatabaseEntity):
         Raises:
             MicrocodeError: If decompilation fails.
         """
-        cfunc = ida_hexrays.decompile(func)
+        cfunc = ida_hexrays.decompile(func.start_ea)
         if not cfunc:
             raise MicrocodeError(
                 f'Failed to decompile function at 0x{func.start_ea:x}'

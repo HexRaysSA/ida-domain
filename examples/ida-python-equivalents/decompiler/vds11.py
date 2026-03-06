@@ -57,13 +57,16 @@ class vds11_plugin_t(ida_idaapi.plugin_t):
     help = ''
 
     def init(self):
+        self.optimizer = None
         if ida_hexrays.init_hexrays_plugin():
             self.optimizer = GotoChainOptimizer()
             self.optimizer.install()
             return ida_idaapi.PLUGIN_KEEP
+        return ida_idaapi.PLUGIN_SKIP
 
     def term(self):
-        self.optimizer.remove()
+        if self.optimizer is not None:
+            self.optimizer.remove()
 
     def run(self, arg):
         if arg == 1:

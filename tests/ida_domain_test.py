@@ -4077,11 +4077,22 @@ def test_microcode_instruction_aliases_and_block(test_env):
     func = db.functions.get_at(0xC4)
     mf = db.microcode.generate(func)
 
+    from ida_domain.microcode import MicroOperand
+
     for block in mf.blocks(skip_sentinels=True):
         for insn in block:
             # right and dest are aliases for r and d
-            assert insn.right is not None or insn.right is None  # no crash
-            assert insn.dest is not None or insn.dest is None
+            if insn.r is not None:
+                assert insn.right == insn.r
+                assert isinstance(insn.right, MicroOperand)
+            else:
+                assert insn.right is None
+
+            if insn.d is not None:
+                assert insn.dest == insn.d
+                assert isinstance(insn.dest, MicroOperand)
+            else:
+                assert insn.dest is None
 
             # block property should return the parent block
             assert insn.block is not None
@@ -4436,3 +4447,60 @@ def test_microcode_block_str(test_env):
         for line, insn in zip(lines, block):
             assert line == str(insn)
         break  # first real block is enough
+
+
+def test_microcode_find_call_nested_is_not_top_level(test_env):
+    """find_call/find_opcode on a top-level instruction marks nested results as not top-level."""
+    from ida_domain.microcode import MicroOpcode, MicroOperandType
+
+    db = test_env
+    # 0xC4 has sub-instructions (helper calls embedded in larger instructions)
+    func = db.functions.get_at(0xC4)
+    mf = db.microcode.generate(func)
+
+    found_nested = False
+    for insn in mf.instructions():
+        assert insn.is_top_level
+        # find_call with helpers to find nested helper calls (e.g. _bittest64)
+        fc = insn.find_call(with_helpers=True)
+        if fc is not None:
+            if fc.raw_instruction.obj_id == insn.raw_instruction.obj_id:
+                assert fc.is_top_level
+            else:
+                assert not fc.is_top_level
+                found_nested = True
+
+    assert found_nested, \
+        'Expected to find at least one nested sub-instruction via find_call'
+
+
+def test_microcode_visitor_top_level_flag(test_env):
+    """MicroInstructionVisitor sets is_top_level only for block-list instructions."""
+    from ida_domain.microcode import MicroInstruction, MicroInstructionVisitor
+
+    db = test_env
+    func = db.functions.get_at(0xC4)
+    mf = db.microcode.generate(func)
+
+    class TopLevelChecker(MicroInstructionVisitor):
+        def __init__(self):
+            super().__init__()
+            self.top_level_count = 0
+            self.nested_count = 0
+
+        def visit(self, insn):
+            assert isinstance(insn, MicroInstruction)
+            if insn.is_top_level:
+                self.top_level_count += 1
+            else:
+                self.nested_count += 1
+            return 0
+
+    block = list(mf.blocks(skip_sentinels=True))[0]
+    checker = TopLevelChecker()
+    block.raw_block.for_all_insns(checker)
+
+    # Top-level count must match the number of instructions in the block
+    assert checker.top_level_count == len(block)
+    # Total visited includes nested sub-instructions
+    assert checker.top_level_count + checker.nested_count >= checker.top_level_count
