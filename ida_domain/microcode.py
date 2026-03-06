@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 # Enums
 # ---------------------------------------------------------------------------
 
+
 class MicroMaturity(IntEnum):
     """Microcode maturity levels corresponding to MMAT_* constants."""
 
@@ -220,7 +221,10 @@ class MicrocodeError(Exception):
     """
 
     def __init__(
-        self, message: str, code: Optional[MicroError] = None, errea: Optional[int] = None,
+        self,
+        message: str,
+        code: Optional[MicroError] = None,
+        errea: Optional[int] = None,
     ):
         self.code = code
         self.errea = errea
@@ -255,6 +259,7 @@ class AnalyzeCallsFlags(IntFlag):
 # ---------------------------------------------------------------------------
 # MicroOperand — wraps mop_t
 # ---------------------------------------------------------------------------
+
 
 class MicroOperand:
     """Wrapper around an IDA ``mop_t`` microcode operand.
@@ -493,6 +498,7 @@ class MicroOperand:
 # MicroInstruction — wraps minsn_t
 # ---------------------------------------------------------------------------
 
+
 class MicroInstruction:
     """Wrapper around an IDA ``minsn_t`` microcode instruction.
 
@@ -674,6 +680,7 @@ class MicroInstruction:
 # ---------------------------------------------------------------------------
 # MicroBlock — wraps mblock_t
 # ---------------------------------------------------------------------------
+
 
 class MicroBlock:
     """Wrapper around an IDA ``mblock_t`` microcode basic block.
@@ -931,6 +938,7 @@ class MicroBlock:
 # MicroBlockArray — wraps mba_t
 # ---------------------------------------------------------------------------
 
+
 class MicroBlockArray:
     """Wrapper around an IDA ``mba_t`` (micro block array).
 
@@ -1139,6 +1147,7 @@ class MicroBlockArray:
 # MicroGraph — wraps mbl_graph_t
 # ---------------------------------------------------------------------------
 
+
 class MicroGraph:
     """Wrapper around an IDA ``mbl_graph_t`` block-level control flow graph.
 
@@ -1198,6 +1207,7 @@ class MicroGraph:
 # ---------------------------------------------------------------------------
 # MicroLocationSet — wraps mlist_t
 # ---------------------------------------------------------------------------
+
 
 class MicroLocationSet:
     """Wrapper around an IDA ``mlist_t`` set of memory/register locations.
@@ -1266,13 +1276,14 @@ class MicroLocationSet:
 # Visitor base classes
 # ---------------------------------------------------------------------------
 
+
 class MicroInstructionVisitor(ida_hexrays.minsn_visitor_t):
     """Visitor that delivers :class:`MicroInstruction` wrappers.
 
     Override :meth:`visit` instead of ``visit_minsn()``.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
 
     def visit_minsn(self) -> int:
@@ -1302,6 +1313,7 @@ class MicroOperandVisitor(ida_hexrays.mop_visitor_t):
 # ---------------------------------------------------------------------------
 # Optimizer & filter base classes
 # ---------------------------------------------------------------------------
+
 
 class MicroInstructionOptimizer(ida_hexrays.optinsn_t):
     """Per-instruction optimizer. Override :meth:`optimize`."""
@@ -1374,6 +1386,7 @@ class MicrocodeLifter(ida_hexrays.microcode_filter_t):
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+
 def _microcode_error_from(hf: Any, location: str) -> MicrocodeError:
     """Build a :class:`MicrocodeError` from a ``hexrays_failure_t``."""
     try:
@@ -1393,6 +1406,7 @@ def _microcode_error_from(hf: Any, location: str) -> MicrocodeError:
 # ---------------------------------------------------------------------------
 # Microcode entry point — DatabaseEntity
 # ---------------------------------------------------------------------------
+
 
 @decorate_all_methods(check_db_open)
 class Microcode(DatabaseEntity):
@@ -1495,9 +1509,7 @@ class Microcode(DatabaseEntity):
         """
         cfunc = ida_hexrays.decompile(func.start_ea)
         if not cfunc:
-            raise MicrocodeError(
-                f'Failed to decompile function at 0x{func.start_ea:x}'
-            )
+            raise MicrocodeError(f'Failed to decompile function at 0x{func.start_ea:x}')
         return MicroBlockArray(cfunc.mba)
 
     def get_text(
