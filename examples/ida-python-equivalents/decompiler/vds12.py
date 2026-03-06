@@ -22,7 +22,6 @@ from ida_domain.microcode import (
     MicroMaturity,
 )
 
-
 # -- intra-block xref collection (uses ida-domain) --------------------------
 
 def collect_block_xrefs(out, mlist, block, start_insn, find_uses):
