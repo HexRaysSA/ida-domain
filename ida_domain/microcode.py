@@ -271,9 +271,8 @@ class MicroOperand:
 
     _T = MicroOperandType  # shorthand for type checks
 
-    def __init__(self, raw: mop_t, parent_insn: Optional[MicroInstruction] = None):
+    def __init__(self, raw: mop_t):
         self._raw = raw
-        self._parent_insn = parent_insn
 
     # -- raw access --------------------------------------------------------
 
@@ -536,17 +535,17 @@ class MicroInstruction:
     @property
     def l(self) -> MicroOperand:
         """Left operand."""
-        return MicroOperand(self._raw.l, self)
+        return MicroOperand(self._raw.l)
 
     @property
     def r(self) -> MicroOperand:
         """Right operand."""
-        return MicroOperand(self._raw.r, self)
+        return MicroOperand(self._raw.r)
 
     @property
     def d(self) -> MicroOperand:
         """Destination operand."""
-        return MicroOperand(self._raw.d, self)
+        return MicroOperand(self._raw.d)
 
     @property
     def left(self) -> MicroOperand:
@@ -689,11 +688,8 @@ class MicroBlock:
     successors/predecessors.
     """
 
-    def __init__(
-        self, raw: mblock_t, serial: int = 0, parent_mf: Optional[MicroBlockArray] = None
-    ):
+    def __init__(self, raw: mblock_t, parent_mf: Optional[MicroBlockArray] = None):
         self._raw = raw
-        self._serial = serial
         self._parent_mf = parent_mf
 
     # -- raw access --------------------------------------------------------
@@ -817,14 +813,14 @@ class MicroBlock:
         mba_raw = self._raw.mba
         for j in range(self._raw.nsucc()):
             serial = self._raw.succ(j)
-            yield MicroBlock(mba_raw.get_mblock(serial), serial, self._parent_mf)
+            yield MicroBlock(mba_raw.get_mblock(serial), self._parent_mf)
 
     def predecessors(self) -> Iterator[MicroBlock]:
         """Iterate over predecessor blocks."""
         mba_raw = self._raw.mba
         for j in range(self._raw.npred()):
             serial = self._raw.pred(j)
-            yield MicroBlock(mba_raw.get_mblock(serial), serial, self._parent_mf)
+            yield MicroBlock(mba_raw.get_mblock(serial), self._parent_mf)
 
     @property
     def successor_serials(self) -> List[int]:
@@ -977,7 +973,7 @@ class MicroBlockArray:
     @property
     def entry_block(self) -> MicroBlock:
         """First block (index 0)."""
-        return MicroBlock(self._raw.get_mblock(0), 0, self)
+        return MicroBlock(self._raw.get_mblock(0), self)
 
     # -- state queries -----------------------------------------------------
 
@@ -996,13 +992,13 @@ class MicroBlockArray:
     def __iter__(self) -> Iterator[MicroBlock]:
         """Iterate over all blocks."""
         for i in range(self._raw.qty):
-            yield MicroBlock(self._raw.get_mblock(i), i, self)
+            yield MicroBlock(self._raw.get_mblock(i), self)
 
     def __getitem__(self, i: int) -> MicroBlock:
         """Get block by index."""
         if i < 0 or i >= self._raw.qty:
             raise IndexError(f'Block index {i} out of range (0..{self._raw.qty - 1})')
-        return MicroBlock(self._raw.get_mblock(i), i, self)
+        return MicroBlock(self._raw.get_mblock(i), self)
 
     def __len__(self) -> int:
         return self._raw.qty
@@ -1082,7 +1078,7 @@ class MicroBlockArray:
     def insert_block(self, index: int) -> MicroBlock:
         """Insert a new block at the given index."""
         blk = self._raw.insert_block(index)
-        return MicroBlock(blk, index, self)
+        return MicroBlock(blk, self)
 
     def remove_block(self, block: MicroBlock) -> None:
         """Remove a block."""
@@ -1166,11 +1162,11 @@ class MicroGraph:
         return self._raw.node_qty()
 
     def __getitem__(self, i: int) -> MicroBlock:
-        return MicroBlock(self._raw.get_mblock(i), i)
+        return MicroBlock(self._raw.get_mblock(i))
 
     def __iter__(self) -> Iterator[MicroBlock]:
         for i in range(self._raw.node_qty()):
-            yield MicroBlock(self._raw.get_mblock(i), i)
+            yield MicroBlock(self._raw.get_mblock(i))
 
     def get_use_def_chains(self, gctype: int) -> Any:
         """Get use-def chains (returns raw ``graph_chains_t``).
@@ -1319,7 +1315,7 @@ class MicroInstructionOptimizer(ida_hexrays.optinsn_t):
     """Per-instruction optimizer. Override :meth:`optimize`."""
 
     def func(self, blk: Any, ins: Any, optflags: int = 0) -> int:
-        mb = MicroBlock(blk, blk.serial)
+        mb = MicroBlock(blk)
         mi = MicroInstruction(ins, mb)
         return self.optimize(mb, mi, optflags)
 
@@ -1332,7 +1328,7 @@ class MicroBlockOptimizer(ida_hexrays.optblock_t):
     """Per-block optimizer. Override :meth:`optimize`."""
 
     def func(self, blk: Any) -> int:
-        mb = MicroBlock(blk, blk.serial)
+        mb = MicroBlock(blk)
         return self.optimize(mb)
 
     def optimize(self, block: MicroBlock) -> int:

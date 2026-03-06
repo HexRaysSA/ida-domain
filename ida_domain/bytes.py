@@ -2114,7 +2114,4 @@ class Bytes(DatabaseEntity):
         Raises:
             MicrocodeError: If microcode generation fails for the range.
         """
-        from .microcode import Microcode
-
-        mc = Microcode(self.database)
-        return mc.generate_for_range(start_ea, end_ea)
+        return self.database.microcode.generate_for_range(start_ea, end_ea)

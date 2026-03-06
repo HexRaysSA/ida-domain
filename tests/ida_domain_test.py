@@ -4082,17 +4082,11 @@ def test_microcode_instruction_aliases_and_block(test_env):
     for block in mf.blocks(skip_sentinels=True):
         for insn in block:
             # right and dest are aliases for r and d
-            if insn.r is not None:
-                assert insn.right == insn.r
-                assert isinstance(insn.right, MicroOperand)
-            else:
-                assert insn.right is None
+            assert insn.right == insn.r
+            assert isinstance(insn.right, MicroOperand)
 
-            if insn.d is not None:
-                assert insn.dest == insn.d
-                assert isinstance(insn.dest, MicroOperand)
-            else:
-                assert insn.dest is None
+            assert insn.dest == insn.d
+            assert isinstance(insn.dest, MicroOperand)
 
             # block property should return the parent block
             assert insn.block is not None
