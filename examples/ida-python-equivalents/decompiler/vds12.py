@@ -44,7 +44,7 @@ def collect_xrefs(out, ctx, mop, mlist, du, mf, find_uses):
     # Current block
     top = ctx.topins
     start = top.next if find_uses else top.prev
-    blk_wrapped = MicroBlock(ctx.blk, ctx.blk.serial)
+    blk_wrapped = MicroBlock(ctx.blk, mf)
     start_wrapped = MicroInstruction(start) if start else None
     if start_wrapped:
         collect_block_xrefs(out, mlist.copy(), blk_wrapped,

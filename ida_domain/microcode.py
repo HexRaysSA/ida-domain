@@ -2275,7 +2275,7 @@ def _microcode_error_from(hf: Any, location: str) -> MicrocodeError:
     except ValueError:
         code = None
         code_label = str(hf.code)
-    errea = hf.errea if hf.errea else None
+    errea = hf.errea if hf.errea != ida_idaapi.BADADDR else None
     parts = [f'Microcode generation failed for {location}']
     parts.append(f'{code_label}: {hf.str}' if hf.str else code_label)
     if errea is not None:
