@@ -1629,6 +1629,29 @@ class MicroBlock:
         """
         self._raw.mark_lists_dirty()
 
+    def optimize_block(self) -> int:
+        """Optimize this basic block.
+
+        Usually there is no need to call this explicitly because the
+        decompiler will call it itself if an optimizer callback returns
+        non-zero.
+
+        Returns:
+            Number of changes made.
+        """
+        return self._raw.optimize_block()
+
+    def optimize_useless_jump(self) -> int:
+        """Remove a useless jump at the end of this block.
+
+        Both conditional and unconditional jumps (and jtbl) are
+        handled.  Side effects are preserved when removing the jump.
+
+        Returns:
+            Number of changes made.
+        """
+        return self._raw.optimize_useless_jump()
+
     def replace_instruction(
         self, old_insn: MicroInstruction, new_insn: MicroInstruction
     ) -> None:
@@ -1928,6 +1951,18 @@ class MicroBlockArray:
             Number of changes made.
         """
         return self._raw.optimize_local(locopt_level)
+
+    def optimize_global(self) -> MicroError:
+        """Optimize microcode globally.
+
+        Applies various optimization methods until a fixed point is
+        reached, then preallocates local variables unless the
+        requested maturity forbids it.
+
+        Returns:
+            Error code (:attr:`MicroError.OK` on success).
+        """
+        return MicroError(self._raw.optimize_global())
 
     def build_graph(self) -> None:
         """Build (or rebuild) the block-level control flow graph.
@@ -2229,11 +2264,11 @@ class MicrocodeFilter(ida_hexrays.udc_filter_t):
 
     def install(self) -> None:
         """Install this filter."""
-        ida_hexrays.install_microcode_filter(self, True)
+        ida_hexrays.udc_filter_t.install(self)
 
     def uninstall(self) -> None:
         """Uninstall this filter."""
-        ida_hexrays.install_microcode_filter(self, False)
+        ida_hexrays.udc_filter_t.remove(self)
 
 
 class MicrocodeLifter(ida_hexrays.microcode_filter_t):

@@ -5685,3 +5685,4 @@ def test_micro_mba_serialize_roundtrip(test_env):
     # Re-serialize should produce identical bytes
     data2 = mf2.serialize()
     assert data == data2
+
