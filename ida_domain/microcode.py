@@ -1072,16 +1072,15 @@ class MicroInstruction:
         Raises:
             RuntimeError: If the parent block is not known.
         """
-        self.swap(new_insn)
-        self.optimize_solo()
-        if self._parent_block is not None:
-            self._parent_block.mark_lists_dirty()
-        else:
+        if self._parent_block is None:
             raise RuntimeError(
                 "Cannot mark lists dirty: parent block unknown. "
                 "Use block.replace_instruction() or ensure the instruction "
                 "was obtained from a block."
             )
+        self.swap(new_insn)
+        self.optimize_solo()
+        self._parent_block.mark_lists_dirty()
 
     def set_ea(self, ea: int) -> None:
         """Change the effective address of this instruction."""
@@ -1533,10 +1532,13 @@ class MicroBlock:
            continues searching for the definition of the ``mov``'s source.
         3. Follows single-predecessor paths across block boundaries.
         4. Stops when a non-``mov`` definition is found, the source is
-           a constant or non-variable, or the search is exhausted.
+           a constant or non-trackable operand, or the search is
+           exhausted.
 
-        Only register (``mop_r``), stack variable (``mop_S``), and local
-        variable (``mop_l``) operands can be tracked.
+        Only register (``mop_r``) and stack variable (``mop_S``)
+        operands are followed through ``mov`` chains.  Local variables
+        (``mop_l``) are not typically present at the maturity levels
+        where this method is most useful.
 
         Args:
             operand: The operand to trace.
@@ -1998,8 +2000,10 @@ class MicroBlockArray:
     def to_text(self, remove_tags: bool = True) -> List[str]:
         """Get text representation of the microcode.
 
-        Prints each non-sentinel block individually, stripping empty lines
-        and whitespace.  Color tags are stripped by default.
+        Prints each non-sentinel block individually.  When *remove_tags*
+        is True (default), IDA color tags are stripped and empty lines
+        and whitespace are removed.  When False, raw block output
+        (including color tags and blank lines) is returned as-is.
         """
         lines: List[str] = []
         for block in self.blocks(skip_sentinels=True):
