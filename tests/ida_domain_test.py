@@ -3783,9 +3783,9 @@ def test_microcode_location_set_operations(test_env):
         # __bool__
         assert bool(a) is True
 
-        # __and__ (has_common)
-        common = a & a  # self always has common with self
-        assert common is True
+        # __and__ (intersection)
+        common = a & a  # intersection with self returns non-empty set
+        assert bool(common)
 
         # has_common method
         assert a.has_common(a)
@@ -4133,6 +4133,156 @@ def test_microcode_instruction_find_opcode(test_env):
         return
 
 
+def test_microcode_opcode_category_properties(test_env):
+    """Test MicroOpcode category query properties."""
+    from ida_domain.microcode import MicroOpcode
+
+    # -- Conditional jumps
+    assert MicroOpcode.JZ.is_conditional_jump is True
+    assert MicroOpcode.JNZ.is_conditional_jump is True
+    assert MicroOpcode.JA.is_conditional_jump is True
+    assert MicroOpcode.JBE.is_conditional_jump is True
+    assert MicroOpcode.JG.is_conditional_jump is True
+    assert MicroOpcode.JLE.is_conditional_jump is True
+    assert MicroOpcode.JCND.is_conditional_jump is True
+    assert MicroOpcode.GOTO.is_conditional_jump is False
+    assert MicroOpcode.MOV.is_conditional_jump is False
+
+    # -- Jump (superset of conditional jump)
+    assert MicroOpcode.JZ.is_jump is True
+    assert MicroOpcode.GOTO.is_jump is True
+    assert MicroOpcode.JTBL.is_jump is True
+    assert MicroOpcode.IJMP.is_jump is True
+    assert MicroOpcode.CALL.is_jump is False
+    assert MicroOpcode.MOV.is_jump is False
+
+    # -- Call
+    assert MicroOpcode.CALL.is_call is True
+    assert MicroOpcode.ICALL.is_call is True
+    assert MicroOpcode.MOV.is_call is False
+    assert MicroOpcode.GOTO.is_call is False
+
+    # -- Flow (jumps + calls + ret)
+    assert MicroOpcode.GOTO.is_flow is True
+    assert MicroOpcode.JZ.is_flow is True
+    assert MicroOpcode.CALL.is_flow is True
+    assert MicroOpcode.RET.is_flow is True
+    assert MicroOpcode.MOV.is_flow is False
+    assert MicroOpcode.ADD.is_flow is False
+
+    # -- Set-condition
+    assert MicroOpcode.SETZ.is_set is True
+    assert MicroOpcode.SETNZ.is_set is True
+    assert MicroOpcode.SETAE.is_set is True
+    assert MicroOpcode.SETG.is_set is True
+    assert MicroOpcode.SETLE.is_set is True
+    assert MicroOpcode.MOV.is_set is False
+    assert MicroOpcode.JZ.is_set is False
+
+    # -- Commutative
+    assert MicroOpcode.ADD.is_commutative is True
+    assert MicroOpcode.MUL.is_commutative is True
+    assert MicroOpcode.OR.is_commutative is True
+    assert MicroOpcode.AND.is_commutative is True
+    assert MicroOpcode.XOR.is_commutative is True
+    assert MicroOpcode.SETZ.is_commutative is True
+    assert MicroOpcode.SETNZ.is_commutative is True
+    assert MicroOpcode.SUB.is_commutative is False
+    assert MicroOpcode.SHL.is_commutative is False
+
+    # -- FPU
+    assert MicroOpcode.FADD.is_fpu is True
+    assert MicroOpcode.FDIV.is_fpu is True
+    assert MicroOpcode.F2I.is_fpu is True
+    assert MicroOpcode.FNEG.is_fpu is True
+    assert MicroOpcode.ADD.is_fpu is False
+    assert MicroOpcode.MOV.is_fpu is False
+
+    # -- Propagatable (can appear in sub-instructions)
+    assert MicroOpcode.ADD.is_propagatable is True
+    assert MicroOpcode.MOV.is_propagatable is True
+    assert MicroOpcode.NOP.is_propagatable is False
+    assert MicroOpcode.RET.is_propagatable is False
+    assert MicroOpcode.GOTO.is_propagatable is False
+
+    # -- Unary
+    assert MicroOpcode.NEG.is_unary is True
+    assert MicroOpcode.LNOT.is_unary is True
+    assert MicroOpcode.BNOT.is_unary is True
+    assert MicroOpcode.FNEG.is_unary is True
+    assert MicroOpcode.ADD.is_unary is False
+    assert MicroOpcode.MOV.is_unary is False
+
+    # -- Shift
+    assert MicroOpcode.SHL.is_shift is True
+    assert MicroOpcode.SHR.is_shift is True
+    assert MicroOpcode.SAR.is_shift is True
+    assert MicroOpcode.ADD.is_shift is False
+    assert MicroOpcode.OR.is_shift is False
+
+    # -- Arithmetic
+    assert MicroOpcode.ADD.is_arithmetic is True
+    assert MicroOpcode.SUB.is_arithmetic is True
+    assert MicroOpcode.MUL.is_arithmetic is True
+    assert MicroOpcode.UDIV.is_arithmetic is True
+    assert MicroOpcode.SDIV.is_arithmetic is True
+    assert MicroOpcode.UMOD.is_arithmetic is True
+    assert MicroOpcode.SMOD.is_arithmetic is True
+    assert MicroOpcode.OR.is_arithmetic is False
+    assert MicroOpcode.FADD.is_arithmetic is False
+
+    # -- Bitwise
+    assert MicroOpcode.OR.is_bitwise is True
+    assert MicroOpcode.AND.is_bitwise is True
+    assert MicroOpcode.XOR.is_bitwise is True
+    assert MicroOpcode.SHL.is_bitwise is True
+    assert MicroOpcode.SHR.is_bitwise is True
+    assert MicroOpcode.SAR.is_bitwise is True
+    assert MicroOpcode.ADD.is_bitwise is False
+    assert MicroOpcode.MOV.is_bitwise is False
+
+    # -- Add/sub
+    assert MicroOpcode.ADD.is_addsub is True
+    assert MicroOpcode.SUB.is_addsub is True
+    assert MicroOpcode.MUL.is_addsub is False
+
+    # -- Extension (xds/xdu)
+    assert MicroOpcode.XDS.is_xdsu is True
+    assert MicroOpcode.XDU.is_xdsu is True
+    assert MicroOpcode.MOV.is_xdsu is False
+
+    # -- Convertible between set <-> jump
+    assert MicroOpcode.SETZ.is_convertible_to_jump is True
+    assert MicroOpcode.JZ.is_convertible_to_set is True
+    assert MicroOpcode.GOTO.is_convertible_to_set is False
+    assert MicroOpcode.MOV.is_convertible_to_jump is False
+
+
+def test_microcode_instruction_category_methods(test_env):
+    """Test MicroInstruction category helper methods on real microcode."""
+    from ida_domain.microcode import MicroOpcode
+
+    db = test_env
+    func = db.functions.get_at(0xC4)
+    mf = db.microcode.generate(func)
+
+    found_any = False
+    for insn in mf.instructions():
+        found_any = True
+        opc = insn.opcode
+
+        # Instruction methods should agree with opcode properties
+        assert insn.is_call() == opc.is_call
+        assert insn.is_conditional_jump() == opc.is_conditional_jump
+        assert insn.is_jump() == opc.is_jump
+        assert insn.is_flow() == opc.is_flow
+        assert insn.is_set() == opc.is_set
+        assert insn.is_fpu() == opc.is_fpu
+        assert insn.is_commutative() == opc.is_commutative
+
+    assert found_any, "Expected at least one instruction"
+
+
 def test_microcode_instruction_comparisons(test_env):
     """Test __eq__, __ne__, __lt__ on MicroInstruction."""
     db = test_env
@@ -4333,9 +4483,7 @@ def test_microcode_optimizer_base_classes(test_env):
 
 def test_microcode_block_insert_remove_instruction(test_env):
     """Test insert_instruction and remove_instruction on MicroBlock."""
-    import ida_hexrays
-
-    from ida_domain.microcode import MicroOpcode
+    from ida_domain.microcode import MicroInstruction, MicroOpcode
 
     db = test_env
     func = db.functions.get_at(0x2A3)  # add_numbers — small
@@ -4344,19 +4492,15 @@ def test_microcode_block_insert_remove_instruction(test_env):
     block = list(mf.blocks(skip_sentinels=True))[0]
     original_count = len(block)
 
-    # Create a NOP instruction to insert
-    nop = ida_hexrays.minsn_t(block.head.raw_instruction.ea)
-    nop.opcode = ida_hexrays.m_nop
-
-    from ida_domain.microcode import MicroInstruction
-    wrapped_nop = MicroInstruction(nop)
+    # Create a NOP instruction using the factory
+    nop = MicroInstruction.create(block.head.ea, MicroOpcode.NOP)
 
     # Insert at head (after=None)
-    block.insert_instruction(wrapped_nop)
+    block.insert_instruction(nop)
     assert len(block) == original_count + 1
 
     # Remove it
-    block.remove_instruction(wrapped_nop)
+    block.remove_instruction(nop)
     assert len(block) == original_count
 
 
@@ -4498,3 +4642,1046 @@ def test_microcode_visitor_top_level_flag(test_env):
     assert checker.top_level_count == len(block)
     # Total visited includes nested sub-instructions
     assert checker.top_level_count + checker.nested_count >= checker.top_level_count
+
+
+# ---------------------------------------------------------------------------
+# MicroOperand / MicroInstruction — factory & builder tests
+# ---------------------------------------------------------------------------
+
+
+def test_micro_operand_number_factory(test_env):
+    """Test MicroOperand.number() static factory."""
+    from ida_domain.microcode import MicroOperand, MicroOperandType
+
+    op = MicroOperand.number(42, size=4)
+    assert op.type == MicroOperandType.NUMBER
+    assert op.value == 42
+    assert op.size == 4
+    assert op.is_number is True
+    assert bool(op) is True
+
+    # Large 8-byte value
+    big = MicroOperand.number(0xDEADBEEFCAFEBABE, size=8)
+    assert big.value == 0xDEADBEEFCAFEBABE
+    assert big.size == 8
+
+    # Zero
+    zero = MicroOperand.number(0, size=1)
+    assert zero.value == 0
+    assert zero.size == 1
+
+
+def test_micro_operand_reg_factory(test_env):
+    """Test MicroOperand.reg() static factory."""
+    import ida_hexrays
+
+    from ida_domain.microcode import MicroOperand, MicroOperandType
+
+    mreg = ida_hexrays.reg2mreg(1)  # cl/ecx/rcx
+    op = MicroOperand.reg(mreg, size=1)
+    assert op.type == MicroOperandType.REGISTER
+    assert op.register == mreg
+    assert op.size == 1
+    assert op.is_register is True
+
+
+def test_micro_operand_helper_factory(test_env):
+    """Test MicroOperand.helper() static factory."""
+    from ida_domain.microcode import MicroOperand, MicroOperandType
+
+    op = MicroOperand.helper("memcpy")
+    assert op.type == MicroOperandType.HELPER
+    assert op.helper_name == "memcpy"
+    assert op.is_helper is True
+
+
+def test_micro_operand_block_ref_factory(test_env):
+    """Test MicroOperand.new_block_ref() static factory."""
+    from ida_domain.microcode import MicroOperand, MicroOperandType
+
+    op = MicroOperand.new_block_ref(7)
+    assert op.type == MicroOperandType.BLOCK_REF
+    assert op.block_ref == 7
+    assert bool(op) is True
+
+
+def test_micro_operand_global_addr_factory(test_env):
+    """Test MicroOperand.global_addr() static factory."""
+    from ida_domain.microcode import MicroOperand, MicroOperandType
+
+    op = MicroOperand.global_addr(0x401000, size=4)
+    assert op.type == MicroOperandType.GLOBAL_ADDR
+    assert op.global_address == 0x401000
+    assert op.size == 4
+    assert op.is_global_address is True
+
+
+def test_micro_operand_empty_factory(test_env):
+    """Test MicroOperand.empty() static factory."""
+    from ida_domain.microcode import MicroOperand, MicroOperandType
+
+    op = MicroOperand.empty()
+    assert op.type == MicroOperandType.EMPTY
+    assert op.is_empty is True
+    assert bool(op) is False
+
+
+def test_micro_operand_from_insn_factory(test_env):
+    """Test MicroOperand.from_insn() creating a sub-instruction operand."""
+    from ida_domain.microcode import (
+        MicroInstruction,
+        MicroOperand,
+        MicroOpcode,
+        MicroOperandType,
+    )
+
+    inner = MicroInstruction.create(
+        ea=0x1000,
+        opcode=MicroOpcode.ADD,
+        left=MicroOperand.number(1, size=4),
+        right=MicroOperand.number(2, size=4),
+    )
+    op = MicroOperand.from_insn(inner)
+    assert op.type == MicroOperandType.SUB_INSN
+    assert op.is_sub_instruction(MicroOpcode.ADD)
+    sub = op.sub_instruction
+    assert sub is not None
+    assert sub.opcode == MicroOpcode.ADD
+
+
+def test_micro_operand_stack_var_factory(test_env):
+    """Test MicroOperand.stack_var() creates a stack variable operand."""
+    from ida_domain.microcode import MicroOperand, MicroOperandType
+
+    db = test_env
+    func = db.functions.get_at(0xC4)
+    mf = db.microcode.generate(func)
+
+    op = MicroOperand.stack_var(mf, 0x10)
+    assert op.type == MicroOperandType.STACK_VAR
+    assert op.is_stack_var is True
+
+
+def test_micro_instruction_create_nop(test_env):
+    """Test MicroInstruction.create() with no operands (NOP)."""
+    from ida_domain.microcode import MicroInstruction, MicroOpcode
+
+    insn = MicroInstruction.create(ea=0x1000, opcode=MicroOpcode.NOP)
+    assert insn.opcode == MicroOpcode.NOP
+    assert insn.ea == 0x1000
+    assert insn.l.is_empty
+    assert insn.r.is_empty
+    assert insn.d.is_empty
+
+
+def test_micro_instruction_create_mov(test_env):
+    """Test MicroInstruction.create() building a MOV with operands."""
+    import ida_hexrays
+
+    from ida_domain.microcode import (
+        MicroInstruction,
+        MicroOperand,
+        MicroOpcode,
+        MicroOperandType,
+    )
+
+    src = MicroOperand.number(0xFF, size=4)
+    dst = MicroOperand.reg(ida_hexrays.reg2mreg(0), size=4)
+
+    insn = MicroInstruction.create(
+        ea=0x2000,
+        opcode=MicroOpcode.MOV,
+        left=src,
+        dest=dst,
+    )
+    assert insn.opcode == MicroOpcode.MOV
+    assert insn.ea == 0x2000
+    assert insn.l.is_number
+    assert insn.l.value == 0xFF
+    assert insn.d.is_register
+    assert insn.d.register == ida_hexrays.reg2mreg(0)
+    # Right operand should remain empty (not provided)
+    assert insn.r.is_empty
+
+
+def test_micro_instruction_create_goto(test_env):
+    """Test MicroInstruction.create() building a GOTO."""
+    from ida_domain.microcode import (
+        MicroInstruction,
+        MicroOperand,
+        MicroOpcode,
+    )
+
+    insn = MicroInstruction.create(
+        ea=0x3000,
+        opcode=MicroOpcode.GOTO,
+        left=MicroOperand.new_block_ref(5),
+    )
+    assert insn.opcode == MicroOpcode.GOTO
+    assert insn.l.block_ref == 5
+
+
+def test_micro_instruction_create_add(test_env):
+    """Test MicroInstruction.create() building an ADD with all three operands."""
+    import ida_hexrays
+
+    from ida_domain.microcode import (
+        MicroInstruction,
+        MicroOperand,
+        MicroOpcode,
+    )
+
+    insn = MicroInstruction.create(
+        ea=0x4000,
+        opcode=MicroOpcode.ADD,
+        left=MicroOperand.reg(ida_hexrays.reg2mreg(0), size=4),
+        right=MicroOperand.number(10, size=4),
+        dest=MicroOperand.reg(ida_hexrays.reg2mreg(0), size=4),
+    )
+    assert insn.opcode == MicroOpcode.ADD
+    assert insn.l.is_register
+    assert insn.r.is_number
+    assert insn.r.value == 10
+    assert insn.d.is_register
+
+
+def test_micro_instruction_operand_setters(test_env):
+    """Test assigning MicroOperand to instruction l/r/d and left/right/dest."""
+    import ida_hexrays
+
+    from ida_domain.microcode import (
+        MicroInstruction,
+        MicroOperand,
+        MicroOpcode,
+    )
+
+    insn = MicroInstruction.create(ea=0x5000, opcode=MicroOpcode.MOV)
+    assert insn.l.is_empty
+    assert insn.d.is_empty
+
+    # Assign via short names
+    insn.l = MicroOperand.number(99, size=4)
+    assert insn.l.is_number
+    assert insn.l.value == 99
+
+    insn.d = MicroOperand.reg(ida_hexrays.reg2mreg(1), size=4)
+    assert insn.d.is_register
+    assert insn.d.register == ida_hexrays.reg2mreg(1)
+
+    insn.r = MicroOperand.number(7, size=4)
+    assert insn.r.value == 7
+
+    # Assign via long aliases
+    insn2 = MicroInstruction.create(ea=0x5000, opcode=MicroOpcode.ADD)
+    insn2.left = MicroOperand.number(1, size=4)
+    insn2.right = MicroOperand.number(2, size=4)
+    insn2.dest = MicroOperand.reg(ida_hexrays.reg2mreg(0), size=4)
+
+    assert insn2.left.value == 1
+    assert insn2.right.value == 2
+    assert insn2.dest.is_register
+
+
+def test_micro_instruction_create_and_insert(test_env):
+    """Test creating an instruction with factories and inserting into a block."""
+    from ida_domain.microcode import (
+        MicroInstruction,
+        MicroOperand,
+        MicroOpcode,
+    )
+
+    db = test_env
+    func = db.functions.get_at(0x2A3)
+    mf = db.microcode.generate(func)
+
+    block = list(mf.blocks(skip_sentinels=True))[0]
+    original_count = len(block)
+
+    # Build a mov 0, 0 instruction and insert it
+    nop_mov = MicroInstruction.create(
+        ea=block.head.ea,
+        opcode=MicroOpcode.NOP,
+    )
+    block.insert_instruction(nop_mov)
+    assert len(block) == original_count + 1
+
+    # Clean up
+    block.remove_instruction(nop_mov)
+    assert len(block) == original_count
+
+
+def test_micro_instruction_create_nested(test_env):
+    """Test creating nested sub-instruction operands."""
+    import ida_hexrays
+
+    from ida_domain.microcode import (
+        MicroInstruction,
+        MicroOperand,
+        MicroOpcode,
+    )
+
+    # Build: mov (add eax, 10), ecx
+    # i.e. the left operand is itself an ADD sub-instruction
+    add_insn = MicroInstruction.create(
+        ea=0x6000,
+        opcode=MicroOpcode.ADD,
+        left=MicroOperand.reg(ida_hexrays.reg2mreg(0), size=4),
+        right=MicroOperand.number(10, size=4),
+    )
+
+    outer = MicroInstruction.create(
+        ea=0x6000,
+        opcode=MicroOpcode.MOV,
+        left=MicroOperand.from_insn(add_insn),
+        dest=MicroOperand.reg(ida_hexrays.reg2mreg(1), size=4),
+    )
+
+    assert outer.opcode == MicroOpcode.MOV
+    assert outer.l.is_sub_instruction(MicroOpcode.ADD)
+    sub = outer.l.sub_instruction
+    assert sub.l.register == ida_hexrays.reg2mreg(0)
+    assert sub.r.value == 10
+    assert outer.d.register == ida_hexrays.reg2mreg(1)
+
+
+# ---------------------------------------------------------------------------
+# Backward definition search tests
+# ---------------------------------------------------------------------------
+
+
+def test_micro_block_build_operand_locations(test_env):
+    """Test build_operand_locations returns non-empty set for registers."""
+    from ida_domain.microcode import MicroMaturity
+
+    db = test_env
+    func = db.functions.get_at(0x2A3)  # add_numbers
+    mf = db.microcode.generate(func, maturity=MicroMaturity.PREOPTIMIZED)
+
+    block = list(mf.blocks(skip_sentinels=True))[0]
+    found_register = False
+    for insn in block:
+        for op in insn:
+            if op.is_register:
+                locations = block.build_operand_locations(op)
+                assert bool(locations), f"Expected non-empty locations for {op}"
+                found_register = True
+                break
+        if found_register:
+            break
+    assert found_register
+
+
+def test_micro_block_build_operand_locations_empty_for_constants(test_env):
+    """Test build_operand_locations returns empty set for non-trackable operands."""
+    from ida_domain.microcode import MicroMaturity, MicroOperand
+
+    db = test_env
+    func = db.functions.get_at(0x2A3)
+    mf = db.microcode.generate(func, maturity=MicroMaturity.PREOPTIMIZED)
+
+    block = list(mf.blocks(skip_sentinels=True))[0]
+    # A number operand should produce an empty location set
+    num = MicroOperand.number(42, size=4)
+    locations = block.build_operand_locations(num)
+    assert not locations
+
+
+def test_micro_find_def_backward_in_block(test_env):
+    """Test find_def_backward finds a register definition within a block.
+
+    In add_numbers at PREOPTIMIZED maturity:
+        mov    rdi.8, rax.8        ; defines rax
+        ...
+        add    rsi.8, rax.8, rax.8 ; uses rax (right operand)
+
+    Searching backward from the ADD for rax.8 should find the MOV.
+    """
+    from ida_domain.microcode import MicroMaturity, MicroOpcode
+
+    db = test_env
+    func = db.functions.get_at(0x2A3)  # add_numbers
+    mf = db.microcode.generate(func, maturity=MicroMaturity.PREOPTIMIZED)
+
+    block = list(mf.blocks(skip_sentinels=True))[0]
+
+    # Find the ADD instruction
+    add_insn = None
+    for insn in block:
+        if insn.opcode == MicroOpcode.ADD:
+            add_insn = insn
+            break
+    assert add_insn is not None, "Expected an ADD instruction in add_numbers"
+
+    # The right operand of ADD (rax.8) should be defined by an earlier MOV
+    rax_operand = add_insn.r
+    assert rax_operand.is_register
+
+    defining_insn = block.find_def_backward(rax_operand, start=add_insn)
+    assert defining_insn is not None
+    assert defining_insn.opcode == MicroOpcode.MOV
+    # The MOV defines rax from rdi: "mov rdi.8, rax.8"
+    assert defining_insn.d.is_register
+    assert defining_insn.d.register == rax_operand.register
+
+
+def test_micro_find_def_backward_not_found(test_env):
+    """Test find_def_backward returns None for function parameters."""
+    from ida_domain.microcode import MicroMaturity, MicroOpcode
+
+    db = test_env
+    func = db.functions.get_at(0x2A3)  # add_numbers
+    mf = db.microcode.generate(func, maturity=MicroMaturity.PREOPTIMIZED)
+
+    block = list(mf.blocks(skip_sentinels=True))[0]
+
+    # Find the ADD instruction
+    add_insn = None
+    for insn in block:
+        if insn.opcode == MicroOpcode.ADD:
+            add_insn = insn
+            break
+    assert add_insn is not None
+
+    # The left operand (rsi.8) is a function parameter — not defined in this block
+    rsi_operand = add_insn.l
+    assert rsi_operand.is_register
+
+    result = block.find_def_backward(rsi_operand, start=add_insn)
+    assert result is None
+
+
+def test_micro_find_def_backward_start_none(test_env):
+    """Test find_def_backward with start=None searches from block tail."""
+    from ida_domain.microcode import MicroMaturity, MicroOpcode
+
+    db = test_env
+    func = db.functions.get_at(0x2A3)  # add_numbers
+    mf = db.microcode.generate(func, maturity=MicroMaturity.PREOPTIMIZED)
+
+    block = list(mf.blocks(skip_sentinels=True))[0]
+
+    # Find any register that's defined in the block
+    add_insn = None
+    for insn in block:
+        if insn.opcode == MicroOpcode.ADD:
+            add_insn = insn
+            break
+    assert add_insn is not None
+
+    # Search from tail (start=None) for rax — should find the ADD itself
+    # (since ADD defines rax.8 in dest, and it's the last real instruction)
+    rax_operand = add_insn.d  # rax.8
+    result = block.find_def_backward(rax_operand)
+    assert result is not None
+    # Should find the ADD (last definition of rax before the GOTO)
+    assert result.opcode == MicroOpcode.ADD
+
+
+def test_micro_trace_def_backward_single_block(test_env):
+    """Test trace_def_backward following mov chains within a block.
+
+    In print_number block 2 at PREOPTIMIZED:
+        ...
+        mov    rtt.8, rax.8       ; rax <- rtt
+        udiv   rtt.16, ...        ; defines rtt
+        ...
+        setz   rax.8, ...         ; uses rax.8
+
+    Searching for rax.8 from setz should produce:
+        chain[0] = mov rtt.8, rax.8     (defines rax, source is rtt)
+        chain[1] = udiv rtt.16, ...     (defines rtt, non-mov → stops)
+    """
+    from ida_domain.microcode import MicroMaturity, MicroOpcode
+
+    db = test_env
+    func = db.functions.get_at(0x2BC)  # print_number
+    mf = db.microcode.generate(func, maturity=MicroMaturity.PREOPTIMIZED)
+
+    # Find block 2 (the loop block with udiv/umod)
+    block2 = None
+    for block in mf.blocks(skip_sentinels=True):
+        has_udiv = any(insn.opcode == MicroOpcode.UDIV for insn in block)
+        if has_udiv:
+            block2 = block
+            break
+    assert block2 is not None, "Expected a block with UDIV in print_number"
+
+    # Find a SETZ instruction in that block (uses rax.8)
+    setz_insn = None
+    for insn in block2:
+        if insn.opcode == MicroOpcode.SETZ and insn.l.is_register:
+            setz_insn = insn
+            break
+    assert setz_insn is not None, "Expected SETZ in the loop block"
+
+    rax_op = setz_insn.l
+    chain = block2.trace_def_backward(rax_op, start=setz_insn)
+
+    assert len(chain) >= 2, f"Expected chain of 2+, got {len(chain)}"
+    # First link: the mov that defines rax
+    assert chain[0].opcode == MicroOpcode.MOV
+    # Last link: should be udiv (non-mov, stops chain)
+    assert chain[-1].opcode == MicroOpcode.UDIV
+
+
+def test_micro_trace_def_backward_cross_block(test_env):
+    """Test trace_def_backward crosses into predecessor block.
+
+    In print_number at PREOPTIMIZED:
+        Block 1: sub rsi.8, #1.8, rsi.8
+        ...
+        Block 3 (pred=[2]): sub rdx.8, rsi.8, rdx.8
+
+    Tracing rsi.8 from the SUB in block 3 should reach into block 2.
+    """
+    from ida_domain.microcode import MicroMaturity, MicroOpcode
+
+    db = test_env
+    func = db.functions.get_at(0x2BC)  # print_number
+    mf = db.microcode.generate(func, maturity=MicroMaturity.PREOPTIMIZED)
+
+    # Find the block that has CALL to sys_write (block 3 — single pred from block 2)
+    call_block = None
+    for block in mf.blocks(skip_sentinels=True):
+        if any(insn.opcode == MicroOpcode.CALL for insn in block):
+            call_block = block
+            break
+    assert call_block is not None
+
+    # Find: sub rdx.8, rsi.8, rdx.8 — the rsi.8 is the right operand
+    sub_insn = None
+    for insn in call_block:
+        if insn.opcode == MicroOpcode.SUB and insn.r.is_register:
+            sub_insn = insn
+            break
+    assert sub_insn is not None, "Expected SUB in the call block"
+
+    rsi_op = sub_insn.r
+    chain = call_block.trace_def_backward(rsi_op, start=sub_insn)
+
+    assert len(chain) >= 1, "Expected cross-block chain"
+    # The defining instruction should be in a different block
+    assert chain[0].block is not None
+    assert chain[0].block.serial != call_block.serial
+
+
+def test_micro_trace_def_backward_empty_for_param(test_env):
+    """Test trace_def_backward returns empty list for unresolvable operands."""
+    from ida_domain.microcode import MicroMaturity, MicroOpcode
+
+    db = test_env
+    func = db.functions.get_at(0x2A3)  # add_numbers
+    mf = db.microcode.generate(func, maturity=MicroMaturity.PREOPTIMIZED)
+
+    block = list(mf.blocks(skip_sentinels=True))[0]
+
+    # Find the first MOV (mov rsp.8, rbp.8) — rsp is the stack pointer,
+    # a function parameter with no definition in the block
+    first_mov = None
+    for insn in block:
+        if insn.opcode == MicroOpcode.MOV:
+            first_mov = insn
+            break
+    assert first_mov is not None
+
+    # The left operand of the first MOV (rsp.8) has no prior definition
+    chain = block.trace_def_backward(first_mov.l, start=first_mov)
+    assert chain == []
+
+
+def test_micro_trace_def_backward_stops_at_multi_pred(test_env):
+    """Test trace_def_backward stops at blocks with multiple predecessors."""
+    from ida_domain.microcode import MicroMaturity, MicroOpcode
+
+    db = test_env
+    func = db.functions.get_at(0x2BC)  # print_number
+    mf = db.microcode.generate(func, maturity=MicroMaturity.PREOPTIMIZED)
+
+    # Block 2 is the loop block with preds=[1, 2] (self-loop + entry)
+    loop_block = None
+    for block in mf.blocks(skip_sentinels=True):
+        if block.npred > 1:
+            loop_block = block
+            break
+    assert loop_block is not None, "Expected a block with multiple predecessors"
+
+    # Find a MOV at the top of the loop that uses a register
+    first_reg_use = None
+    for insn in loop_block:
+        if insn.l.is_register:
+            first_reg_use = insn
+            break
+    assert first_reg_use is not None
+
+    # trace should NOT cross into a predecessor since this block has multiple preds
+    chain = loop_block.trace_def_backward(first_reg_use.l, start=first_reg_use)
+    # Chain may be empty (operand not defined before start in this block)
+    # or may find defs within the block, but should not cross the multi-pred boundary
+    for c in chain:
+        if c.block is not None:
+            assert c.block.serial == loop_block.serial, (
+                f"Expected chain to stay within block {loop_block.serial}, "
+                f"but found entry in block {c.block.serial}"
+            )
+
+
+# ---------------------------------------------------------------------------
+# Pattern 1: Instruction Replacement
+# ---------------------------------------------------------------------------
+
+
+def test_micro_instruction_optimize_solo(test_env):
+    """Test optimize_solo runs without error and returns an int."""
+    from ida_domain.microcode import MicroInstruction, MicroOpcode
+
+    db = test_env
+    func = db.functions.get_at(0x2A3)  # add_numbers
+    mf = db.microcode.generate(func)
+    block = list(mf.blocks(skip_sentinels=True))[0]
+    insn = block.head
+    result = insn.optimize_solo()
+    assert isinstance(result, int)
+
+
+def test_micro_block_mark_lists_dirty(test_env):
+    """Test mark_lists_dirty runs without error."""
+    db = test_env
+    func = db.functions.get_at(0x2A3)
+    mf = db.microcode.generate(func)
+    block = list(mf.blocks(skip_sentinels=True))[0]
+    # Should not raise
+    block.mark_lists_dirty()
+
+
+def test_micro_block_contains_instruction(test_env):
+    """Test contains_instruction correctly identifies block membership."""
+    from ida_domain.microcode import MicroInstruction, MicroOpcode
+
+    db = test_env
+    func = db.functions.get_at(0x2BC)  # print_number — multiple blocks
+    mf = db.microcode.generate(func)
+    blocks = list(mf.blocks(skip_sentinels=True))
+    assert len(blocks) >= 2
+
+    block0 = blocks[0]
+    block1 = blocks[1]
+    insn_in_b0 = block0.head
+    assert insn_in_b0 is not None
+
+    assert block0.contains_instruction(insn_in_b0) is True
+    assert block1.contains_instruction(insn_in_b0) is False
+
+
+def test_micro_block_replace_instruction(test_env):
+    """Test replace_instruction swaps + optimizes + marks dirty."""
+    from ida_domain.microcode import MicroInstruction, MicroOpcode, MicroOperand
+
+    db = test_env
+    func = db.functions.get_at(0x2A3)  # add_numbers
+    mf = db.microcode.generate(func)
+    block = list(mf.blocks(skip_sentinels=True))[0]
+
+    # Pick an instruction to replace
+    target = block.head
+    assert target is not None
+    original_opcode = target.opcode
+
+    # Build a NOP replacement
+    nop = MicroInstruction.create(target.ea, MicroOpcode.NOP)
+    block.replace_instruction(target, nop)
+
+    # After swap, `target` now holds the NOP content
+    assert target.opcode == MicroOpcode.NOP
+
+
+def test_micro_block_replace_instruction_wrong_block(test_env):
+    """Test replace_instruction raises ValueError for wrong block."""
+    import pytest
+
+    from ida_domain.microcode import MicroInstruction, MicroOpcode
+
+    db = test_env
+    func = db.functions.get_at(0x2BC)  # print_number — multiple blocks
+    mf = db.microcode.generate(func)
+    blocks = list(mf.blocks(skip_sentinels=True))
+    assert len(blocks) >= 2
+
+    block0 = blocks[0]
+    block1 = blocks[1]
+    insn_in_b1 = block1.head
+    assert insn_in_b1 is not None
+
+    nop = MicroInstruction.create(insn_in_b1.ea, MicroOpcode.NOP)
+    with pytest.raises(ValueError, match="old_insn is not in this block"):
+        block0.replace_instruction(insn_in_b1, nop)
+
+
+def test_micro_instruction_replace_with(test_env):
+    """Test MicroInstruction.replace_with when parent block is known."""
+    from ida_domain.microcode import MicroInstruction, MicroOpcode
+
+    db = test_env
+    func = db.functions.get_at(0x2A3)
+    mf = db.microcode.generate(func)
+    block = list(mf.blocks(skip_sentinels=True))[0]
+
+    # Get instruction from block iteration (parent_block is set)
+    target = block.head
+    assert target is not None
+    assert target.block is not None
+
+    nop = MicroInstruction.create(target.ea, MicroOpcode.NOP)
+    target.replace_with(nop)
+    assert target.opcode == MicroOpcode.NOP
+
+
+def test_micro_instruction_replace_with_no_parent(test_env):
+    """Test replace_with raises RuntimeError when parent block is unknown."""
+    import pytest
+
+    from ida_domain.microcode import MicroInstruction, MicroOpcode
+
+    # Create a standalone instruction (no parent block)
+    insn = MicroInstruction.create(0x1000, MicroOpcode.NOP)
+    replacement = MicroInstruction.create(0x1000, MicroOpcode.NOP)
+
+    with pytest.raises(RuntimeError, match="parent block unknown"):
+        insn.replace_with(replacement)
+
+
+def test_micro_mba_verify(test_env):
+    """Test MicroBlockArray.verify() via the domain API."""
+    db = test_env
+    func = db.functions.get_at(0xC4)
+    mf = db.microcode.generate(func)
+    # Should not raise on consistent microcode
+    mf.verify(always=True)
+
+
+def test_micro_mba_mark_chains_dirty(test_env):
+    """Test MicroBlockArray.mark_chains_dirty() runs without error."""
+    db = test_env
+    func = db.functions.get_at(0x2A3)
+    mf = db.microcode.generate(func)
+    # Should not raise
+    mf.mark_chains_dirty()
+
+
+def test_micro_mba_flags(test_env):
+    """Test MbaFlags read, set, and clear."""
+    from ida_domain.microcode import MbaFlags
+
+    db = test_env
+    func = db.functions.get_at(0x2A3)
+    mf = db.microcode.generate(func)
+
+    original = mf.mba_flags
+
+    # set_mba_flag ORs the flag in
+    mf.set_mba_flag(MbaFlags.SHORT)
+    assert MbaFlags.SHORT in mf.mba_flags
+
+    # set_mba_flag is additive — previous flags are preserved
+    mf.set_mba_flag(MbaFlags.NUMADDR)
+    assert MbaFlags.SHORT in mf.mba_flags
+    assert MbaFlags.NUMADDR in mf.mba_flags
+
+    # clear_mba_flag removes only the specified flag
+    mf.clear_mba_flag(MbaFlags.SHORT)
+    assert MbaFlags.SHORT not in mf.mba_flags
+    assert MbaFlags.NUMADDR in mf.mba_flags
+
+    # clear the other flag too, restore original state
+    mf.clear_mba_flag(MbaFlags.NUMADDR)
+    if MbaFlags.NUMADDR not in original:
+        assert MbaFlags.NUMADDR not in mf.mba_flags
+
+
+def test_micro_block_edge_manipulation(test_env):
+    """Test MicroBlock edge add/remove/clear/replace."""
+    from ida_domain.microcode import MicroBlockType, MicroMaturity
+
+    db = test_env
+    func = db.functions.get_at(0xC4)
+    mf = db.microcode.generate(func, maturity=MicroMaturity.GENERATED)
+
+    # Find a TWO_WAY block (conditional branch) so we have known edges
+    branch_block = None
+    for block in mf.blocks(skip_sentinels=True):
+        if block.block_type == MicroBlockType.TWO_WAY:
+            branch_block = block
+            break
+    assert branch_block is not None, "Need a TWO_WAY block for this test"
+
+    orig_succs = branch_block.successor_serials[:]
+    assert len(orig_succs) == 2
+
+    target_serial = orig_succs[0]
+    target_block = mf[target_serial]
+    assert branch_block.serial in target_block.predecessor_serials
+
+    # --- remove_successor ---
+    branch_block.remove_successor(target_serial)
+    assert target_serial not in branch_block.successor_serials
+    assert branch_block.serial not in target_block.predecessor_serials
+
+    # --- add_successor (restore it) ---
+    branch_block.add_successor(target_serial)
+    assert target_serial in branch_block.successor_serials
+    assert branch_block.serial in target_block.predecessor_serials
+
+    # --- add_successor accepts MicroBlock too ---
+    new_block = mf.insert_block(mf.block_count - 1)
+    branch_block.add_successor(new_block)
+    assert new_block.serial in branch_block.successor_serials
+    assert branch_block.serial in new_block.predecessor_serials
+
+    # --- replace_successor ---
+    other_serial = orig_succs[1]
+    branch_block.replace_successor(new_block, other_serial)
+    assert new_block.serial not in branch_block.successor_serials
+    assert branch_block.serial not in new_block.predecessor_serials
+
+    # --- clear_successors ---
+    saved_succs = branch_block.successor_serials[:]
+    branch_block.clear_successors()
+    assert branch_block.nsucc == 0
+    for s in saved_succs:
+        assert branch_block.serial not in mf[s].predecessor_serials
+
+    # --- clear_predecessors ---
+    # Use target_block which should still have predecessors
+    if target_block.npred > 0:
+        saved_preds = target_block.predecessor_serials[:]
+        target_block.clear_predecessors()
+        assert target_block.npred == 0
+        for p in saved_preds:
+            assert target_block.serial not in mf[p].successor_serials
+
+
+def test_micro_block_jump_target_and_fall_through(test_env):
+    """Test jump_target and fall_through on real microcode across functions and maturity levels."""
+    from ida_domain.microcode import MicroBlockType, MicroMaturity, MicroOpcode
+
+    db = test_env
+
+    # Test across multiple functions and maturity levels
+    func_addrs = [0xC4, 0x2A3, 0x2BC]
+    maturities = [
+        MicroMaturity.GENERATED,
+        MicroMaturity.PREOPTIMIZED,
+        MicroMaturity.LOCOPT,
+    ]
+
+    two_way_count = 0
+    one_way_goto_count = 0
+    one_way_fallthrough_count = 0
+
+    for addr in func_addrs:
+        func = db.functions.get_at(addr)
+        if func is None:
+            continue
+        for mat in maturities:
+            mf = db.microcode.generate(func, maturity=mat)
+
+            for block in mf.blocks(skip_sentinels=True):
+                bt = block.block_type
+
+                if bt == MicroBlockType.TWO_WAY:
+                    two_way_count += 1
+                    tail = block.tail
+                    assert tail is not None
+                    assert tail.is_conditional_jump()
+
+                    # jump_target must match tail.d.block_ref
+                    jt = block.jump_target
+                    assert jt is not None
+                    assert jt == tail.d.block_ref
+
+                    # fall_through must be serial + 1
+                    ft = block.fall_through
+                    assert ft is not None
+                    assert ft == block.serial + 1
+
+                    # Both targets must be in the successor set
+                    succs = block.successor_serials
+                    assert jt in succs, (
+                        f"jump_target {jt} not in succs {succs} "
+                        f"(block {block.serial}, func 0x{addr:x}, {mat.name})"
+                    )
+                    assert ft in succs, (
+                        f"fall_through {ft} not in succs {succs} "
+                        f"(block {block.serial}, func 0x{addr:x}, {mat.name})"
+                    )
+
+                elif bt == MicroBlockType.ONE_WAY:
+                    tail = block.tail
+                    jt = block.jump_target
+                    assert jt is not None
+
+                    if tail is not None and tail.opcode == MicroOpcode.GOTO:
+                        one_way_goto_count += 1
+                        assert jt == tail.l.block_ref
+                    else:
+                        one_way_fallthrough_count += 1
+                        assert jt == block.serial + 1
+
+                    # fall_through is None for ONE_WAY
+                    assert block.fall_through is None
+
+                elif bt in (MicroBlockType.STOP, MicroBlockType.ZERO_WAY):
+                    assert block.jump_target is None
+                    assert block.fall_through is None
+
+    # Ensure we actually tested the interesting cases
+    assert two_way_count > 0, "No TWO_WAY blocks found"
+    assert one_way_goto_count > 0, "No ONE_WAY+goto blocks found"
+
+
+def test_micro_block_is_simple_goto(test_env):
+    """Test MicroBlock.is_simple_goto detection."""
+    from ida_domain.microcode import MicroBlockType, MicroOpcode
+
+    db = test_env
+    func = db.functions.get_at(0xC4)
+    mf = db.microcode.generate(func)
+
+    for block in mf.blocks(skip_sentinels=True):
+        if block.is_simple_goto:
+            # A simple goto block should have a goto tail and be ONE_WAY
+            assert block.tail is not None
+            assert block.tail.opcode == MicroOpcode.GOTO
+            assert block.block_type == MicroBlockType.ONE_WAY
+
+
+def test_micro_block_flags(test_env):
+    """Test MicroBlockFlags read, set, and clear."""
+    from ida_domain.microcode import MicroBlockFlags
+
+    db = test_env
+    func = db.functions.get_at(0xC4)
+    mf = db.microcode.generate(func)
+
+    block = next(mf.blocks(skip_sentinels=True))
+    original = block.block_flags
+    assert isinstance(original, MicroBlockFlags)
+
+    # set_block_flag ORs in
+    block.set_block_flag(MicroBlockFlags.GOTO)
+    assert MicroBlockFlags.GOTO in block.block_flags
+
+    # clear_block_flag removes
+    block.clear_block_flag(MicroBlockFlags.GOTO)
+    if MicroBlockFlags.GOTO not in original:
+        assert MicroBlockFlags.GOTO not in block.block_flags
+
+    # setter replaces all flags
+    block.block_flags = original
+    assert block.block_flags == original
+
+
+def test_micro_mba_optimize_local(test_env):
+    """Test MicroBlockArray.optimize_local() runs without error."""
+    db = test_env
+    func = db.functions.get_at(0x2A3)
+    mf = db.microcode.generate(func)
+    # Should not raise; return value is number of changes
+    result = mf.optimize_local(0)
+    assert isinstance(result, int)
+
+
+def test_micro_mba_merge_blocks(test_env):
+    """Test MicroBlockArray.merge_blocks() runs without error."""
+    db = test_env
+    func = db.functions.get_at(0x2A3)
+    mf = db.microcode.generate(func)
+    # Should not raise; return value is bool
+    result = mf.merge_blocks()
+    assert isinstance(result, bool)
+
+
+def test_micro_mba_build_graph(test_env):
+    """Test MicroBlockArray.build_graph() can rebuild the graph."""
+    db = test_env
+    func = db.functions.get_at(0xC4)
+    # Generate without building the graph
+    mf = db.microcode.generate(func, build_graph=False)
+    # Manually build it
+    mf.build_graph()
+    # Graph should now be usable — verify blocks have successors
+    found_succs = False
+    for block in mf.blocks(skip_sentinels=True):
+        if block.nsucc > 0:
+            found_succs = True
+            break
+    assert found_succs
+
+
+def test_micro_mba_copy_block(test_env):
+    """Test MicroBlockArray.copy_block() duplicates a block."""
+    from ida_domain.microcode import CopyBlockFlags, MicroBlockType
+
+    db = test_env
+    func = db.functions.get_at(0xC4)
+    mf = db.microcode.generate(func)
+
+    # Find a non-empty, non-sentinel block to copy
+    source = None
+    for block in mf.blocks(skip_sentinels=True):
+        if not block.is_empty and block.block_type != MicroBlockType.STOP:
+            source = block
+            break
+    assert source is not None
+
+    original_count = mf.block_count
+    source_insn_count = len(source)
+    source_serial = source.serial
+
+    # Copy the block; insert before the STOP sentinel (last block)
+    insert_at = mf.block_count - 1
+    copy = mf.copy_block(source, insert_at)
+
+    # Block count increased by 1
+    assert mf.block_count == original_count + 1
+
+    # The copy lives at the requested serial
+    assert copy.serial == insert_at
+
+    # The copy has the same number of instructions as the source
+    assert len(copy) == source_insn_count
+
+    # The original source still exists (its serial may have shifted
+    # if the copy was inserted before it, but in our case we insert
+    # at the end so it shouldn't shift)
+    assert mf[source_serial] is not None
+
+
+def test_micro_mba_serialize_roundtrip(test_env):
+    """Test that serialize → deserialize produces equivalent microcode."""
+    from ida_domain.microcode import MicroBlockArray, MicroMaturity
+
+    db = test_env
+    func = db.functions.get_at(0x2BC)
+    mf = db.microcode.generate(func, maturity=MicroMaturity.PREOPTIMIZED)
+
+    # Serialize
+    data = mf.serialize()
+    assert isinstance(data, bytes)
+    assert len(data) > 0
+
+    # Deserialize
+    mf2 = MicroBlockArray.deserialize(data)
+    assert mf2 is not mf
+
+    # Same structure
+    assert len(mf2) == len(mf)
+    assert mf2.maturity == mf.maturity
+
+    # Same block types and instruction counts
+    for b1, b2 in zip(mf, mf2):
+        assert b1.block_type == b2.block_type
+        assert len(b1) == len(b2)
+
+    # Re-serialize should produce identical bytes
+    data2 = mf2.serialize()
+    assert data == data2

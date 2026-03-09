@@ -26,7 +26,7 @@ class OrNotVisitor(MicroInstructionVisitor):
             insn.opcode == MicroOpcode.OR
             and insn.right.is_sub_instruction(MicroOpcode.BNOT)
             and insn.left == insn.right.sub_instruction.left
-            and not insn.left.raw_operand.has_side_effects()
+            and not insn.left.has_side_effects()
         ):
             insn.opcode = MicroOpcode.MOV
             insn.left.raw_operand.make_number(-1, insn.right.size)
@@ -38,9 +38,9 @@ class OrNotVisitor(MicroInstructionVisitor):
 class OrNotOptimizer(MicroInstructionOptimizer):
     def optimize(self, block, insn, optflags):
         visitor = OrNotVisitor()
-        insn.raw_instruction.for_all_insns(visitor)
+        insn.for_all_insns(visitor)
         if visitor.cnt:
-            block.mba.raw_mba.verify(True)
+            block.mba.verify(True)
         return visitor.cnt
 
 

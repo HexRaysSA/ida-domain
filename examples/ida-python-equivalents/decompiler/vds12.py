@@ -14,6 +14,7 @@ import ida_pro
 
 import ida_domain
 from ida_domain.microcode import (
+    AccessType,
     AnalyzeCallsFlags,
     DecompilationFlags,
     MicroBlock,
@@ -27,10 +28,10 @@ from ida_domain.microcode import (
 def collect_block_xrefs(out, mlist, block, start_insn, find_uses):
     insn = start_insn
     while insn and mlist:                              # MicroLocationSet.__bool__
-        use_set = block.build_use_list(insn, ida_hexrays.MUST_ACCESS)
-        def_set = block.build_def_list(insn, ida_hexrays.MUST_ACCESS)
+        use_set = block.build_use_list(insn, AccessType.MUST)
+        def_set = block.build_def_list(insn, AccessType.MUST)
         check = use_set if find_uses else def_set
-        if mlist & check:                              # MicroLocationSet.__and__ (has_common)
+        if mlist.has_common(check):                     # any overlap?
             if insn.ea not in out:
                 out.append(insn.ea)
         mlist -= def_set                               # MicroLocationSet.__isub__ (subtract)

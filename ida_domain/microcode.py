@@ -4,8 +4,10 @@ import logging
 from enum import IntEnum, IntFlag
 
 import ida_hexrays
+import ida_idaapi
 import ida_lines
 import ida_range
+from ida_funcs import func_t
 from ida_hexrays import mba_t, mblock_t, minsn_t, mlist_t, mop_t
 from typing_extensions import TYPE_CHECKING, Any, Iterator, List, Optional, Tuple
 
@@ -132,6 +134,115 @@ class MicroOpcode(IntEnum):
     UND = ida_hexrays.m_und
     EXT = ida_hexrays.m_ext
 
+    # -- category queries --------------------------------------------------
+
+    @property
+    def is_conditional_jump(self) -> bool:
+        """True for conditional jump opcodes (``jnz`` through ``jle``, plus ``jcnd``)."""
+        return ida_hexrays.is_mcode_jcond(self.value)
+
+    @property
+    def is_jump(self) -> bool:
+        """True for any jump/branch opcode including ``goto``, ``jtbl``, and ``ijmp``."""
+        return self.is_conditional_jump or self.value in (
+            ida_hexrays.m_goto,
+            ida_hexrays.m_jtbl,
+            ida_hexrays.m_ijmp,
+        )
+
+    @property
+    def is_call(self) -> bool:
+        """True for call opcodes (``call``, ``icall``)."""
+        return ida_hexrays.is_mcode_call(self.value)
+
+    @property
+    def is_flow(self) -> bool:
+        """True for any control-flow opcode (jumps, calls, ``ret``)."""
+        return self.is_jump or self.is_call or self.value == ida_hexrays.m_ret
+
+    @property
+    def is_set(self) -> bool:
+        """True for set-condition opcodes (``setnz`` through ``setle``)."""
+        return ida_hexrays.is_mcode_set(self.value)
+
+    @property
+    def is_commutative(self) -> bool:
+        """True for commutative opcodes (``add``, ``mul``, ``or``, ``and``, ``xor``, ``setz``, ``setnz``, ``cfadd``, ``ofadd``)."""
+        return ida_hexrays.is_mcode_commutative(self.value)
+
+    @property
+    def is_fpu(self) -> bool:
+        """True for floating-point opcodes (``f2i`` through ``fdiv``)."""
+        return ida_hexrays.is_mcode_fpu(self.value)
+
+    @property
+    def is_propagatable(self) -> bool:
+        """True if this opcode may appear in a sub-instruction (nested ``mop_d``).
+
+        Non-propagatable opcodes include jumps, ``ret``, ``nop``, etc.
+        """
+        return ida_hexrays.is_mcode_propagatable(self.value)
+
+    @property
+    def is_unary(self) -> bool:
+        """True for unary opcodes (single source operand: ``neg``, ``lnot``, ``bnot``, ``fneg``)."""
+        return self.value in (
+            ida_hexrays.m_neg,
+            ida_hexrays.m_lnot,
+            ida_hexrays.m_bnot,
+            ida_hexrays.m_fneg,
+        )
+
+    @property
+    def is_shift(self) -> bool:
+        """True for shift opcodes (``shl``, ``shr``, ``sar``)."""
+        return ida_hexrays.is_mcode_shift(self.value)
+
+    @property
+    def is_arithmetic(self) -> bool:
+        """True for integer arithmetic opcodes (``add``, ``sub``, ``mul``, ``udiv``, ``sdiv``, ``umod``, ``smod``)."""
+        return self.value in (
+            ida_hexrays.m_add,
+            ida_hexrays.m_sub,
+            ida_hexrays.m_mul,
+            ida_hexrays.m_udiv,
+            ida_hexrays.m_sdiv,
+            ida_hexrays.m_umod,
+            ida_hexrays.m_smod,
+        )
+
+    @property
+    def is_bitwise(self) -> bool:
+        """True for bitwise opcodes (``or``, ``and``, ``xor``, ``shl``, ``shr``, ``sar``)."""
+        return self.value in (
+            ida_hexrays.m_or,
+            ida_hexrays.m_and,
+            ida_hexrays.m_xor,
+            ida_hexrays.m_shl,
+            ida_hexrays.m_shr,
+            ida_hexrays.m_sar,
+        )
+
+    @property
+    def is_addsub(self) -> bool:
+        """True for addition/subtraction opcodes (``add``, ``sub``)."""
+        return ida_hexrays.is_mcode_addsub(self.value)
+
+    @property
+    def is_xdsu(self) -> bool:
+        """True for sign/zero extension opcodes (``xds``, ``xdu``)."""
+        return ida_hexrays.is_mcode_xdsu(self.value)
+
+    @property
+    def is_convertible_to_jump(self) -> bool:
+        """True if this set-condition opcode has a corresponding jump opcode."""
+        return ida_hexrays.is_mcode_convertible_to_jmp(self.value)
+
+    @property
+    def is_convertible_to_set(self) -> bool:
+        """True if this jump opcode has a corresponding set-condition opcode."""
+        return ida_hexrays.is_mcode_convertible_to_set(self.value)
+
 
 class MicroOperandType(IntEnum):
     """Microcode operand types corresponding to mop_* constants."""
@@ -164,6 +275,28 @@ class MicroBlockType(IntEnum):
     TWO_WAY = ida_hexrays.BLT_2WAY
     N_WAY = ida_hexrays.BLT_NWAY
     EXTERNAL = ida_hexrays.BLT_XTRN
+
+
+class MicroBlockFlags(IntFlag):
+    """Block flags corresponding to MBL_* constants."""
+
+    PRIV = ida_hexrays.MBL_PRIV
+    NONFAKE = ida_hexrays.MBL_NONFAKE
+    FAKE = ida_hexrays.MBL_FAKE
+    GOTO = ida_hexrays.MBL_GOTO
+    TCAL = ida_hexrays.MBL_TCAL
+    PUSH = ida_hexrays.MBL_PUSH
+    DMT64 = ida_hexrays.MBL_DMT64
+    COMB = ida_hexrays.MBL_COMB
+    PROP = ida_hexrays.MBL_PROP
+    DEAD = ida_hexrays.MBL_DEAD
+    LIST = ida_hexrays.MBL_LIST
+    INCONST = ida_hexrays.MBL_INCONST
+    CALL = ida_hexrays.MBL_CALL
+    BACKPROP = ida_hexrays.MBL_BACKPROP
+    NORET = ida_hexrays.MBL_NORET
+    DSLOT = ida_hexrays.MBL_DSLOT
+    VALRANGES = ida_hexrays.MBL_VALRANGES
 
 
 class MicroError(IntEnum):
@@ -256,6 +389,65 @@ class AnalyzeCallsFlags(IntFlag):
     GUESS = ida_hexrays.ACFL_GUESS
 
 
+class MbaFlags(IntFlag):
+    """Microcode block-array flags (``MBA_*``).
+
+    These control display options, optimization requests, and
+    internal state of the :class:`MicroBlockArray`.
+    """
+
+    # Display / output
+    SHORT = ida_hexrays.MBA_SHORT
+    COLGDL = ida_hexrays.MBA_COLGDL
+    INSGDL = ida_hexrays.MBA_INSGDL
+    NICE = ida_hexrays.MBA_NICE
+    NUMADDR = ida_hexrays.MBA_NUMADDR
+    VALNUM = ida_hexrays.MBA_VALNUM
+
+    # Optimization requests
+    CMBBLK = ida_hexrays.MBA_CMBBLK
+    PREOPT = ida_hexrays.MBA_PREOPT
+    GLBOPT = ida_hexrays.MBA_GLBOPT
+    REFINE = ida_hexrays.MBA_REFINE
+
+    # Function properties
+    PRCDEFS = ida_hexrays.MBA_PRCDEFS
+    NOFUNC = ida_hexrays.MBA_NOFUNC
+    PATTERN = ida_hexrays.MBA_PATTERN
+    LOADED = ida_hexrays.MBA_LOADED
+    RETFP = ida_hexrays.MBA_RETFP
+    SPLINFO = ida_hexrays.MBA_SPLINFO
+    PASSREGS = ida_hexrays.MBA_PASSREGS
+    THUNK = ida_hexrays.MBA_THUNK
+    CMNSTK = ida_hexrays.MBA_CMNSTK
+
+    # Internal state
+    ASRTOK = ida_hexrays.MBA_ASRTOK
+    CALLS = ida_hexrays.MBA_CALLS
+    ASRPROP = ida_hexrays.MBA_ASRPROP
+    SAVRST = ida_hexrays.MBA_SAVRST
+    RETREF = ida_hexrays.MBA_RETREF
+    LVARS0 = ida_hexrays.MBA_LVARS0
+    LVARS1 = ida_hexrays.MBA_LVARS1
+    DELPAIRS = ida_hexrays.MBA_DELPAIRS
+    CHVARS = ida_hexrays.MBA_CHVARS
+
+
+class CopyBlockFlags(IntFlag):
+    """Flags for :meth:`MicroBlockArray.copy_block` (``CPBLK_*``)."""
+
+    FAST = ida_hexrays.CPBLK_FAST
+    MINREF = ida_hexrays.CPBLK_MINREF
+    OPTJMP = ida_hexrays.CPBLK_OPTJMP
+
+
+class AccessType(IntEnum):
+    """Access type for use-def list building (``MUST_ACCESS`` / ``MAY_ACCESS``)."""
+
+    MAY = ida_hexrays.MAY_ACCESS
+    MUST = ida_hexrays.MUST_ACCESS
+
+
 # ---------------------------------------------------------------------------
 # MicroOperand — wraps mop_t
 # ---------------------------------------------------------------------------
@@ -267,12 +459,111 @@ class MicroOperand:
     Provides Pythonic access to operand type, value, and type-specific
     accessors.  The underlying raw object is always available via
     :pyattr:`raw_operand`.
+
+    Use the static factory methods to create new operands::
+
+        num = MicroOperand.number(42, size=4)
+        reg = MicroOperand.reg(mreg, size=8)
+        blk = MicroOperand.new_block_ref(3)
     """
 
     _T = MicroOperandType  # shorthand for type checks
 
     def __init__(self, raw: mop_t):
         self._raw = raw
+
+    # -- factories ---------------------------------------------------------
+
+    @staticmethod
+    def number(value: int, size: int, ea: int = ida_idaapi.BADADDR) -> MicroOperand:
+        """Create a numeric constant operand.
+
+        Args:
+            value: The integer constant value.
+            size: Operand size in bytes (1, 2, 4, 8).
+            ea: Optional source address (default ``BADADDR``).
+        """
+        raw = mop_t()
+        raw.make_number(value, size, ea)
+        return MicroOperand(raw)
+
+    @staticmethod
+    def reg(mreg: int, size: int) -> MicroOperand:
+        """Create a micro-register operand.
+
+        Args:
+            mreg: Micro-register number (from ``ida_hexrays.reg2mreg()``
+                or ``ida_hexrays.mr_*`` constants).
+            size: Operand size in bytes.
+        """
+        raw = mop_t()
+        raw._make_reg(mreg, size)
+        return MicroOperand(raw)
+
+    @staticmethod
+    def helper(name: str) -> MicroOperand:
+        """Create a helper function name operand.
+
+        Args:
+            name: Helper function name (e.g. ``"memcpy"``).
+        """
+        raw = mop_t()
+        raw.make_helper(name)
+        return MicroOperand(raw)
+
+    @staticmethod
+    def new_block_ref(serial: int) -> MicroOperand:
+        """Create a block-reference operand.
+
+        Args:
+            serial: Target block serial number.
+        """
+        raw = mop_t()
+        raw._make_blkref(serial)
+        return MicroOperand(raw)
+
+    @staticmethod
+    def global_addr(ea: int, size: int) -> MicroOperand:
+        """Create a global address operand.
+
+        Args:
+            ea: Global address.
+            size: Operand size in bytes.
+        """
+        raw = mop_t()
+        raw._make_gvar(ea)
+        raw.size = size
+        return MicroOperand(raw)
+
+    @staticmethod
+    def from_insn(insn: MicroInstruction) -> MicroOperand:
+        """Create an operand wrapping a sub-instruction (``mop_d``).
+
+        The instruction becomes a nested expression operand.
+
+        Args:
+            insn: The :class:`MicroInstruction` to wrap.
+        """
+        raw = mop_t()
+        raw.create_from_insn(insn._raw)
+        return MicroOperand(raw)
+
+    @staticmethod
+    def stack_var(mba: MicroBlockArray, offset: int) -> MicroOperand:
+        """Create a stack variable operand.
+
+        Args:
+            mba: The parent :class:`MicroBlockArray`.
+            offset: Stack offset.
+        """
+        raw = mop_t()
+        raw._make_stkvar(mba._raw, offset)
+        return MicroOperand(raw)
+
+    @staticmethod
+    def empty() -> MicroOperand:
+        """Create an empty operand (``mop_z``)."""
+        return MicroOperand(mop_t())
 
     # -- raw access --------------------------------------------------------
 
@@ -325,18 +616,14 @@ class MicroOperand:
     def signed_value(self) -> Optional[int]:
         """Signed interpretation of a number operand, or *None*."""
         if self._raw.t == self._T.NUMBER:
-            v = self._raw.nnn.value
-            bits = self._raw.size * 8
-            if v >= (1 << (bits - 1)):
-                v -= 1 << bits
-            return v
+            return self._raw.signed_value()
         return None
 
     @property
     def unsigned_value(self) -> Optional[int]:
         """Unsigned interpretation of a number operand, or *None*."""
         if self._raw.t == self._T.NUMBER:
-            return self._raw.nnn.value
+            return self._raw.unsigned_value()
         return None
 
     @property
@@ -409,7 +696,7 @@ class MicroOperand:
 
     @property
     def is_register(self) -> bool:
-        return self._raw.t == self._T.REGISTER
+        return self._raw.is_reg()
 
     @property
     def is_number(self) -> bool:
@@ -417,11 +704,11 @@ class MicroOperand:
 
     @property
     def is_stack_var(self) -> bool:
-        return self._raw.t == self._T.STACK_VAR
+        return self._raw.is_stkvar()
 
     @property
     def is_global_address(self) -> bool:
-        return self._raw.t == self._T.GLOBAL_ADDR
+        return self._raw.is_glbvar()
 
     @property
     def is_helper(self) -> bool:
@@ -444,11 +731,13 @@ class MicroOperand:
             opcode: If given, also checks that the nested instruction has
                 this specific opcode.
         """
-        if self._raw.t != self._T.SUB_INSN:
-            return False
         if opcode is not None:
-            return self._raw.d.opcode == int(opcode)
-        return True
+            return self._raw.is_insn(int(opcode))
+        return self._raw.is_insn()
+
+    def has_side_effects(self) -> bool:
+        """True if evaluating this operand may cause side effects."""
+        return self._raw.has_side_effects()
 
     def clear(self) -> None:
         """Reset this operand to empty (``mop_z``)."""
@@ -479,8 +768,10 @@ class MicroOperand:
             return self._raw != other._raw
         return NotImplemented
 
-    def __lt__(self, other: MicroOperand) -> bool:
-        return self._raw < other._raw
+    def __lt__(self, other: object) -> bool:
+        if isinstance(other, MicroOperand):
+            return self._raw < other._raw
+        return NotImplemented
 
     def __str__(self) -> str:
         return self.to_text()
@@ -502,11 +793,52 @@ class MicroInstruction:
     """Wrapper around an IDA ``minsn_t`` microcode instruction.
 
     Provides Pythonic access to opcode, operands, and traversal.
+
+    Use :meth:`create` to build new instructions::
+
+        insn = MicroInstruction.create(
+            ea=0x401000,
+            opcode=MicroOpcode.MOV,
+            left=MicroOperand.reg(mreg, 4),
+            dest=MicroOperand.number(0, 4),
+        )
     """
 
     def __init__(self, raw: minsn_t, parent_block: Optional[MicroBlock] = None):
         self._raw = raw
         self._parent_block = parent_block
+
+    # -- factory -----------------------------------------------------------
+
+    @staticmethod
+    def create(
+        ea: int,
+        opcode: MicroOpcode,
+        left: Optional[MicroOperand] = None,
+        right: Optional[MicroOperand] = None,
+        dest: Optional[MicroOperand] = None,
+    ) -> MicroInstruction:
+        """Create a new microcode instruction from scratch.
+
+        Args:
+            ea: Effective address for the instruction.
+            opcode: The microcode opcode.
+            left: Left operand (``l``).
+            right: Right operand (``r``).
+            dest: Destination operand (``d``).
+
+        Returns:
+            A new :class:`MicroInstruction`.
+        """
+        raw = minsn_t(ea)
+        raw.opcode = int(opcode)
+        if left is not None:
+            raw.l.swap(left._raw)
+        if right is not None:
+            raw.r.swap(right._raw)
+        if dest is not None:
+            raw.d.swap(dest._raw)
+        return MicroInstruction(raw)
 
     # -- raw access --------------------------------------------------------
 
@@ -537,30 +869,54 @@ class MicroInstruction:
         """Left operand."""
         return MicroOperand(self._raw.l)
 
+    @l.setter
+    def l(self, operand: MicroOperand) -> None:
+        self._raw.l.swap(operand._raw)
+
     @property
     def r(self) -> MicroOperand:
         """Right operand."""
         return MicroOperand(self._raw.r)
+
+    @r.setter
+    def r(self, operand: MicroOperand) -> None:
+        self._raw.r.swap(operand._raw)
 
     @property
     def d(self) -> MicroOperand:
         """Destination operand."""
         return MicroOperand(self._raw.d)
 
+    @d.setter
+    def d(self, operand: MicroOperand) -> None:
+        self._raw.d.swap(operand._raw)
+
     @property
     def left(self) -> MicroOperand:
         """Left operand (alias for ``l``)."""
         return self.l
+
+    @left.setter
+    def left(self, operand: MicroOperand) -> None:
+        self.l = operand
 
     @property
     def right(self) -> MicroOperand:
         """Right operand (alias for ``r``)."""
         return self.r
 
+    @right.setter
+    def right(self, operand: MicroOperand) -> None:
+        self.r = operand
+
     @property
     def dest(self) -> MicroOperand:
         """Destination operand (alias for ``d``)."""
         return self.d
+
+    @dest.setter
+    def dest(self, operand: MicroOperand) -> None:
+        self.d = operand
 
     @property
     def next(self) -> Optional[MicroInstruction]:
@@ -603,11 +959,39 @@ class MicroInstruction:
 
     def is_call(self) -> bool:
         """True if this is a call instruction (``m_call`` or ``m_icall``)."""
-        return self.opcode in (MicroOpcode.CALL, MicroOpcode.ICALL)
+        return self.opcode.is_call
 
     def is_mov(self) -> bool:
         """True if this is a ``m_mov`` instruction."""
         return self.opcode == MicroOpcode.MOV
+
+    def is_conditional_jump(self) -> bool:
+        """True if this is a conditional jump (``jnz``..``jle``, ``jcnd``)."""
+        return self.opcode.is_conditional_jump
+
+    def is_jump(self) -> bool:
+        """True if this is any jump/branch (including ``goto``, ``jtbl``, ``ijmp``)."""
+        return self.opcode.is_jump
+
+    def is_flow(self) -> bool:
+        """True if this is any control-flow instruction (jump, call, ``ret``)."""
+        return self.opcode.is_flow
+
+    def is_set(self) -> bool:
+        """True if this is a set-condition instruction (``setnz``..``setle``)."""
+        return self.opcode.is_set
+
+    def is_fpu(self) -> bool:
+        """True if this is a floating-point instruction."""
+        return self.opcode.is_fpu
+
+    def is_commutative(self) -> bool:
+        """True if this instruction's opcode is commutative."""
+        return self.opcode.is_commutative
+
+    def has_side_effects(self) -> bool:
+        """True if this instruction (or any nested sub-instruction) may cause side effects."""
+        return self._raw.has_side_effects()
 
     def find_call(self, with_helpers: bool = False) -> Optional[MicroInstruction]:
         """Find the first call in this instruction tree."""
@@ -625,11 +1009,71 @@ class MicroInstruction:
             return MicroInstruction(result, parent)
         return None
 
+    # -- recursive visitors ------------------------------------------------
+
+    def for_all_insns(self, visitor: MicroInstructionVisitor) -> int:
+        """Recursively visit all sub-instructions in this instruction tree.
+
+        Args:
+            visitor: A :class:`MicroInstructionVisitor` whose ``visit`` method
+                will be called for each nested instruction.
+
+        Returns:
+            Non-zero if the visitor stopped early.
+        """
+        return self._raw.for_all_insns(visitor)
+
+    def for_all_ops(self, visitor: MicroOperandVisitor) -> int:
+        """Recursively visit all operands in this instruction tree.
+
+        Args:
+            visitor: A :class:`MicroOperandVisitor` whose ``visit`` method
+                will be called for each operand.
+
+        Returns:
+            Non-zero if the visitor stopped early.
+        """
+        return self._raw.for_all_ops(visitor)
+
     # -- mutation ----------------------------------------------------------
 
     def swap(self, other: MicroInstruction) -> None:
         """Swap this instruction with another."""
         self._raw.swap(other._raw)
+
+    def optimize_solo(self) -> int:
+        """Run single-instruction optimization on this instruction.
+
+        Returns:
+            Number of changes made (non-zero means the instruction was optimized).
+        """
+        return self._raw.optimize_solo(0)
+
+    def replace_with(self, new_insn: MicroInstruction) -> None:
+        """Replace this instruction with *new_insn*, performing cleanup.
+
+        Equivalent to the common deobfuscation idiom::
+
+            insn.swap(new_insn)
+            insn.optimize_solo()
+            block.mark_lists_dirty()
+
+        The parent block must be known (i.e. this instruction must have been
+        obtained from a :class:`MicroBlock`).
+
+        Raises:
+            RuntimeError: If the parent block is not known.
+        """
+        self.swap(new_insn)
+        self.optimize_solo()
+        if self._parent_block is not None:
+            self._parent_block.mark_lists_dirty()
+        else:
+            raise RuntimeError(
+                "Cannot mark lists dirty: parent block unknown. "
+                "Use block.replace_instruction() or ensure the instruction "
+                "was obtained from a block."
+            )
 
     def set_ea(self, ea: int) -> None:
         """Change the effective address of this instruction."""
@@ -662,8 +1106,10 @@ class MicroInstruction:
             return self._raw != other._raw
         return NotImplemented
 
-    def __lt__(self, other: MicroInstruction) -> bool:
-        return self._raw < other._raw
+    def __lt__(self, other: object) -> bool:
+        if isinstance(other, MicroInstruction):
+            return self._raw < other._raw
+        return NotImplemented
 
     def __str__(self) -> str:
         return self.to_text()
@@ -691,6 +1137,7 @@ class MicroBlock:
     def __init__(self, raw: mblock_t, parent_mf: Optional[MicroBlockArray] = None):
         self._raw = raw
         self._parent_mf = parent_mf
+        self._cached_mba: Optional[MicroBlockArray] = None
 
     # -- raw access --------------------------------------------------------
 
@@ -710,6 +1157,27 @@ class MicroBlock:
     def block_type(self) -> MicroBlockType:
         """Block type as a :class:`MicroBlockType` enum."""
         return MicroBlockType(self._raw.type)
+
+    @block_type.setter
+    def block_type(self, value: MicroBlockType) -> None:
+        self._raw.type = int(value)
+
+    @property
+    def block_flags(self) -> MicroBlockFlags:
+        """Current block flags as a :class:`MicroBlockFlags` bit-field."""
+        return MicroBlockFlags(self._raw.flags)
+
+    @block_flags.setter
+    def block_flags(self, value: MicroBlockFlags) -> None:
+        self._raw.flags = int(value)
+
+    def set_block_flag(self, flag: MicroBlockFlags) -> None:
+        """Set (OR) one or more block flags."""
+        self._raw.flags |= int(flag)
+
+    def clear_block_flag(self, flag: MicroBlockFlags) -> None:
+        """Clear one or more block flags."""
+        self._raw.flags &= ~int(flag)
 
     @property
     def start_ea(self) -> int:
@@ -758,8 +1226,10 @@ class MicroBlock:
         """Parent :class:`MicroBlockArray`."""
         if self._parent_mf is not None:
             return self._parent_mf
-        # Lazily wrap the raw mba_t from the block
-        return MicroBlockArray(self._raw.mba)
+        # Lazily wrap the raw mba_t and cache to prevent GC
+        if self._cached_mba is None:
+            self._cached_mba = MicroBlockArray(self._raw.mba)
+        return self._cached_mba
 
     # -- query properties --------------------------------------------------
 
@@ -771,12 +1241,54 @@ class MicroBlock:
     @property
     def is_branch(self) -> bool:
         """True if this block ends with a conditional branch."""
-        return self.block_type == MicroBlockType.TWO_WAY
+        return self._raw.is_branch()
+
+    @property
+    def is_simple_goto(self) -> bool:
+        """True if this block contains only a ``goto`` instruction.
+
+        Commonly used by deobfuscators to detect and simplify goto chains.
+        """
+        return self._raw.is_simple_goto_block()
 
     @property
     def is_call_block(self) -> bool:
         """True if this block contains a call instruction."""
-        return any(insn.is_call() for insn in self)
+        return self._raw.is_call_block()
+
+    @property
+    def jump_target(self) -> Optional[int]:
+        """Target block serial of the tail jump, or *None*.
+
+        - ``TWO_WAY``: the taken-branch target from the conditional
+          jump's ``d`` operand.
+        - ``ONE_WAY`` with ``goto``: the goto target from ``l``.
+        - ``ONE_WAY`` without ``goto``: implicit fallthrough
+          (``serial + 1``).
+        - Other block types: *None*.
+        """
+        tail = self.tail
+        if tail is None:
+            return None
+        if tail.is_conditional_jump():
+            return tail.d.block_ref
+        if tail.opcode == MicroOpcode.GOTO:
+            return tail.l.block_ref
+        if self.block_type == MicroBlockType.ONE_WAY:
+            return self._raw.serial + 1
+        return None
+
+    @property
+    def fall_through(self) -> Optional[int]:
+        """Fall-through (not-taken) block serial, or *None*.
+
+        Only meaningful for ``TWO_WAY`` blocks.  In IDA's microcode the
+        fall-through successor of a conditional branch is always the
+        sequentially-next block (``serial + 1``).
+        """
+        if self.block_type != MicroBlockType.TWO_WAY:
+            return None
+        return self._raw.serial + 1
 
     @property
     def npred(self) -> int:
@@ -831,6 +1343,67 @@ class MicroBlock:
     def predecessor_serials(self) -> List[int]:
         """List of predecessor block serial numbers."""
         return [self._raw.pred(j) for j in range(self._raw.npred())]
+
+    # -- edge manipulation -------------------------------------------------
+
+    def _resolve_serial(self, block_or_serial: Any) -> int:
+        if isinstance(block_or_serial, MicroBlock):
+            return block_or_serial.serial
+        return int(block_or_serial)
+
+    def add_successor(self, target: Any) -> None:
+        """Add a successor edge from this block to *target*.
+
+        Also adds this block to *target*'s predecessor set.
+
+        Args:
+            target: A :class:`MicroBlock` or a block serial number.
+        """
+        serial = self._resolve_serial(target)
+        self._raw.succset.push_back(serial)
+        self._raw.mba.get_mblock(serial).predset.push_back(self._raw.serial)
+
+    def remove_successor(self, target: Any) -> None:
+        """Remove a successor edge from this block to *target*.
+
+        Also removes this block from *target*'s predecessor set.
+
+        Args:
+            target: A :class:`MicroBlock` or a block serial number.
+        """
+        serial = self._resolve_serial(target)
+        self._raw.succset._del(serial)
+        self._raw.mba.get_mblock(serial).predset._del(self._raw.serial)
+
+    def clear_successors(self) -> None:
+        """Remove all successor edges.
+
+        Also removes this block from each successor's predecessor set.
+        """
+        for serial in self.successor_serials:
+            self._raw.mba.get_mblock(serial).predset._del(self._raw.serial)
+        self._raw.succset.clear()
+
+    def clear_predecessors(self) -> None:
+        """Remove all predecessor edges.
+
+        Also removes this block from each predecessor's successor set.
+        """
+        for serial in self.predecessor_serials:
+            self._raw.mba.get_mblock(serial).succset._del(self._raw.serial)
+        self._raw.predset.clear()
+
+    def replace_successor(self, old_target: Any, new_target: Any) -> None:
+        """Replace a successor edge: remove *old_target*, add *new_target*.
+
+        Also updates predecessor sets of both target blocks.
+
+        Args:
+            old_target: A :class:`MicroBlock` or serial to disconnect.
+            new_target: A :class:`MicroBlock` or serial to connect.
+        """
+        self.remove_successor(old_target)
+        self.add_successor(new_target)
 
     # -- use-def (intra-block) ---------------------------------------------
 
@@ -892,6 +1465,128 @@ class MicroBlock:
             return MicroInstruction(result, self)
         return None
 
+    def build_operand_locations(self, operand: MicroOperand) -> MicroLocationSet:
+        """Build the location set for a single operand in this block's context.
+
+        Supports registers (``mop_r``), stack variables (``mop_S``),
+        and local variables (``mop_l``).  Returns an empty set for
+        other operand types.
+        """
+        ml = mlist_t()
+        self._raw.append_use_list(ml, operand.raw_operand, AccessType.MUST)
+        return MicroLocationSet(ml)
+
+    def find_def_backward(
+        self,
+        operand: MicroOperand,
+        start: Optional[MicroInstruction] = None,
+    ) -> Optional[MicroInstruction]:
+        """Find the nearest instruction that defines *operand*, searching backward.
+
+        Scans from the instruction *before* ``start`` toward the head of the
+        block.  If ``start`` is *None*, scanning begins at the tail.
+
+        Only register (``mop_r``), stack variable (``mop_S``), and local
+        variable (``mop_l``) operands can be tracked.
+
+        Args:
+            operand: The operand whose definition to search for.
+            start: Reference instruction (excluded from search).
+                If *None*, the entire block is searched from the tail.
+
+        Returns:
+            The defining :class:`MicroInstruction`, or *None* if no
+            definition is found within this block.
+        """
+        locations = self.build_operand_locations(operand)
+        if not locations:
+            return None
+
+        insn = start.prev if start is not None else self.tail
+        while insn is not None:
+            def_set = self.build_def_list(insn, AccessType.MAY)
+            if locations.has_common(def_set):
+                return insn
+            insn = insn.prev
+        return None
+
+    def trace_def_backward(
+        self,
+        operand: MicroOperand,
+        start: Optional[MicroInstruction] = None,
+        max_blocks: int = 64,
+    ) -> List[MicroInstruction]:
+        """Trace the definition chain of *operand* backward through ``mov`` instructions.
+
+        Starting from *start* (or the tail), this method:
+
+        1. Searches backward for the instruction that defines *operand*.
+        2. If the defining instruction is a ``mov``, records it and
+           continues searching for the definition of the ``mov``'s source.
+        3. Follows single-predecessor paths across block boundaries.
+        4. Stops when a non-``mov`` definition is found, the source is
+           a constant or non-variable, or the search is exhausted.
+
+        Only register (``mop_r``), stack variable (``mop_S``), and local
+        variable (``mop_l``) operands can be tracked.
+
+        Args:
+            operand: The operand to trace.
+            start: Reference instruction (excluded from search).
+                If *None*, the entire block is searched from the tail.
+            max_blocks: Maximum number of predecessor blocks to follow
+                (default 64).
+
+        Returns:
+            A list of :class:`MicroInstruction` forming the definition
+            chain, ordered from nearest to earliest.  The last entry is
+            the ultimate defining instruction.  Returns an empty list
+            if no definition is found.
+
+        Example::
+
+            # Find what value is ultimately moved into rax
+            for block in mf.blocks(skip_sentinels=True):
+                for insn in block:
+                    if insn.l.is_register:
+                        chain = block.trace_def_backward(insn.l, start=insn)
+                        if chain:
+                            ultimate = chain[-1]
+                            print(f"{insn.l} defined by: {ultimate}")
+        """
+        chain: List[MicroInstruction] = []
+        block: MicroBlock = self
+        cur_start: Optional[MicroInstruction] = start
+        cur_operand: MicroOperand = operand
+        blocks_traversed = 0
+
+        while True:
+            found = block.find_def_backward(cur_operand, cur_start)
+
+            if found is not None:
+                chain.append(found)
+
+                # If it's a mov with a trackable source, follow the chain.
+                if found.opcode == MicroOpcode.MOV:
+                    src = found.l
+                    if src.is_register or src.is_stack_var:
+                        cur_operand = src
+                        cur_start = found
+                        continue
+                # Non-mov or non-variable source — chain ends here.
+                break
+
+            # Not found in this block — try the sole predecessor.
+            blocks_traversed += 1
+            if blocks_traversed > max_blocks:
+                break
+            if block.npred != 1:
+                break
+            block = next(block.predecessors())
+            cur_start = None  # search from tail of predecessor
+
+        return chain
+
     # -- mutation ----------------------------------------------------------
 
     def insert_instruction(
@@ -915,6 +1610,48 @@ class MicroBlock:
     def make_nop(self, insn: MicroInstruction) -> None:
         """Convert an instruction to a NOP within this block."""
         self._raw.make_nop(insn._raw)
+
+    def contains_instruction(self, insn: MicroInstruction) -> bool:
+        """True if *insn* belongs to this block's instruction list."""
+        cur = self._raw.head
+        target_id = insn._raw.obj_id
+        while cur:
+            if cur.obj_id == target_id:
+                return True
+            cur = cur.next
+        return False
+
+    def mark_lists_dirty(self) -> None:
+        """Invalidate the use-def lists for this block.
+
+        Must be called after modifying instructions to keep the
+        analysis state consistent.
+        """
+        self._raw.mark_lists_dirty()
+
+    def replace_instruction(
+        self, old_insn: MicroInstruction, new_insn: MicroInstruction
+    ) -> None:
+        """Replace *old_insn* with *new_insn*, performing cleanup.
+
+        Equivalent to the common deobfuscation idiom::
+
+            old.swap(new)
+            old.optimize_solo()
+            block.mark_lists_dirty()
+
+        Args:
+            old_insn: The instruction to replace (must be in this block).
+            new_insn: The replacement instruction.
+
+        Raises:
+            ValueError: If *old_insn* is not found in this block.
+        """
+        if not self.contains_instruction(old_insn):
+            raise ValueError("old_insn is not in this block")
+        old_insn.swap(new_insn)
+        old_insn.optimize_solo()
+        self.mark_lists_dirty()
 
     def __str__(self) -> str:
         return '\n'.join(str(insn) for insn in self)
@@ -943,8 +1680,9 @@ class MicroBlockArray:
     analysis primitives.
     """
 
-    def __init__(self, raw: mba_t):
+    def __init__(self, raw: mba_t, _owner: Any = None):
         self._raw = raw
+        self._owner = _owner  # prevent GC of parent (e.g. cfunc_t)
 
     # -- raw access --------------------------------------------------------
 
@@ -959,6 +1697,19 @@ class MicroBlockArray:
     def maturity(self) -> MicroMaturity:
         """Current maturity level."""
         return MicroMaturity(self._raw.maturity)
+
+    @property
+    def mba_flags(self) -> MbaFlags:
+        """Current MBA flags as a :class:`MbaFlags` bit-field."""
+        return MbaFlags(self._raw.get_mba_flags())
+
+    def set_mba_flag(self, flag: MbaFlags) -> None:
+        """Set (OR) one or more MBA flags, leaving others unchanged."""
+        self._raw.set_mba_flags(int(flag))
+
+    def clear_mba_flag(self, flag: MbaFlags) -> None:
+        """Clear one or more MBA flags, leaving others unchanged."""
+        self._raw.clr_mba_flags(int(flag))
 
     @property
     def block_count(self) -> int:
@@ -995,9 +1746,11 @@ class MicroBlockArray:
             yield MicroBlock(self._raw.get_mblock(i), self)
 
     def __getitem__(self, i: int) -> MicroBlock:
-        """Get block by index."""
+        """Get block by index (supports negative indexing)."""
+        if i < 0:
+            i += self._raw.qty
         if i < 0 or i >= self._raw.qty:
-            raise IndexError(f'Block index {i} out of range (0..{self._raw.qty - 1})')
+            raise IndexError(f'Block index out of range (0..{self._raw.qty - 1})')
         return MicroBlock(self._raw.get_mblock(i), self)
 
     def __len__(self) -> int:
@@ -1062,7 +1815,7 @@ class MicroBlockArray:
 
     def get_graph(self) -> MicroGraph:
         """Get the wrapped :class:`MicroGraph`."""
-        return MicroGraph(self._raw.get_graph())
+        return MicroGraph(self._raw.get_graph(), _parent_mf=self)
 
     def find_mop(
         self, ctx: Any, ea: int, is_dest: bool, locations: MicroLocationSet
@@ -1084,6 +1837,28 @@ class MicroBlockArray:
         """Remove a block."""
         self._raw.remove_block(block._raw)
 
+    def copy_block(
+        self,
+        source: MicroBlock,
+        new_serial: int,
+        flags: CopyBlockFlags = CopyBlockFlags.FAST | CopyBlockFlags.MINREF,
+    ) -> MicroBlock:
+        """Make a copy of a block and insert it at *new_serial*.
+
+        Args:
+            source: The block to copy.
+            new_serial: Serial number where the copy will be inserted.
+                Existing blocks at this index and above are shifted.
+            flags: Copy flags controlling reference updates and
+                jump optimization.  The default
+                (``FAST | MINREF``) matches the IDA SDK default.
+
+        Returns:
+            The newly created :class:`MicroBlock`.
+        """
+        raw = self._raw.copy_block(source._raw, new_serial, int(flags))
+        return MicroBlock(raw, self)
+
     def set_maturity(self, maturity: MicroMaturity) -> None:
         """Set the microcode maturity level."""
         self._raw.set_maturity(int(maturity))
@@ -1093,7 +1868,81 @@ class MicroBlockArray:
         insn = self._raw.create_helper_call(ea, helper_name)
         return MicroInstruction(insn)
 
+    def verify(self, always: bool = False) -> None:
+        """Verify the microcode structure for consistency.
+
+        If any inconsistency is discovered, an internal error will be
+        generated.  It is strongly recommended to call this before
+        returning control to the decompiler from callbacks that modify
+        the microcode.
+
+        Args:
+            always: If False, the check is only performed when IDA runs
+                under a debugger.  If True, always verify.
+        """
+        self._raw.verify(always)
+
+    def mark_chains_dirty(self) -> None:
+        """Invalidate the use-def chains for the entire function.
+
+        Call after structural changes (block insertion/removal, edge
+        changes) that affect global data-flow.
+        """
+        self._raw.mark_chains_dirty()
+
+    def remove_empty_and_unreachable_blocks(self) -> bool:
+        """Delete all empty and unreachable blocks.
+
+        Blocks may become empty or unreachable after control-flow
+        modifications (e.g. deobfuscation, unflattening).  This method
+        cleans them up in a single pass.
+
+        Returns:
+            True if any blocks were removed.
+        """
+        return self._raw.remove_empty_and_unreachable_blocks()
+
+    def merge_blocks(self) -> bool:
+        """Merge blocks that form a linear flow.
+
+        Combines consecutive blocks where one falls through to the next
+        with no other predecessors.  Also calls
+        :meth:`remove_empty_and_unreachable_blocks` internally.
+
+        Returns:
+            True if any blocks were merged.
+        """
+        return self._raw.merge_blocks()
+
+    def optimize_local(self, locopt_level: int = 0) -> int:
+        """Run local optimization on all blocks.
+
+        This triggers a local optimization pass (constant folding,
+        dead-code elimination, etc.) and is typically called after
+        structural modifications.
+
+        Args:
+            locopt_level: Optimization level (0 is standard).
+
+        Returns:
+            Number of changes made.
+        """
+        return self._raw.optimize_local(locopt_level)
+
+    def build_graph(self) -> None:
+        """Build (or rebuild) the block-level control flow graph.
+
+        Must be called after heavy structural modifications (block
+        insertion/removal, edge changes) before the microcode can
+        be further analyzed or verified.
+        """
+        self._raw.build_graph()
+
     # -- serialization -----------------------------------------------------
+
+    def serialize(self) -> bytes:
+        """Serialize the microcode to bytes."""
+        return self._raw.serialize()
 
     @staticmethod
     def deserialize(data: bytes) -> MicroBlockArray:
@@ -1150,8 +1999,9 @@ class MicroGraph:
     Provides iteration and use-def chain access.
     """
 
-    def __init__(self, raw: Any) -> None:
+    def __init__(self, raw: Any, _parent_mf: Optional[MicroBlockArray] = None) -> None:
         self._raw = raw
+        self._parent_mf = _parent_mf  # prevent GC of parent mba_t
 
     @property
     def raw_graph(self) -> Any:
@@ -1162,11 +2012,16 @@ class MicroGraph:
         return self._raw.node_qty()
 
     def __getitem__(self, i: int) -> MicroBlock:
-        return MicroBlock(self._raw.get_mblock(i))
+        qty = self._raw.node_qty()
+        if i < 0:
+            i += qty
+        if i < 0 or i >= qty:
+            raise IndexError(f'Graph node index out of range (0..{qty - 1})')
+        return MicroBlock(self._raw.get_mblock(i), self._parent_mf)
 
     def __iter__(self) -> Iterator[MicroBlock]:
         for i in range(self._raw.node_qty()):
-            yield MicroBlock(self._raw.get_mblock(i))
+            yield MicroBlock(self._raw.get_mblock(i), self._parent_mf)
 
     def get_use_def_chains(self, gctype: int) -> Any:
         """Get use-def chains (returns raw ``graph_chains_t``).
@@ -1212,7 +2067,7 @@ class MicroLocationSet:
 
         use_set = block.build_use_list(insn)
         def_set = block.build_def_list(insn)
-        if search_set & use_set:      # has_common
+        if search_set.has_common(use_set):  # any overlap?
             results.append(insn.ea)
         search_set -= def_set          # subtract
     """
@@ -1246,22 +2101,51 @@ class MicroLocationSet:
     def __bool__(self) -> bool:
         return not self._raw.empty()
 
-    def __and__(self, other: MicroLocationSet) -> bool:
-        """Intersection test (``has_common``)."""
-        return self.has_common(other)
+    def __and__(self, other: MicroLocationSet) -> MicroLocationSet:
+        """Return the intersection of this set and *other*."""
+        result = self.copy()
+        result._raw.intersect(other._raw)
+        return result
+
+    def __or__(self, other: MicroLocationSet) -> MicroLocationSet:
+        """Return the union of this set and *other*."""
+        result = self.copy()
+        result.add(other)
+        return result
 
     def __ior__(self, other: MicroLocationSet) -> MicroLocationSet:
         """Union in-place."""
         self.add(other)
         return self
 
+    def __sub__(self, other: MicroLocationSet) -> MicroLocationSet:
+        """Return this set minus *other*."""
+        result = self.copy()
+        result.subtract(other)
+        return result
+
     def __isub__(self, other: MicroLocationSet) -> MicroLocationSet:
         """Subtract in-place."""
         self.subtract(other)
         return self
 
+    def issuperset(self, other: MicroLocationSet) -> bool:
+        """True if this set contains all locations from *other*."""
+        return self._raw.includes(other._raw)
+
+    def issubset(self, other: MicroLocationSet) -> bool:
+        """True if all locations in this set are also in *other*."""
+        return other._raw.includes(self._raw)
+
     def __contains__(self, other: MicroLocationSet) -> bool:
-        """True if this set includes all locations from *other*."""
+        """True if *other* is a subset of this set.
+
+        Note: Unlike Python's built-in ``set`` where ``x in s`` tests
+        membership of a single element, ``MicroLocationSet`` elements
+        are not individually addressable.  This operator tests whether
+        all locations in *other* are present in this set (superset check),
+        matching the semantics of ``mlist_t::includes``.
+        """
         return self._raw.includes(other._raw)
 
     def __repr__(self) -> str:
@@ -1419,7 +2303,7 @@ class Microcode(DatabaseEntity):
 
     def generate(
         self,
-        func: Any,
+        func: func_t,
         maturity: MicroMaturity = MicroMaturity.GENERATED,
         flags: DecompilationFlags = DecompilationFlags.WARNINGS,
         build_graph: bool = True,
@@ -1488,7 +2372,7 @@ class Microcode(DatabaseEntity):
 
         return MicroBlockArray(mba)
 
-    def from_decompilation(self, func: Any) -> MicroBlockArray:
+    def from_decompilation(self, func: func_t) -> MicroBlockArray:
         """Get microcode from a full decompilation (maturity LVARS).
 
         Uses ``ida_hexrays.decompile()`` and returns the ``mba_t``
@@ -1506,11 +2390,11 @@ class Microcode(DatabaseEntity):
         cfunc = ida_hexrays.decompile(func.start_ea)
         if not cfunc:
             raise MicrocodeError(f'Failed to decompile function at 0x{func.start_ea:x}')
-        return MicroBlockArray(cfunc.mba)
+        return MicroBlockArray(cfunc.mba, _owner=cfunc)
 
     def get_text(
         self,
-        func: Any,
+        func: func_t,
         maturity: MicroMaturity = MicroMaturity.GENERATED,
         remove_tags: bool = True,
     ) -> List[str]:

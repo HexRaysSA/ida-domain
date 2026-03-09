@@ -25,27 +25,24 @@ class GotoChainOptimizer(MicroBlockOptimizer):
         t0 = tail.left.block_ref
         i = t0
 
-        # Follow the goto chain
+        # Follow the goto chain using is_simple_goto / jump_target
         while True:
             if i in visited:
                 return 0
             visited.append(i)
             b = mf[i]
-            m2 = b.first_regular_insn
-            if not m2 or m2.opcode != MicroOpcode.GOTO:
+            if not b.is_simple_goto:
                 break
-            i = m2.left.block_ref
+            i = b.jump_target
 
         if i == t0:
             return 0
 
         # Rewrite: point goto directly at chain end
         tail.raw_instruction.l.b = i
-        block.raw_block.succset[0] = i
-        mf.raw_mba.get_mblock(i).predset.add(block.serial)
-        mf.raw_mba.get_mblock(t0).predset._del(block.serial)
-        mf.raw_mba.mark_chains_dirty()
-        mf.raw_mba.verify(True)
+        block.replace_successor(t0, i)           # updates succset + predsets
+        mf.mark_chains_dirty()
+        mf.verify(True)
         return 1
 
 
