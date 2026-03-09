@@ -4730,8 +4730,8 @@ def test_micro_operand_from_insn_factory(test_env):
     """Test MicroOperand.from_insn() creating a sub-instruction operand."""
     from ida_domain.microcode import (
         MicroInstruction,
-        MicroOperand,
         MicroOpcode,
+        MicroOperand,
         MicroOperandType,
     )
 
@@ -4780,8 +4780,8 @@ def test_micro_instruction_create_mov(test_env):
 
     from ida_domain.microcode import (
         MicroInstruction,
-        MicroOperand,
         MicroOpcode,
+        MicroOperand,
         MicroOperandType,
     )
 
@@ -4808,8 +4808,8 @@ def test_micro_instruction_create_goto(test_env):
     """Test MicroInstruction.create() building a GOTO."""
     from ida_domain.microcode import (
         MicroInstruction,
-        MicroOperand,
         MicroOpcode,
+        MicroOperand,
     )
 
     insn = MicroInstruction.create(
@@ -4827,8 +4827,8 @@ def test_micro_instruction_create_add(test_env):
 
     from ida_domain.microcode import (
         MicroInstruction,
-        MicroOperand,
         MicroOpcode,
+        MicroOperand,
     )
 
     insn = MicroInstruction.create(
@@ -4851,8 +4851,8 @@ def test_micro_instruction_operand_setters(test_env):
 
     from ida_domain.microcode import (
         MicroInstruction,
-        MicroOperand,
         MicroOpcode,
+        MicroOperand,
     )
 
     insn = MicroInstruction.create(ea=0x5000, opcode=MicroOpcode.MOV)
@@ -4886,8 +4886,8 @@ def test_micro_instruction_create_and_insert(test_env):
     """Test creating an instruction with factories and inserting into a block."""
     from ida_domain.microcode import (
         MicroInstruction,
-        MicroOperand,
         MicroOpcode,
+        MicroOperand,
     )
 
     db = test_env
@@ -4916,8 +4916,8 @@ def test_micro_instruction_create_nested(test_env):
 
     from ida_domain.microcode import (
         MicroInstruction,
-        MicroOperand,
         MicroOpcode,
+        MicroOperand,
     )
 
     # Build: mov (add eax, 10), ecx

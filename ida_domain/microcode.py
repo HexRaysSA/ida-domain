@@ -167,7 +167,11 @@ class MicroOpcode(IntEnum):
 
     @property
     def is_commutative(self) -> bool:
-        """True for commutative opcodes (``add``, ``mul``, ``or``, ``and``, ``xor``, ``setz``, ``setnz``, ``cfadd``, ``ofadd``)."""
+        """True for commutative opcodes.
+
+        Includes ``add``, ``mul``, ``or``, ``and``, ``xor``,
+        ``setz``, ``setnz``, ``cfadd``, ``ofadd``.
+        """
         return ida_hexrays.is_mcode_commutative(self.value)
 
     @property
@@ -185,7 +189,7 @@ class MicroOpcode(IntEnum):
 
     @property
     def is_unary(self) -> bool:
-        """True for unary opcodes (single source operand: ``neg``, ``lnot``, ``bnot``, ``fneg``)."""
+        """True for unary opcodes (``neg``, ``lnot``, ``bnot``, ``fneg``)."""
         return self.value in (
             ida_hexrays.m_neg,
             ida_hexrays.m_lnot,
@@ -200,7 +204,11 @@ class MicroOpcode(IntEnum):
 
     @property
     def is_arithmetic(self) -> bool:
-        """True for integer arithmetic opcodes (``add``, ``sub``, ``mul``, ``udiv``, ``sdiv``, ``umod``, ``smod``)."""
+        """True for integer arithmetic opcodes.
+
+        Includes ``add``, ``sub``, ``mul``, ``udiv``, ``sdiv``,
+        ``umod``, ``smod``.
+        """
         return self.value in (
             ida_hexrays.m_add,
             ida_hexrays.m_sub,
