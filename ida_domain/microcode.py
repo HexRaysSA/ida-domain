@@ -8,13 +8,25 @@ import ida_idaapi
 import ida_lines
 import ida_range
 from ida_funcs import func_t
-from ida_hexrays import mba_t, mblock_t, minsn_t, mlist_t, mop_t
+from ida_hexrays import (
+    lvar_t,
+    lvars_t,
+    mba_t,
+    mblock_t,
+    mcallarg_t,
+    mcallinfo_t,
+    minsn_t,
+    mlist_t,
+    mop_t,
+)
 from typing_extensions import TYPE_CHECKING, Any, Iterator, List, Optional, Tuple
 
 from .base import DatabaseEntity, check_db_open, decorate_all_methods
 
 if TYPE_CHECKING:
+    from ida_hexrays import vdloc_t
     from ida_idaapi import ea_t
+    from ida_typeinf import argloc_t, tinfo_t
 
     from .database import Database
 
@@ -456,6 +468,554 @@ class AccessType(IntEnum):
     MUST = ida_hexrays.MUST_ACCESS
 
 
+class CallInfoFlags(IntFlag):
+    """Call information flags (``FCI_*``)."""
+
+    PROP = ida_hexrays.FCI_PROP
+    DEAD = ida_hexrays.FCI_DEAD
+    FINAL = ida_hexrays.FCI_FINAL
+    NORET = ida_hexrays.FCI_NORET
+    PURE = ida_hexrays.FCI_PURE
+    NOSIDE = ida_hexrays.FCI_NOSIDE
+    SPLOK = ida_hexrays.FCI_SPLOK
+    HASCALL = ida_hexrays.FCI_HASCALL
+    HASFMT = ida_hexrays.FCI_HASFMT
+    EXPLOCS = ida_hexrays.FCI_EXPLOCS
+
+
+class FunctionRole(IntEnum):
+    """Function role constants (``ROLE_*``)."""
+
+    UNK = ida_hexrays.ROLE_UNK
+    EMPTY = ida_hexrays.ROLE_EMPTY
+    MEMSET = ida_hexrays.ROLE_MEMSET
+    MEMSET32 = ida_hexrays.ROLE_MEMSET32
+    MEMSET64 = ida_hexrays.ROLE_MEMSET64
+    MEMCPY = ida_hexrays.ROLE_MEMCPY
+    STRCPY = ida_hexrays.ROLE_STRCPY
+    STRLEN = ida_hexrays.ROLE_STRLEN
+    STRCAT = ida_hexrays.ROLE_STRCAT
+    TAIL = ida_hexrays.ROLE_TAIL
+    BUG = ida_hexrays.ROLE_BUG
+    ALLOCA = ida_hexrays.ROLE_ALLOCA
+    BSWAP = ida_hexrays.ROLE_BSWAP
+    PRESENT = ida_hexrays.ROLE_PRESENT
+    CONTAINING_RECORD = ida_hexrays.ROLE_CONTAINING_RECORD
+    FASTFAIL = ida_hexrays.ROLE_FASTFAIL
+    READFLAGS = ida_hexrays.ROLE_READFLAGS
+    IS_MUL_OK = ida_hexrays.ROLE_IS_MUL_OK
+    SATURATED_MUL = ida_hexrays.ROLE_SATURATED_MUL
+    BITTEST = ida_hexrays.ROLE_BITTEST
+    BITTESTANDSET = ida_hexrays.ROLE_BITTESTANDSET
+    BITTESTANDRESET = ida_hexrays.ROLE_BITTESTANDRESET
+    BITTESTANDCOMPLEMENT = ida_hexrays.ROLE_BITTESTANDCOMPLEMENT
+    VA_ARG = ida_hexrays.ROLE_VA_ARG
+    VA_COPY = ida_hexrays.ROLE_VA_COPY
+    VA_START = ida_hexrays.ROLE_VA_START
+    VA_END = ida_hexrays.ROLE_VA_END
+    ROL = ida_hexrays.ROLE_ROL
+    ROR = ida_hexrays.ROLE_ROR
+    CFSUB3 = ida_hexrays.ROLE_CFSUB3
+    OFSUB3 = ida_hexrays.ROLE_OFSUB3
+    ABS = ida_hexrays.ROLE_ABS
+    THREE_WAY_CMP0 = ida_hexrays.ROLE_3WAYCMP0
+    THREE_WAY_CMP1 = ida_hexrays.ROLE_3WAYCMP1
+    WMEMCPY = ida_hexrays.ROLE_WMEMCPY
+    WMEMSET = ida_hexrays.ROLE_WMEMSET
+    WCSCPY = ida_hexrays.ROLE_WCSCPY
+    WCSLEN = ida_hexrays.ROLE_WCSLEN
+    WCSCAT = ida_hexrays.ROLE_WCSCAT
+    SSE_CMP4 = ida_hexrays.ROLE_SSE_CMP4
+    SSE_CMP8 = ida_hexrays.ROLE_SSE_CMP8
+
+
+# ---------------------------------------------------------------------------
+# MicroCallArg / MicroCallInfo — wraps mcallarg_t / mcallinfo_t
+# ---------------------------------------------------------------------------
+
+
+class MicroCallArg:
+    """Wrapper around an IDA ``mcallarg_t`` call argument.
+
+    Each argument has a type, a location (argloc), an optional name,
+    and inherits all ``mop_t`` fields (the argument value as a
+    micro-operand).
+    """
+
+    def __init__(self, raw: mcallarg_t):
+        self._raw = raw
+
+    @property
+    def raw_arg(self) -> mcallarg_t:
+        """Get the underlying ``mcallarg_t`` object."""
+        return self._raw
+
+    @property
+    def type(self) -> tinfo_t:
+        """Argument type."""
+        return self._raw.type
+
+    @property
+    def argloc(self) -> argloc_t:
+        """Argument location."""
+        return self._raw.argloc
+
+    @property
+    def name(self) -> str:
+        """Argument name (may be empty)."""
+        return self._raw.name
+
+    @property
+    def flags(self) -> int:
+        """Argument flags."""
+        return self._raw.flags
+
+    @property
+    def size(self) -> int:
+        """Argument size in bytes."""
+        return self._raw.size
+
+    @property
+    def ea(self) -> ea_t:
+        """Source address of the argument."""
+        return self._raw.ea
+
+    @property
+    def operand(self) -> MicroOperand:
+        """The argument value as a :class:`MicroOperand`.
+
+        ``mcallarg_t`` inherits from ``mop_t``, so the argument
+        itself is a micro-operand.
+        """
+        return MicroOperand(self._raw)
+
+    def to_text(self) -> str:
+        """Get text representation of this argument."""
+        return self._raw.dstr()
+
+    def __str__(self) -> str:
+        return self.to_text()
+
+    def __repr__(self) -> str:
+        name = self._raw.name or '?'
+        return f'MicroCallArg(name={name!r}, size={self._raw.size})'
+
+
+class MicroCallInfo:
+    """Wrapper around an IDA ``mcallinfo_t`` call information structure.
+
+    Provides access to the callee, arguments, calling convention,
+    return type, and spoiled/dead registers.
+    """
+
+    def __init__(self, raw: mcallinfo_t):
+        self._raw = raw
+
+    @property
+    def raw_call_info(self) -> mcallinfo_t:
+        """Get the underlying ``mcallinfo_t`` object."""
+        return self._raw
+
+    @property
+    def callee(self) -> ea_t:
+        """Callee address (``BADADDR`` if indirect/unknown)."""
+        return self._raw.callee
+
+    @property
+    def solid_args(self) -> int:
+        """Number of solid (non-variadic) arguments."""
+        return self._raw.solid_args
+
+    @property
+    def calling_convention(self) -> int:
+        """Calling convention (``CM_CC_*`` constant)."""
+        return self._raw.cc
+
+    @property
+    def return_type(self) -> tinfo_t:
+        """Return type."""
+        return self._raw.return_type
+
+    @property
+    def return_argloc(self) -> argloc_t:
+        """Return value location."""
+        return self._raw.return_argloc
+
+    @property
+    def flags(self) -> CallInfoFlags:
+        """Call flags as a :class:`CallInfoFlags` bit-field."""
+        return CallInfoFlags(self._raw.flags)
+
+    @property
+    def role(self) -> FunctionRole:
+        """Function role as a :class:`FunctionRole` enum."""
+        return FunctionRole(self._raw.role)
+
+    @property
+    def is_vararg(self) -> bool:
+        """True if this is a variadic call."""
+        return self._raw.is_vararg()
+
+    @property
+    def is_noret(self) -> bool:
+        """True if the ``FCI_NORET`` flag is set."""
+        return bool(self._raw.flags & ida_hexrays.FCI_NORET)
+
+    @property
+    def is_pure(self) -> bool:
+        """True if the ``FCI_PURE`` flag is set (no side effects)."""
+        return bool(self._raw.flags & ida_hexrays.FCI_PURE)
+
+    @property
+    def spoiled(self) -> MicroLocationSet:
+        """Spoiled register set."""
+        return MicroLocationSet(self._raw.spoiled)
+
+    @property
+    def dead_regs(self) -> MicroLocationSet:
+        """Dead registers set."""
+        return MicroLocationSet(self._raw.dead_regs)
+
+    @property
+    def return_regs(self) -> MicroLocationSet:
+        """Return registers set."""
+        return MicroLocationSet(self._raw.return_regs)
+
+    @property
+    def pass_regs(self) -> MicroLocationSet:
+        """Pass-through registers set."""
+        return MicroLocationSet(self._raw.pass_regs)
+
+    @property
+    def visible_memory(self) -> MicroLocationSet:
+        """Visible memory set."""
+        return MicroLocationSet(self._raw.visible_memory)
+
+    @property
+    def call_spd(self) -> int:
+        """Stack pointer delta at the call point."""
+        return self._raw.call_spd
+
+    @property
+    def stkargs_top(self) -> int:
+        """Top of stack arguments area."""
+        return self._raw.stkargs_top
+
+    @property
+    def args(self) -> List[MicroCallArg]:
+        """List of call arguments as :class:`MicroCallArg` wrappers."""
+        raw_args = self._raw.args
+        return [MicroCallArg(raw_args.at(i)) for i in range(raw_args.size())]
+
+    @property
+    def arg_count(self) -> int:
+        """Number of arguments."""
+        return self._raw.args.size()
+
+    def get_type(self) -> tinfo_t:
+        """Get the full function type."""
+        return self._raw.get_type()
+
+    def to_text(self) -> str:
+        """Get text representation of this call info."""
+        return self._raw.dstr()
+
+    def __str__(self) -> str:
+        return self.to_text()
+
+    def __repr__(self) -> str:
+        return (
+            f'MicroCallInfo(callee=0x{self._raw.callee:x}, '
+            f'args={self._raw.args.size()})'
+        )
+
+
+# ---------------------------------------------------------------------------
+# MicroLocalVar / MicroLocalVars — wraps lvar_t / lvars_t
+# ---------------------------------------------------------------------------
+
+
+class MicroLocalVar:
+    """Wrapper around an IDA ``lvar_t`` local variable.
+
+    Provides access to the variable's name, type, location, and flags.
+    """
+
+    def __init__(self, raw: lvar_t):
+        self._raw = raw
+
+    @property
+    def raw_var(self) -> lvar_t:
+        """Get the underlying ``lvar_t`` object."""
+        return self._raw
+
+    # -- identity ----------------------------------------------------------
+
+    @property
+    def name(self) -> str:
+        """Variable name."""
+        return self._raw.name
+
+    @property
+    def comment(self) -> str:
+        """Variable comment (may be empty)."""
+        return self._raw.cmt
+
+    @property
+    def type_info(self) -> tinfo_t:
+        """Variable type information."""
+        return self._raw.tif
+
+    @property
+    def location(self) -> vdloc_t:
+        """Variable location (register, stack, or scattered)."""
+        return self._raw.location
+
+    @property
+    def width(self) -> int:
+        """Variable width in bytes."""
+        return self._raw.width
+
+    @property
+    def def_ea(self) -> ea_t:
+        """Address where this variable is first defined."""
+        return self._raw.defea
+
+    @property
+    def def_block(self) -> int:
+        """Block index where this variable is first defined."""
+        return self._raw.defblk
+
+    @property
+    def divisor(self) -> int:
+        """Variable divisor (for division optimization)."""
+        return self._raw.divisor
+
+    # -- boolean flags (properties for no-arg, methods for parameterized) --
+
+    @property
+    def is_arg(self) -> bool:
+        """True if this is a function argument."""
+        return self._raw.is_arg_var
+
+    @property
+    def is_result(self) -> bool:
+        """True if this is the function return variable."""
+        return self._raw.is_result_var
+
+    @property
+    def is_used(self) -> bool:
+        """True if this variable is used in the function."""
+        return self._raw.used
+
+    @property
+    def is_typed(self) -> bool:
+        """True if this variable has a type assigned."""
+        return self._raw.typed
+
+    @property
+    def has_nice_name(self) -> bool:
+        """True if the variable has a meaningful name."""
+        return self._raw.has_nice_name
+
+    @property
+    def has_user_name(self) -> bool:
+        """True if the user has set a custom name."""
+        return self._raw.has_user_name
+
+    @property
+    def has_user_type(self) -> bool:
+        """True if the user has set a custom type."""
+        return self._raw.has_user_type
+
+    @property
+    def has_user_info(self) -> bool:
+        """True if the user has set any custom info."""
+        return self._raw.has_user_info
+
+    @property
+    def is_fake(self) -> bool:
+        """True if this is a fake variable."""
+        return self._raw.is_fake_var
+
+    @property
+    def is_overlapped(self) -> bool:
+        """True if this variable overlaps with another."""
+        return self._raw.is_overlapped_var
+
+    @property
+    def is_floating(self) -> bool:
+        """True if this is a floating-point variable."""
+        return self._raw.is_floating_var
+
+    @property
+    def is_spoiled(self) -> bool:
+        """True if this variable is spoiled."""
+        return self._raw.is_spoiled_var
+
+    def is_stk_var(self) -> bool:
+        """True if this variable is on the stack."""
+        return self._raw.is_stk_var()
+
+    def is_reg_var(self) -> bool:
+        """True if this variable is in a register."""
+        return self._raw.is_reg_var()
+
+    def is_scattered(self) -> bool:
+        """True if this variable is scattered across locations."""
+        return self._raw.is_scattered()
+
+    def is_thisarg(self) -> bool:
+        """True if this is the ``this`` pointer argument."""
+        return self._raw.is_thisarg()
+
+    def is_dummy_arg(self) -> bool:
+        """True if this is a dummy argument."""
+        return self._raw.is_dummy_arg()
+
+    # -- mutation ----------------------------------------------------------
+
+    def set_lvar_type(self, tif: tinfo_t) -> bool:
+        """Set the variable type.
+
+        Args:
+            tif: The new type to assign.
+
+        Returns:
+            True if the type was accepted.
+        """
+        return self._raw.set_lvar_type(tif)
+
+    def set_final_lvar_type(self, tif: tinfo_t) -> bool:
+        """Set the final variable type (no further propagation).
+
+        Args:
+            tif: The new type to assign.
+
+        Returns:
+            True if the type was accepted.
+        """
+        return self._raw.set_final_lvar_type(tif)
+
+    def accepts_type(self, tif: tinfo_t) -> bool:
+        """Check if the variable accepts the given type.
+
+        Args:
+            tif: The type to check.
+
+        Returns:
+            True if the type is compatible.
+        """
+        return self._raw.accepts_type(tif)
+
+    def set_user_name(self, name: str) -> None:
+        """Set a user-defined name for this variable."""
+        self._raw.name = name
+        self._raw.set_user_name()
+
+    # -- text --------------------------------------------------------------
+
+    def __str__(self) -> str:
+        tif_str = str(self._raw.tif) if self._raw.tif else '?'
+        return f'{tif_str} {self._raw.name}'
+
+    def __repr__(self) -> str:
+        return (
+            f'MicroLocalVar(name={self._raw.name!r}, '
+            f'width={self._raw.width})'
+        )
+
+
+class MicroLocalVars:
+    """Wrapper around an IDA ``lvars_t`` local variable list.
+
+    Supports iteration, indexing, and lookup by name or location.
+    """
+
+    def __init__(self, raw: lvars_t, mba: MicroBlockArray):
+        self._raw = raw
+        self._mba = mba
+
+    @property
+    def raw_lvars(self) -> lvars_t:
+        """Get the underlying ``lvars_t`` object."""
+        return self._raw
+
+    def __len__(self) -> int:
+        return self._raw.size()
+
+    def __getitem__(self, i: int) -> MicroLocalVar:
+        if i < 0:
+            i += self._raw.size()
+        if i < 0 or i >= self._raw.size():
+            raise IndexError(
+                f'Variable index out of range (0..{self._raw.size() - 1})'
+            )
+        return MicroLocalVar(self._raw.at(i))
+
+    def __iter__(self) -> Iterator[MicroLocalVar]:
+        for i in range(self._raw.size()):
+            yield MicroLocalVar(self._raw.at(i))
+
+    def find_by_name(self, name: str) -> Optional[MicroLocalVar]:
+        """Find a variable by name.
+
+        Note: IDAPython ``lvars_t`` has no name-based lookup, so this
+        performs a linear scan.
+
+        Args:
+            name: Variable name to search for.
+
+        Returns:
+            The :class:`MicroLocalVar`, or *None* if not found.
+        """
+        for i in range(self._raw.size()):
+            v = self._raw.at(i)
+            if v.name == name:
+                return MicroLocalVar(v)
+        return None
+
+    def find_lvar(self, location: vdloc_t, width: int) -> Optional[MicroLocalVar]:
+        """Find a variable by its location and width.
+
+        Args:
+            location: Variable location (``vdloc_t``).
+            width: Variable width in bytes.
+
+        Returns:
+            The :class:`MicroLocalVar`, or *None* if not found.
+        """
+        idx = self._raw.find_lvar(location, width)
+        if idx < 0:
+            return None
+        return MicroLocalVar(self._raw.at(idx))
+
+    def find_stkvar(self, spoff: int, width: int) -> Optional[MicroLocalVar]:
+        """Find a stack variable by its stack offset and width.
+
+        Args:
+            spoff: Stack offset.
+            width: Variable width in bytes.
+
+        Returns:
+            The :class:`MicroLocalVar`, or *None* if not found.
+        """
+        idx = self._raw.find_stkvar(spoff, width)
+        if idx < 0:
+            return None
+        return MicroLocalVar(self._raw.at(idx))
+
+    @property
+    def arguments(self) -> List[MicroLocalVar]:
+        """List of variables that are function arguments."""
+        return [MicroLocalVar(self._raw.at(i))
+                for i in range(self._raw.size())
+                if self._raw.at(i).is_arg_var]
+
+    def __repr__(self) -> str:
+        return f'MicroLocalVars(count={self._raw.size()})'
+
+
 # ---------------------------------------------------------------------------
 # MicroOperand — wraps mop_t
 # ---------------------------------------------------------------------------
@@ -569,6 +1129,44 @@ class MicroOperand:
         return MicroOperand(raw)
 
     @staticmethod
+    def local_var(mba: MicroBlockArray, idx: int, off: int = 0) -> MicroOperand:
+        """Create a local variable operand.
+
+        Args:
+            mba: The parent :class:`MicroBlockArray`.
+            idx: Index into the local variable list (``mba.vars``).
+            off: Offset from the beginning of the variable.
+        """
+        raw = mop_t()
+        raw._make_lvar(mba._raw, idx, off)
+        return MicroOperand(raw)
+
+    @staticmethod
+    def reg_pair(loreg: int, hireg: int, halfsize: int) -> MicroOperand:
+        """Create a register-pair operand.
+
+        Args:
+            loreg: Micro-register holding the low part.
+            hireg: Micro-register holding the high part.
+            halfsize: Size of each half-register in bytes.
+        """
+        raw = mop_t()
+        raw.make_reg_pair(loreg, hireg, halfsize)
+        return MicroOperand(raw)
+
+    @staticmethod
+    def fpnum(data: bytes) -> MicroOperand:
+        """Create a floating-point constant operand.
+
+        Args:
+            data: Raw floating-point bytes in the processor's native
+                format (e.g. IEEE 754 for x86).
+        """
+        raw = mop_t()
+        raw.make_fpnum(data)
+        return MicroOperand(raw)
+
+    @staticmethod
     def empty() -> MicroOperand:
         """Create an empty operand (``mop_z``)."""
         return MicroOperand(mop_t())
@@ -670,10 +1268,10 @@ class MicroOperand:
         return None
 
     @property
-    def call_info(self) -> Any:
-        """Raw ``mcallinfo_t`` for ``mop_f`` operands, or *None*."""
+    def call_info(self) -> Optional[MicroCallInfo]:
+        """Call information for ``mop_f`` operands, or *None*."""
         if self._raw.t == self._T.CALL_INFO:
-            return self._raw.f
+            return MicroCallInfo(self._raw.f)
         return None
 
     @property
@@ -730,6 +1328,70 @@ class MicroOperand:
     def is_pair(self) -> bool:
         return self._raw.t == self._T.PAIR
 
+    # -- constant predicates -----------------------------------------------
+
+    @property
+    def is_zero(self) -> bool:
+        """True if this is a numeric zero constant."""
+        return self._raw.is_zero()
+
+    @property
+    def is_one(self) -> bool:
+        """True if this is a numeric constant equal to 1."""
+        return self._raw.is_one()
+
+    @property
+    def is_positive_constant(self) -> bool:
+        """True if this is a positive numeric constant."""
+        return self._raw.is_positive_constant()
+
+    @property
+    def is_negative_constant(self) -> bool:
+        """True if this is a negative numeric constant (signed)."""
+        return self._raw.is_negative_constant()
+
+    def is_equal_to(self, n: int, is_signed: bool = True) -> bool:
+        """True if this is a numeric constant equal to *n*.
+
+        Args:
+            n: The value to compare against.
+            is_signed: Interpret the comparison as signed.
+        """
+        return self._raw.is_equal_to(n, is_signed)
+
+    # -- extended type checks ----------------------------------------------
+
+    @property
+    def is_kreg(self) -> bool:
+        """True if this is a kernel register."""
+        return self._raw.is_kreg()
+
+    @property
+    def is_cc(self) -> bool:
+        """True if this is a condition code register."""
+        return self._raw.is_cc()
+
+    @property
+    def is_bit_reg(self) -> bool:
+        """True if this is a bit register (including condition codes)."""
+        return self._raw.is_bit_reg()
+
+    def is_sign_extended_from(self, nbytes: int) -> bool:
+        """True if the high bytes are sign-extended from *nbytes*.
+
+        Args:
+            nbytes: Number of low bytes that were sign-extended.
+        """
+        return self._raw.is_sign_extended_from(nbytes)
+
+    def is_zero_extended_from(self, nbytes: int) -> bool:
+        """True if the high bytes are zero-extended from *nbytes*.
+
+        Args:
+            nbytes: Number of low bytes that were zero-extended.
+        """
+        return self._raw.is_zero_extended_from(nbytes)
+
     # -- query methods -----------------------------------------------------
 
     def is_sub_instruction(self, opcode: Optional[MicroOpcode] = None) -> bool:
@@ -743,13 +1405,31 @@ class MicroOperand:
             return self._raw.is_insn(int(opcode))
         return self._raw.is_insn()
 
-    def has_side_effects(self) -> bool:
-        """True if evaluating this operand may cause side effects."""
-        return self._raw.has_side_effects()
+    def has_side_effects(
+        self, include_ldx_and_divs: bool = False
+    ) -> bool:
+        """True if evaluating this operand may cause side effects.
+
+        Args:
+            include_ldx_and_divs: Also treat ``ldx``/``div``/``mod``
+                as having side effects.
+        """
+        return self._raw.has_side_effects(include_ldx_and_divs)
+
+    @property
+    def may_use_aliased_memory(self) -> bool:
+        """True if this operand may access aliased memory."""
+        return self._raw.may_use_aliased_memory()
+
+    # -- mutation ----------------------------------------------------------
 
     def clear(self) -> None:
         """Reset this operand to empty (``mop_z``)."""
         self._raw.erase()
+
+    def erase_but_keep_size(self) -> None:
+        """Reset this operand to empty but preserve the size field."""
+        self._raw.erase_but_keep_size()
 
     # -- text / display ----------------------------------------------------
 
@@ -997,9 +1677,87 @@ class MicroInstruction:
         """True if this instruction's opcode is commutative."""
         return self.opcode.is_commutative
 
-    def has_side_effects(self) -> bool:
-        """True if this instruction (or any nested sub-instruction) may cause side effects."""
-        return self._raw.has_side_effects()
+    def has_side_effects(
+        self, include_ldx_and_divs: bool = False
+    ) -> bool:
+        """True if this instruction (or any nested sub-instruction) may cause side effects.
+
+        Args:
+            include_ldx_and_divs: Also treat ``ldx``/``div``/``mod``
+                as having side effects.
+        """
+        return self._raw.has_side_effects(include_ldx_and_divs)
+
+    def is_helper(self, name: str) -> bool:
+        """True if this is a helper call with the specified name.
+
+        Args:
+            name: Helper function name to check (e.g. ``"memcpy"``).
+        """
+        return self._raw.is_helper(name)
+
+    def contains_call(self, with_helpers: bool = False) -> bool:
+        """True if this instruction (or any sub-instruction) contains a call.
+
+        Args:
+            with_helpers: Also consider helper calls.
+        """
+        return self._raw.contains_call(with_helpers)
+
+    def is_noret_call(self, flags: int = 0) -> bool:
+        """True if this is a non-returning call.
+
+        Args:
+            flags: Combination of ``NORET_*`` bits.
+        """
+        return self._raw.is_noret_call(flags)
+
+    def find_num_op(
+        self,
+    ) -> Optional[Tuple[MicroOperand, MicroOperand]]:
+        """Find the numeric operand (``l`` or ``r``) of this instruction.
+
+        Returns:
+            A tuple ``(num_operand, other_operand)`` where *num_operand*
+            is the numeric one and *other_operand* is the remaining one,
+            or *None* if neither operand is a number.
+        """
+        result = self._raw.find_num_op()
+        if result is None:
+            return None
+        num_op, other_op = result
+        if num_op is None:
+            return None
+        return MicroOperand(num_op), MicroOperand(other_op)
+
+    def find_ins_op(
+        self, opcode: MicroOpcode = MicroOpcode.NOP
+    ) -> Optional[Tuple[MicroInstruction, MicroOperand]]:
+        """Find a sub-instruction operand (``l`` or ``r``) with the given opcode.
+
+        Args:
+            opcode: Opcode to search for. ``NOP`` (default) matches any.
+
+        Returns:
+            A tuple ``(sub_insn, other_operand)`` where *sub_insn* is
+            the nested instruction and *other_operand* is the remaining
+            operand, or *None* if no matching sub-instruction is found.
+        """
+        result = self._raw.find_ins_op(int(opcode))
+        if result is None:
+            return None
+        insn, other_op = result
+        if insn is None:
+            return None
+        return MicroInstruction(insn), MicroOperand(other_op)
+
+    @property
+    def modifies_d(self) -> bool:
+        """True if this instruction writes to its ``d`` operand.
+
+        Some instructions (e.g. ``stx``) do not modify ``d``.
+        """
+        return self._raw.modifies_d()
 
     def find_call(self, with_helpers: bool = False) -> Optional[MicroInstruction]:
         """Find the first call in this instruction tree."""
@@ -1044,6 +1802,15 @@ class MicroInstruction:
         return self._raw.for_all_ops(visitor)
 
     # -- mutation ----------------------------------------------------------
+
+    def make_nop(self) -> None:
+        """Convert this instruction to a NOP.
+
+        Erases all data except the prev/next links.  In most cases
+        prefer :meth:`MicroBlock.make_nop` which also marks the
+        block's use-def lists as dirty.
+        """
+        self._raw._make_nop()
 
     def swap(self, other: MicroInstruction) -> None:
         """Swap this instruction with another."""
@@ -1326,6 +2093,28 @@ class MicroBlock:
 
     def __len__(self) -> int:
         return sum(1 for _ in self)
+
+    def for_all_insns(self, visitor: MicroInstructionVisitor) -> int:
+        """Visit all instructions in this block (including sub-instructions).
+
+        Args:
+            visitor: A :class:`MicroInstructionVisitor`.
+
+        Returns:
+            Non-zero if the visitor stopped early.
+        """
+        return self._raw.for_all_insns(visitor)
+
+    def for_all_ops(self, visitor: MicroOperandVisitor) -> int:
+        """Visit all operands in this block (including sub-instruction operands).
+
+        Args:
+            visitor: A :class:`MicroOperandVisitor`.
+
+        Returns:
+            Non-zero if the visitor stopped early.
+        """
+        return self._raw.for_all_ops(visitor)
 
     def successors(self) -> Iterator[MicroBlock]:
         """Iterate over successor blocks."""
@@ -1767,9 +2556,25 @@ class MicroBlockArray:
         return self._raw.has_over_chains()
 
     @property
-    def final_type(self) -> Any:
-        """Return type of the function (raw ``tinfo_t``)."""
+    def final_type(self) -> tinfo_t:
+        """Return type of the function."""
         return self._raw.final_type
+
+    @property
+    def vars(self) -> MicroLocalVars:
+        """Local variables (available after ``MMAT_LVARS`` maturity)."""
+        return MicroLocalVars(self._raw.vars, self)
+
+    @property
+    def argidx(self) -> List[int]:
+        """Indices of function arguments in the local variable list."""
+        raw = self._raw.argidx
+        return [raw.at(i) for i in range(raw.size())]
+
+    @property
+    def retvaridx(self) -> int:
+        """Index of the return variable in the local variable list, or -1."""
+        return self._raw.retvaridx
 
     # -- iteration ---------------------------------------------------------
 
@@ -1859,7 +2664,83 @@ class MicroBlockArray:
             return MicroOperand(result)
         return None
 
+    # -- visitor dispatch --------------------------------------------------
+
+    def for_all_topinsns(self, visitor: MicroInstructionVisitor) -> int:
+        """Visit all top-level instructions across all blocks.
+
+        Args:
+            visitor: A :class:`MicroInstructionVisitor`.
+
+        Returns:
+            Non-zero if the visitor stopped early.
+        """
+        return self._raw.for_all_topinsns(visitor)
+
+    def for_all_insns(self, visitor: MicroInstructionVisitor) -> int:
+        """Visit all instructions (including sub-instructions) across all blocks.
+
+        Args:
+            visitor: A :class:`MicroInstructionVisitor`.
+
+        Returns:
+            Non-zero if the visitor stopped early.
+        """
+        return self._raw.for_all_insns(visitor)
+
+    def for_all_ops(self, visitor: MicroOperandVisitor) -> int:
+        """Visit all operands across all blocks and sub-instructions.
+
+        Args:
+            visitor: A :class:`MicroOperandVisitor`.
+
+        Returns:
+            Non-zero if the visitor stopped early.
+        """
+        return self._raw.for_all_ops(visitor)
+
     # -- mutation ----------------------------------------------------------
+
+    def alloc_kreg(self, size: int, check_size: bool = True) -> int:
+        """Allocate a kernel register.
+
+        Kernel registers are temporary registers that do not interfere
+        with the processor's own registers.
+
+        Args:
+            size: Size of the register in bytes.
+            check_size: If True, only sizes matching a basic type are
+                accepted.
+
+        Returns:
+            Allocated micro-register number, or ``mr_none`` on failure.
+        """
+        return self._raw.alloc_kreg(size, check_size)
+
+    def free_kreg(self, reg: int, size: int) -> None:
+        """Free a previously allocated kernel register.
+
+        Args:
+            reg: The micro-register number returned by :meth:`alloc_kreg`.
+            size: Size of the register in bytes (must match allocation).
+        """
+        self._raw.free_kreg(reg, size)
+
+    def alloc_fict_ea(self, real_ea: int = ida_idaapi.BADADDR) -> int:
+        """Allocate a fictional address for new instructions or variables.
+
+        Fictional addresses are unique addresses from an unallocated
+        range, useful when creating new instructions where reusing an
+        existing address would cause conflicts.
+
+        Args:
+            real_ea: A real instruction address to associate with,
+                or ``BADADDR``.
+
+        Returns:
+            A unique fictional address.
+        """
+        return self._raw.alloc_fict_ea(real_ea)
 
     def insert_block(self, index: int) -> MicroBlock:
         """Insert a new block at the given index."""
@@ -2243,7 +3124,18 @@ class MicroOperandVisitor(ida_hexrays.mop_visitor_t):
 
 
 class MicroInstructionOptimizer(ida_hexrays.optinsn_t):
-    """Per-instruction optimizer. Override :meth:`optimize`."""
+    """Per-instruction optimizer. Override :meth:`optimize`.
+
+    Use :meth:`install` to register and :meth:`uninstall` to remove::
+
+        class MyOpt(MicroInstructionOptimizer):
+            def optimize(self, block, insn, optflags):
+                ...
+                return 1  # number of changes
+
+        opt = MyOpt()
+        opt.install()
+    """
 
     def func(self, blk: Any, ins: Any, optflags: int = 0) -> int:
         mb = MicroBlock(blk)
@@ -2254,9 +3146,28 @@ class MicroInstructionOptimizer(ida_hexrays.optinsn_t):
         """Override this. Return number of changes made."""
         return 0
 
+    def install(self) -> None:
+        """Register this optimizer with the decompiler."""
+        ida_hexrays.optinsn_t.install(self)
+
+    def uninstall(self) -> None:
+        """Unregister this optimizer from the decompiler."""
+        ida_hexrays.optinsn_t.remove(self)
+
 
 class MicroBlockOptimizer(ida_hexrays.optblock_t):
-    """Per-block optimizer. Override :meth:`optimize`."""
+    """Per-block optimizer. Override :meth:`optimize`.
+
+    Use :meth:`install` to register and :meth:`uninstall` to remove::
+
+        class MyOpt(MicroBlockOptimizer):
+            def optimize(self, block):
+                ...
+                return 1  # modified
+
+        opt = MyOpt()
+        opt.install()
+    """
 
     def func(self, blk: Any) -> int:
         mb = MicroBlock(blk)
@@ -2265,6 +3176,14 @@ class MicroBlockOptimizer(ida_hexrays.optblock_t):
     def optimize(self, block: MicroBlock) -> int:
         """Override this. Return 1 if modified, 0 otherwise."""
         return 0
+
+    def install(self) -> None:
+        """Register this optimizer with the decompiler."""
+        ida_hexrays.optblock_t.install(self)
+
+    def uninstall(self) -> None:
+        """Unregister this optimizer from the decompiler."""
+        ida_hexrays.optblock_t.remove(self)
 
 
 class MicrocodeFilter(ida_hexrays.udc_filter_t):

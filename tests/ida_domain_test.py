@@ -4481,6 +4481,19 @@ def test_microcode_optimizer_base_classes(test_env):
     assert result == 0  # default returns 0
 
 
+def test_microcode_optimizer_install_uninstall(test_env):
+    """Test that optimizers can be installed and uninstalled."""
+    from ida_domain.microcode import MicroBlockOptimizer, MicroInstructionOptimizer
+
+    opt_insn = MicroInstructionOptimizer()
+    opt_insn.install()
+    opt_insn.uninstall()
+
+    opt_block = MicroBlockOptimizer()
+    opt_block.install()
+    opt_block.uninstall()
+
+
 def test_microcode_block_insert_remove_instruction(test_env):
     """Test insert_instruction and remove_instruction on MicroBlock."""
     from ida_domain.microcode import MicroInstruction, MicroOpcode
@@ -4649,7 +4662,7 @@ def test_microcode_visitor_top_level_flag(test_env):
 # ---------------------------------------------------------------------------
 
 
-def test_micro_operand_number_factory(test_env):
+def test_microcode_operand_number_factory(test_env):
     """Test MicroOperand.number() static factory."""
     from ida_domain.microcode import MicroOperand, MicroOperandType
 
@@ -4671,7 +4684,7 @@ def test_micro_operand_number_factory(test_env):
     assert zero.size == 1
 
 
-def test_micro_operand_reg_factory(test_env):
+def test_microcode_operand_reg_factory(test_env):
     """Test MicroOperand.reg() static factory."""
     import ida_hexrays
 
@@ -4685,7 +4698,7 @@ def test_micro_operand_reg_factory(test_env):
     assert op.is_register is True
 
 
-def test_micro_operand_helper_factory(test_env):
+def test_microcode_operand_helper_factory(test_env):
     """Test MicroOperand.helper() static factory."""
     from ida_domain.microcode import MicroOperand, MicroOperandType
 
@@ -4695,7 +4708,7 @@ def test_micro_operand_helper_factory(test_env):
     assert op.is_helper is True
 
 
-def test_micro_operand_block_ref_factory(test_env):
+def test_microcode_operand_block_ref_factory(test_env):
     """Test MicroOperand.new_block_ref() static factory."""
     from ida_domain.microcode import MicroOperand, MicroOperandType
 
@@ -4705,7 +4718,7 @@ def test_micro_operand_block_ref_factory(test_env):
     assert bool(op) is True
 
 
-def test_micro_operand_global_addr_factory(test_env):
+def test_microcode_operand_global_addr_factory(test_env):
     """Test MicroOperand.global_addr() static factory."""
     from ida_domain.microcode import MicroOperand, MicroOperandType
 
@@ -4716,7 +4729,7 @@ def test_micro_operand_global_addr_factory(test_env):
     assert op.is_global_address is True
 
 
-def test_micro_operand_empty_factory(test_env):
+def test_microcode_operand_empty_factory(test_env):
     """Test MicroOperand.empty() static factory."""
     from ida_domain.microcode import MicroOperand, MicroOperandType
 
@@ -4726,7 +4739,7 @@ def test_micro_operand_empty_factory(test_env):
     assert bool(op) is False
 
 
-def test_micro_operand_from_insn_factory(test_env):
+def test_microcode_operand_from_insn_factory(test_env):
     """Test MicroOperand.from_insn() creating a sub-instruction operand."""
     from ida_domain.microcode import (
         MicroInstruction,
@@ -4749,7 +4762,7 @@ def test_micro_operand_from_insn_factory(test_env):
     assert sub.opcode == MicroOpcode.ADD
 
 
-def test_micro_operand_stack_var_factory(test_env):
+def test_microcode_operand_stack_var_factory(test_env):
     """Test MicroOperand.stack_var() creates a stack variable operand."""
     from ida_domain.microcode import MicroOperand, MicroOperandType
 
@@ -4762,7 +4775,7 @@ def test_micro_operand_stack_var_factory(test_env):
     assert op.is_stack_var is True
 
 
-def test_micro_instruction_create_nop(test_env):
+def test_microcode_instruction_create_nop(test_env):
     """Test MicroInstruction.create() with no operands (NOP)."""
     from ida_domain.microcode import MicroInstruction, MicroOpcode
 
@@ -4774,7 +4787,7 @@ def test_micro_instruction_create_nop(test_env):
     assert insn.d.is_empty
 
 
-def test_micro_instruction_create_mov(test_env):
+def test_microcode_instruction_create_mov(test_env):
     """Test MicroInstruction.create() building a MOV with operands."""
     import ida_hexrays
 
@@ -4804,7 +4817,7 @@ def test_micro_instruction_create_mov(test_env):
     assert insn.r.is_empty
 
 
-def test_micro_instruction_create_goto(test_env):
+def test_microcode_instruction_create_goto(test_env):
     """Test MicroInstruction.create() building a GOTO."""
     from ida_domain.microcode import (
         MicroInstruction,
@@ -4821,7 +4834,7 @@ def test_micro_instruction_create_goto(test_env):
     assert insn.l.block_ref == 5
 
 
-def test_micro_instruction_create_add(test_env):
+def test_microcode_instruction_create_add(test_env):
     """Test MicroInstruction.create() building an ADD with all three operands."""
     import ida_hexrays
 
@@ -4845,7 +4858,7 @@ def test_micro_instruction_create_add(test_env):
     assert insn.d.is_register
 
 
-def test_micro_instruction_operand_setters(test_env):
+def test_microcode_instruction_operand_setters(test_env):
     """Test assigning MicroOperand to instruction l/r/d and left/right/dest."""
     import ida_hexrays
 
@@ -4882,7 +4895,7 @@ def test_micro_instruction_operand_setters(test_env):
     assert insn2.dest.is_register
 
 
-def test_micro_instruction_create_and_insert(test_env):
+def test_microcode_instruction_create_and_insert(test_env):
     """Test creating an instruction with factories and inserting into a block."""
     from ida_domain.microcode import (
         MicroInstruction,
@@ -4910,7 +4923,7 @@ def test_micro_instruction_create_and_insert(test_env):
     assert len(block) == original_count
 
 
-def test_micro_instruction_create_nested(test_env):
+def test_microcode_instruction_create_nested(test_env):
     """Test creating nested sub-instruction operands."""
     import ida_hexrays
 
@@ -4949,7 +4962,7 @@ def test_micro_instruction_create_nested(test_env):
 # ---------------------------------------------------------------------------
 
 
-def test_micro_block_build_operand_locations(test_env):
+def test_microcode_block_build_operand_locations(test_env):
     """Test build_operand_locations returns non-empty set for registers."""
     from ida_domain.microcode import MicroMaturity
 
@@ -4971,7 +4984,7 @@ def test_micro_block_build_operand_locations(test_env):
     assert found_register
 
 
-def test_micro_block_build_operand_locations_empty_for_constants(test_env):
+def test_microcode_block_build_operand_locations_empty_for_constants(test_env):
     """Test build_operand_locations returns empty set for non-trackable operands."""
     from ida_domain.microcode import MicroMaturity, MicroOperand
 
@@ -4986,7 +4999,7 @@ def test_micro_block_build_operand_locations_empty_for_constants(test_env):
     assert not locations
 
 
-def test_micro_find_def_backward_in_block(test_env):
+def test_microcode_find_def_backward_in_block(test_env):
     """Test find_def_backward finds a register definition within a block.
 
     In add_numbers at PREOPTIMIZED maturity:
@@ -5024,7 +5037,7 @@ def test_micro_find_def_backward_in_block(test_env):
     assert defining_insn.d.register == rax_operand.register
 
 
-def test_micro_find_def_backward_not_found(test_env):
+def test_microcode_find_def_backward_not_found(test_env):
     """Test find_def_backward returns None for function parameters."""
     from ida_domain.microcode import MicroMaturity, MicroOpcode
 
@@ -5050,7 +5063,7 @@ def test_micro_find_def_backward_not_found(test_env):
     assert result is None
 
 
-def test_micro_find_def_backward_start_none(test_env):
+def test_microcode_find_def_backward_start_none(test_env):
     """Test find_def_backward with start=None searches from block tail."""
     from ida_domain.microcode import MicroMaturity, MicroOpcode
 
@@ -5077,7 +5090,7 @@ def test_micro_find_def_backward_start_none(test_env):
     assert result.opcode == MicroOpcode.ADD
 
 
-def test_micro_trace_def_backward_single_block(test_env):
+def test_microcode_trace_def_backward_single_block(test_env):
     """Test trace_def_backward following mov chains within a block.
 
     In print_number block 2 at PREOPTIMIZED:
@@ -5124,7 +5137,7 @@ def test_micro_trace_def_backward_single_block(test_env):
     assert chain[-1].opcode == MicroOpcode.UDIV
 
 
-def test_micro_trace_def_backward_cross_block(test_env):
+def test_microcode_trace_def_backward_cross_block(test_env):
     """Test trace_def_backward crosses into predecessor block.
 
     In print_number at PREOPTIMIZED:
@@ -5165,7 +5178,7 @@ def test_micro_trace_def_backward_cross_block(test_env):
     assert chain[0].block.serial != call_block.serial
 
 
-def test_micro_trace_def_backward_empty_for_param(test_env):
+def test_microcode_trace_def_backward_empty_for_param(test_env):
     """Test trace_def_backward returns empty list for unresolvable operands."""
     from ida_domain.microcode import MicroMaturity, MicroOpcode
 
@@ -5189,7 +5202,7 @@ def test_micro_trace_def_backward_empty_for_param(test_env):
     assert chain == []
 
 
-def test_micro_trace_def_backward_stops_at_multi_pred(test_env):
+def test_microcode_trace_def_backward_stops_at_multi_pred(test_env):
     """Test trace_def_backward stops at blocks with multiple predecessors."""
     from ida_domain.microcode import MicroMaturity, MicroOpcode
 
@@ -5230,7 +5243,7 @@ def test_micro_trace_def_backward_stops_at_multi_pred(test_env):
 # ---------------------------------------------------------------------------
 
 
-def test_micro_instruction_optimize_solo(test_env):
+def test_microcode_instruction_optimize_solo(test_env):
     """Test optimize_solo runs without error and returns an int."""
     from ida_domain.microcode import MicroInstruction, MicroOpcode
 
@@ -5243,7 +5256,7 @@ def test_micro_instruction_optimize_solo(test_env):
     assert isinstance(result, int)
 
 
-def test_micro_block_mark_lists_dirty(test_env):
+def test_microcode_block_mark_lists_dirty(test_env):
     """Test mark_lists_dirty runs without error."""
     db = test_env
     func = db.functions.get_at(0x2A3)
@@ -5253,7 +5266,7 @@ def test_micro_block_mark_lists_dirty(test_env):
     block.mark_lists_dirty()
 
 
-def test_micro_block_contains_instruction(test_env):
+def test_microcode_block_contains_instruction(test_env):
     """Test contains_instruction correctly identifies block membership."""
     from ida_domain.microcode import MicroInstruction, MicroOpcode
 
@@ -5272,7 +5285,7 @@ def test_micro_block_contains_instruction(test_env):
     assert block1.contains_instruction(insn_in_b0) is False
 
 
-def test_micro_block_replace_instruction(test_env):
+def test_microcode_block_replace_instruction(test_env):
     """Test replace_instruction swaps + optimizes + marks dirty."""
     from ida_domain.microcode import MicroInstruction, MicroOpcode, MicroOperand
 
@@ -5294,7 +5307,7 @@ def test_micro_block_replace_instruction(test_env):
     assert target.opcode == MicroOpcode.NOP
 
 
-def test_micro_block_replace_instruction_wrong_block(test_env):
+def test_microcode_block_replace_instruction_wrong_block(test_env):
     """Test replace_instruction raises ValueError for wrong block."""
     import pytest
 
@@ -5316,7 +5329,7 @@ def test_micro_block_replace_instruction_wrong_block(test_env):
         block0.replace_instruction(insn_in_b1, nop)
 
 
-def test_micro_instruction_replace_with(test_env):
+def test_microcode_instruction_replace_with(test_env):
     """Test MicroInstruction.replace_with when parent block is known."""
     from ida_domain.microcode import MicroInstruction, MicroOpcode
 
@@ -5335,7 +5348,7 @@ def test_micro_instruction_replace_with(test_env):
     assert target.opcode == MicroOpcode.NOP
 
 
-def test_micro_instruction_replace_with_no_parent(test_env):
+def test_microcode_instruction_replace_with_no_parent(test_env):
     """Test replace_with raises RuntimeError when parent block is unknown."""
     import pytest
 
@@ -5349,7 +5362,7 @@ def test_micro_instruction_replace_with_no_parent(test_env):
         insn.replace_with(replacement)
 
 
-def test_micro_mba_verify(test_env):
+def test_microcode_mba_verify(test_env):
     """Test MicroBlockArray.verify() via the domain API."""
     db = test_env
     func = db.functions.get_at(0xC4)
@@ -5358,7 +5371,7 @@ def test_micro_mba_verify(test_env):
     mf.verify(always=True)
 
 
-def test_micro_mba_mark_chains_dirty(test_env):
+def test_microcode_mba_mark_chains_dirty(test_env):
     """Test MicroBlockArray.mark_chains_dirty() runs without error."""
     db = test_env
     func = db.functions.get_at(0x2A3)
@@ -5367,7 +5380,7 @@ def test_micro_mba_mark_chains_dirty(test_env):
     mf.mark_chains_dirty()
 
 
-def test_micro_mba_flags(test_env):
+def test_microcode_mba_flags(test_env):
     """Test MbaFlags read, set, and clear."""
     from ida_domain.microcode import MbaFlags
 
@@ -5397,7 +5410,7 @@ def test_micro_mba_flags(test_env):
         assert MbaFlags.NUMADDR not in mf.mba_flags
 
 
-def test_micro_block_edge_manipulation(test_env):
+def test_microcode_block_edge_manipulation(test_env):
     """Test MicroBlock edge add/remove/clear/replace."""
     from ida_domain.microcode import MicroBlockType, MicroMaturity
 
@@ -5459,7 +5472,7 @@ def test_micro_block_edge_manipulation(test_env):
             assert target_block.serial not in mf[p].successor_serials
 
 
-def test_micro_block_jump_target_and_fall_through(test_env):
+def test_microcode_block_jump_target_and_fall_through(test_env):
     """Test jump_target and fall_through on real microcode across functions and maturity levels."""
     from ida_domain.microcode import MicroBlockType, MicroMaturity, MicroOpcode
 
@@ -5538,7 +5551,7 @@ def test_micro_block_jump_target_and_fall_through(test_env):
     assert one_way_goto_count > 0, "No ONE_WAY+goto blocks found"
 
 
-def test_micro_block_is_simple_goto(test_env):
+def test_microcode_block_is_simple_goto(test_env):
     """Test MicroBlock.is_simple_goto detection."""
     from ida_domain.microcode import MicroBlockType, MicroOpcode
 
@@ -5554,7 +5567,7 @@ def test_micro_block_is_simple_goto(test_env):
             assert block.block_type == MicroBlockType.ONE_WAY
 
 
-def test_micro_block_flags(test_env):
+def test_microcode_block_flags(test_env):
     """Test MicroBlockFlags read, set, and clear."""
     from ida_domain.microcode import MicroBlockFlags
 
@@ -5580,7 +5593,7 @@ def test_micro_block_flags(test_env):
     assert block.block_flags == original
 
 
-def test_micro_mba_optimize_local(test_env):
+def test_microcode_mba_optimize_local(test_env):
     """Test MicroBlockArray.optimize_local() runs without error."""
     db = test_env
     func = db.functions.get_at(0x2A3)
@@ -5590,7 +5603,7 @@ def test_micro_mba_optimize_local(test_env):
     assert isinstance(result, int)
 
 
-def test_micro_mba_merge_blocks(test_env):
+def test_microcode_mba_merge_blocks(test_env):
     """Test MicroBlockArray.merge_blocks() runs without error."""
     db = test_env
     func = db.functions.get_at(0x2A3)
@@ -5600,7 +5613,7 @@ def test_micro_mba_merge_blocks(test_env):
     assert isinstance(result, bool)
 
 
-def test_micro_mba_build_graph(test_env):
+def test_microcode_mba_build_graph(test_env):
     """Test MicroBlockArray.build_graph() can rebuild the graph."""
     db = test_env
     func = db.functions.get_at(0xC4)
@@ -5617,7 +5630,7 @@ def test_micro_mba_build_graph(test_env):
     assert found_succs
 
 
-def test_micro_mba_copy_block(test_env):
+def test_microcode_mba_copy_block(test_env):
     """Test MicroBlockArray.copy_block() duplicates a block."""
     from ida_domain.microcode import CopyBlockFlags, MicroBlockType
 
@@ -5656,7 +5669,7 @@ def test_micro_mba_copy_block(test_env):
     assert mf[source_serial] is not None
 
 
-def test_micro_mba_serialize_roundtrip(test_env):
+def test_microcode_mba_serialize_roundtrip(test_env):
     """Test that serialize → deserialize produces equivalent microcode."""
     from ida_domain.microcode import MicroBlockArray, MicroMaturity
 
@@ -5685,4 +5698,646 @@ def test_micro_mba_serialize_roundtrip(test_env):
     # Re-serialize should produce identical bytes
     data2 = mf2.serialize()
     assert data == data2
+
+
+# ---------------------------------------------------------------------------
+# Operand constant predicates
+# ---------------------------------------------------------------------------
+
+
+def test_microcode_operand_constant_predicates(test_env):
+    """Test is_zero, is_one, is_positive_constant, is_negative_constant, is_equal_to."""
+    from ida_domain.microcode import MicroOperand
+
+    zero = MicroOperand.number(0, 4)
+    assert zero.is_zero
+    assert not zero.is_one
+    assert not zero.is_positive_constant
+    assert not zero.is_negative_constant
+    assert zero.is_equal_to(0)
+
+    one = MicroOperand.number(1, 4)
+    assert one.is_one
+    assert not one.is_zero
+    assert one.is_positive_constant
+    assert not one.is_negative_constant
+    assert one.is_equal_to(1)
+
+    big = MicroOperand.number(42, 4)
+    assert big.is_positive_constant
+    assert not big.is_negative_constant
+    assert big.is_equal_to(42)
+    assert not big.is_equal_to(43)
+
+    neg = MicroOperand.number(0xFFFFFFFF, 4)  # -1 as unsigned 32-bit
+    assert neg.is_negative_constant
+    assert neg.is_equal_to(-1, is_signed=True)
+
+    # Non-number operands should return False
+    reg = MicroOperand.reg(0, 4)
+    assert not reg.is_zero
+    assert not reg.is_one
+
+
+def test_microcode_operand_extended_type_checks(test_env):
+    """Test is_kreg, is_cc, is_bit_reg on operands."""
+    import ida_hexrays
+
+    from ida_domain.microcode import MicroOperand
+
+    # Condition code register (mreg 0 is cc on x86)
+    cc_reg = MicroOperand.reg(0, 1)
+    assert cc_reg.is_cc
+    assert cc_reg.is_bit_reg  # cc regs are bit regs
+
+    # General-purpose register — mr_first is the start of GP regs
+    gp_reg = MicroOperand.reg(ida_hexrays.mr_first, 4)
+    assert not gp_reg.is_kreg
+    assert not gp_reg.is_cc
+    assert not gp_reg.is_bit_reg
+
+    # Non-register operand
+    num = MicroOperand.number(5, 4)
+    assert not num.is_kreg
+    assert not num.is_cc
+    assert not num.is_bit_reg
+
+
+def test_microcode_operand_may_use_aliased_memory(test_env):
+    """Test may_use_aliased_memory property."""
+    from ida_domain.microcode import MicroOperand
+
+    # A simple number should not use aliased memory
+    num = MicroOperand.number(0, 4)
+    assert not num.may_use_aliased_memory
+
+    # A register should not use aliased memory
+    reg = MicroOperand.reg(0, 4)
+    assert not reg.may_use_aliased_memory
+
+
+def test_microcode_operand_has_side_effects_param(test_env):
+    """Test has_side_effects with include_ldx_and_divs parameter."""
+    from ida_domain.microcode import MicroOperand
+
+    num = MicroOperand.number(0, 4)
+    assert not num.has_side_effects()
+    assert not num.has_side_effects(include_ldx_and_divs=True)
+
+
+def test_microcode_operand_erase_but_keep_size(test_env):
+    """Test erase_but_keep_size preserves size."""
+    from ida_domain.microcode import MicroOperand, MicroOperandType
+
+    op = MicroOperand.number(42, 8)
+    assert op.size == 8
+    assert op.type == MicroOperandType.NUMBER
+
+    op.erase_but_keep_size()
+    assert op.type == MicroOperandType.EMPTY
+    assert op.size == 8  # size preserved
+
+
+def test_microcode_operand_reg_pair_factory(test_env):
+    """Test MicroOperand.reg_pair() factory."""
+    from ida_domain.microcode import MicroOperand, MicroOperandType
+
+    pair = MicroOperand.reg_pair(0, 4, 4)  # lo=mreg0, hi=mreg4, 4 bytes each
+    assert pair.type == MicroOperandType.PAIR
+    assert pair.size == 8  # 2 * halfsize
+    lo, hi = pair.pair
+    assert lo.is_register
+    assert hi.is_register
+
+
+def test_microcode_operand_local_var_factory(test_env):
+    """Test MicroOperand.local_var() factory."""
+    from ida_domain.microcode import MicroMaturity, MicroOperand, MicroOperandType
+
+    db = test_env
+    func = db.functions.get_at(0x2BC)
+    mf = db.microcode.generate(func, maturity=MicroMaturity.LVARS)
+
+    # mba.vars should have at least one local variable after LVARS maturity
+    if mf.raw_mba.vars.size() > 0:
+        lv = MicroOperand.local_var(mf, 0)
+        assert lv.type == MicroOperandType.LOCAL_VAR
+
+
+# ---------------------------------------------------------------------------
+# Instruction query methods
+# ---------------------------------------------------------------------------
+
+
+def test_microcode_instruction_is_helper(test_env):
+    """Test MicroInstruction.is_helper() method."""
+    from ida_domain.microcode import MicroMaturity
+
+    db = test_env
+    func = db.functions.get_at(0x2BC)
+    mf = db.microcode.generate(func, maturity=MicroMaturity.PREOPTIMIZED)
+
+    for insn in mf.instructions():
+        # is_helper should not crash, and should return bool
+        result = insn.is_helper("memcpy")
+        assert isinstance(result, bool)
+
+
+def test_microcode_instruction_contains_call(test_env):
+    """Test MicroInstruction.contains_call() method."""
+    from ida_domain.microcode import MicroMaturity
+
+    db = test_env
+    # Use a function that is known to contain calls
+    func = db.functions.get_at(0xC4)
+    mf = db.microcode.generate(func, maturity=MicroMaturity.CALLS)
+
+    has_call = False
+    for insn in mf.instructions():
+        result = insn.contains_call()
+        assert isinstance(result, bool)
+        if result:
+            has_call = True
+            assert isinstance(insn.contains_call(with_helpers=True), bool)
+            break
+
+    # Even if no call found, the method should work without error.
+    # Just verify the API is functional.
+    if not has_call:
+        # Try with helpers too
+        for insn in mf.instructions():
+            insn.contains_call(with_helpers=True)
+            break
+
+
+def test_microcode_instruction_is_noret_call(test_env):
+    """Test MicroInstruction.is_noret_call() method."""
+    from ida_domain.microcode import MicroMaturity
+
+    db = test_env
+    func = db.functions.get_at(0x2BC)
+    mf = db.microcode.generate(func, maturity=MicroMaturity.CALLS)
+
+    for insn in mf.instructions():
+        # Should not crash, return bool
+        result = insn.is_noret_call()
+        assert isinstance(result, bool)
+
+
+def test_microcode_instruction_find_num_op(test_env):
+    """Test MicroInstruction.find_num_op() method."""
+    from ida_domain.microcode import MicroMaturity, MicroOperand
+
+    db = test_env
+    func = db.functions.get_at(0x2BC)
+    mf = db.microcode.generate(func, maturity=MicroMaturity.PREOPTIMIZED)
+
+    found_num = False
+    for insn in mf.instructions():
+        result = insn.find_num_op()
+        if result is not None:
+            num_op, other_op = result
+            assert isinstance(num_op, MicroOperand)
+            assert isinstance(other_op, MicroOperand)
+            assert num_op.is_number
+            found_num = True
+            break
+    assert found_num, "Expected at least one instruction with a numeric operand"
+
+
+def test_microcode_instruction_find_ins_op(test_env):
+    """Test MicroInstruction.find_ins_op() method."""
+    from ida_domain.microcode import MicroInstruction, MicroMaturity, MicroOperand
+
+    db = test_env
+    func = db.functions.get_at(0x2BC)
+    mf = db.microcode.generate(func, maturity=MicroMaturity.PREOPTIMIZED)
+
+    for insn in mf.instructions():
+        # Default (NOP = any opcode)
+        result = insn.find_ins_op()
+        if result is not None:
+            sub_insn, other_op = result
+            assert isinstance(sub_insn, MicroInstruction)
+            assert isinstance(other_op, MicroOperand)
+            break
+
+
+def test_microcode_instruction_modifies_d(test_env):
+    """Test MicroInstruction.modifies_d property."""
+    from ida_domain.microcode import MicroMaturity, MicroOpcode
+
+    db = test_env
+    func = db.functions.get_at(0x2BC)
+    mf = db.microcode.generate(func, maturity=MicroMaturity.PREOPTIMIZED)
+
+    for insn in mf.instructions():
+        result = insn.modifies_d
+        assert isinstance(result, bool)
+        # MOV always modifies d
+        if insn.opcode == MicroOpcode.MOV:
+            assert result is True
+            break
+
+
+def test_microcode_instruction_has_side_effects_param(test_env):
+    """Test MicroInstruction.has_side_effects() with parameter."""
+    from ida_domain.microcode import MicroMaturity
+
+    db = test_env
+    func = db.functions.get_at(0x2BC)
+    mf = db.microcode.generate(func, maturity=MicroMaturity.PREOPTIMIZED)
+
+    for insn in mf.instructions():
+        r1 = insn.has_side_effects()
+        r2 = insn.has_side_effects(include_ldx_and_divs=True)
+        assert isinstance(r1, bool)
+        assert isinstance(r2, bool)
+        # With ldx/divs included, result should be >= without
+        if r1:
+            assert r2
+        break
+
+
+def test_microcode_instruction_make_nop(test_env):
+    """Test MicroInstruction.make_nop() on a detached instruction."""
+    from ida_domain.microcode import MicroInstruction, MicroOpcode, MicroOperand
+
+    insn = MicroInstruction.create(
+        ea=0x1000, opcode=MicroOpcode.MOV,
+        left=MicroOperand.number(42, 4),
+        dest=MicroOperand.reg(0, 4),
+    )
+    assert insn.opcode == MicroOpcode.MOV
+    insn.make_nop()
+    assert insn.opcode == MicroOpcode.NOP
+
+
+# ---------------------------------------------------------------------------
+# MicroBlockArray — alloc_kreg, free_kreg, alloc_fict_ea
+# ---------------------------------------------------------------------------
+
+
+def test_microcode_mba_alloc_kreg(test_env):
+    """Test alloc_kreg / free_kreg roundtrip."""
+    from ida_domain.microcode import MicroMaturity
+
+    db = test_env
+    func = db.functions.get_at(0x2BC)
+    mf = db.microcode.generate(func, maturity=MicroMaturity.PREOPTIMIZED)
+
+    import ida_hexrays
+
+    kreg = mf.alloc_kreg(4)
+    assert kreg != ida_hexrays.mr_none
+    # Should not raise
+    mf.free_kreg(kreg, 4)
+
+
+def test_microcode_mba_alloc_fict_ea(test_env):
+    """Test alloc_fict_ea returns unique addresses."""
+    from ida_domain.microcode import MicroMaturity
+
+    db = test_env
+    func = db.functions.get_at(0x2BC)
+    mf = db.microcode.generate(func, maturity=MicroMaturity.PREOPTIMIZED)
+
+    ea1 = mf.alloc_fict_ea()
+    ea2 = mf.alloc_fict_ea()
+    assert ea1 != ea2  # must be unique
+
+
+# ---------------------------------------------------------------------------
+# Visitor dispatch on MicroBlock and MicroBlockArray
+# ---------------------------------------------------------------------------
+
+
+def test_microcode_block_for_all_insns(test_env):
+    """Test MicroBlock.for_all_insns() visitor dispatch."""
+    from ida_domain.microcode import MicroInstructionVisitor, MicroMaturity
+
+    db = test_env
+    func = db.functions.get_at(0x2BC)
+    mf = db.microcode.generate(func, maturity=MicroMaturity.PREOPTIMIZED)
+
+    class Counter(MicroInstructionVisitor):
+        def __init__(self):
+            super().__init__()
+            self.count = 0
+
+        def visit(self, insn):
+            self.count += 1
+            return 0
+
+    for block in mf.blocks(skip_sentinels=True):
+        counter = Counter()
+        block.for_all_insns(counter)
+        # for_all_insns visits sub-instructions too, so count >= len(block)
+        assert counter.count >= len(block)
+        break
+
+
+def test_microcode_block_for_all_ops(test_env):
+    """Test MicroBlock.for_all_ops() visitor dispatch."""
+    from ida_domain.microcode import MicroMaturity, MicroOperandVisitor
+
+    db = test_env
+    func = db.functions.get_at(0x2BC)
+    mf = db.microcode.generate(func, maturity=MicroMaturity.PREOPTIMIZED)
+
+    class OpCounter(MicroOperandVisitor):
+        def __init__(self):
+            super().__init__()
+            self.count = 0
+
+        def visit(self, operand, type_info, is_target):
+            self.count += 1
+            return 0
+
+    for block in mf.blocks(skip_sentinels=True):
+        counter = OpCounter()
+        block.for_all_ops(counter)
+        assert counter.count > 0
+        break
+
+
+def test_microcode_mba_for_all_topinsns(test_env):
+    """Test MicroBlockArray.for_all_topinsns() visitor dispatch."""
+    from ida_domain.microcode import MicroInstructionVisitor, MicroMaturity
+
+    db = test_env
+    func = db.functions.get_at(0x2BC)
+    mf = db.microcode.generate(func, maturity=MicroMaturity.PREOPTIMIZED)
+
+    class Counter(MicroInstructionVisitor):
+        def __init__(self):
+            super().__init__()
+            self.count = 0
+
+        def visit(self, insn):
+            self.count += 1
+            return 0
+
+    counter = Counter()
+    mf.for_all_topinsns(counter)
+    # Should visit at least as many as sum of block lengths
+    total_top = sum(len(b) for b in mf.blocks(skip_sentinels=True))
+    assert counter.count == total_top
+
+
+def test_microcode_mba_for_all_insns(test_env):
+    """Test MicroBlockArray.for_all_insns() visits sub-instructions too."""
+    from ida_domain.microcode import MicroInstructionVisitor, MicroMaturity
+
+    db = test_env
+    func = db.functions.get_at(0x2BC)
+    mf = db.microcode.generate(func, maturity=MicroMaturity.PREOPTIMIZED)
+
+    class Counter(MicroInstructionVisitor):
+        def __init__(self):
+            super().__init__()
+            self.count = 0
+
+        def visit(self, insn):
+            self.count += 1
+            return 0
+
+    top_counter = Counter()
+    mf.for_all_topinsns(top_counter)
+
+    all_counter = Counter()
+    mf.for_all_insns(all_counter)
+
+    # for_all_insns includes sub-instructions, so count >= topinsns
+    assert all_counter.count >= top_counter.count
+
+
+def test_microcode_mba_for_all_ops(test_env):
+    """Test MicroBlockArray.for_all_ops() visitor dispatch."""
+    from ida_domain.microcode import MicroMaturity, MicroOperandVisitor
+
+    db = test_env
+    func = db.functions.get_at(0x2BC)
+    mf = db.microcode.generate(func, maturity=MicroMaturity.PREOPTIMIZED)
+
+    class OpCounter(MicroOperandVisitor):
+        def __init__(self):
+            super().__init__()
+            self.count = 0
+
+        def visit(self, operand, type_info, is_target):
+            self.count += 1
+            return 0
+
+    counter = OpCounter()
+    mf.for_all_ops(counter)
+    assert counter.count > 0
+
+
+def test_microcode_mba_optimize_global(test_env):
+    """Test MicroBlockArray.optimize_global()."""
+    from ida_domain.microcode import MicroError, MicroMaturity
+
+    db = test_env
+    func = db.functions.get_at(0x2BC)
+    mf = db.microcode.generate(func, maturity=MicroMaturity.GLBOPT1)
+
+    result = mf.optimize_global()
+    assert isinstance(result, MicroError)
+
+
+def test_microcode_block_optimize_block(test_env):
+    """Test MicroBlock.optimize_block()."""
+    from ida_domain.microcode import MicroMaturity
+
+    db = test_env
+    func = db.functions.get_at(0x2BC)
+    mf = db.microcode.generate(func, maturity=MicroMaturity.PREOPTIMIZED)
+
+    for block in mf.blocks(skip_sentinels=True):
+        result = block.optimize_block()
+        assert isinstance(result, int)
+        break
+
+
+def test_microcode_block_optimize_useless_jump(test_env):
+    """Test MicroBlock.optimize_useless_jump()."""
+    from ida_domain.microcode import MicroMaturity
+
+    db = test_env
+    func = db.functions.get_at(0x2BC)
+    mf = db.microcode.generate(func, maturity=MicroMaturity.PREOPTIMIZED)
+
+    for block in mf.blocks(skip_sentinels=True):
+        result = block.optimize_useless_jump()
+        assert isinstance(result, int)
+        break
+
+
+def test_microcode_call_info_wrapper(test_env):
+    """Test MicroCallInfo and MicroCallArg wrappers."""
+    from ida_domain.microcode import (
+        CallInfoFlags,
+        FunctionRole,
+        MicroCallArg,
+        MicroCallInfo,
+        MicroLocationSet,
+        MicroMaturity,
+    )
+
+    db = test_env
+    func = db.functions.get_at(0x2BC)
+    mf = db.microcode.generate(func, maturity=MicroMaturity.CALLS)
+
+    # Find a call instruction
+    call_info = None
+    for insn in mf.instructions(skip_sentinels=True):
+        if insn.is_call():
+            call_info = insn.d.call_info
+            break
+
+    assert call_info is not None
+    assert isinstance(call_info, MicroCallInfo)
+
+    # Basic properties
+    assert isinstance(call_info.callee, int)
+    assert isinstance(call_info.arg_count, int)
+    assert call_info.arg_count > 0
+    assert isinstance(call_info.calling_convention, int)
+    assert isinstance(call_info.call_spd, int)
+    assert isinstance(call_info.stkargs_top, int)
+
+    # Flags and role enums
+    assert isinstance(call_info.flags, CallInfoFlags)
+    assert isinstance(call_info.role, FunctionRole)
+
+    # Boolean predicates
+    assert isinstance(call_info.is_vararg, bool)
+    assert isinstance(call_info.is_noret, bool)
+    assert isinstance(call_info.is_pure, bool)
+
+    # Return type
+    assert call_info.return_type is not None
+
+    # Location sets
+    assert isinstance(call_info.spoiled, MicroLocationSet)
+    assert isinstance(call_info.dead_regs, MicroLocationSet)
+    assert isinstance(call_info.return_regs, MicroLocationSet)
+    assert isinstance(call_info.pass_regs, MicroLocationSet)
+    assert isinstance(call_info.visible_memory, MicroLocationSet)
+
+    # Arguments
+    args = call_info.args
+    assert len(args) == call_info.arg_count
+    for arg in args:
+        assert isinstance(arg, MicroCallArg)
+        assert isinstance(arg.size, int)
+        assert arg.size > 0
+        assert isinstance(arg.name, str)
+        assert arg.type is not None
+        assert arg.operand is not None
+
+    # Text representations
+    assert isinstance(str(call_info), str)
+    assert len(str(call_info)) > 0
+    assert isinstance(repr(call_info), str)
+    assert 'MicroCallInfo' in repr(call_info)
+
+    # Arg text representations
+    arg = args[0]
+    assert isinstance(str(arg), str)
+    assert len(str(arg)) > 0
+    assert 'MicroCallArg' in repr(arg)
+
+    # Raw access
+    assert call_info.raw_call_info is not None
+    assert arg.raw_arg is not None
+
+
+def test_microcode_local_vars_wrapper(test_env):
+    """Test MicroLocalVar, MicroLocalVars, and MicroBlockArray.vars."""
+    from ida_domain.microcode import MicroLocalVar, MicroLocalVars, MicroMaturity
+
+    db = test_env
+    func = db.functions.get_at(0x2A3)  # add_numbers
+    mf = db.microcode.generate(func, maturity=MicroMaturity.LVARS)
+
+    # Access vars
+    lvars = mf.vars
+    assert isinstance(lvars, MicroLocalVars)
+    assert len(lvars) > 0
+
+    # Indexing
+    v0 = lvars[0]
+    assert isinstance(v0, MicroLocalVar)
+    v_last = lvars[-1]
+    assert isinstance(v_last, MicroLocalVar)
+
+    # Iteration
+    all_vars = list(lvars)
+    assert len(all_vars) == len(lvars)
+
+    # Basic properties
+    assert isinstance(v0.name, str)
+    assert len(v0.name) > 0
+    assert isinstance(v0.width, int)
+    assert v0.width > 0
+    assert isinstance(v0.def_ea, int)
+    assert isinstance(v0.def_block, int)
+    assert isinstance(v0.comment, str)
+    assert isinstance(v0.divisor, int)
+    assert v0.type_info is not None
+    assert v0.location is not None
+
+    # Boolean properties
+    assert isinstance(v0.is_arg, bool)
+    assert isinstance(v0.is_result, bool)
+    assert isinstance(v0.is_used, bool)
+    assert isinstance(v0.is_typed, bool)
+    assert isinstance(v0.has_nice_name, bool)
+    assert isinstance(v0.has_user_name, bool)
+    assert isinstance(v0.has_user_type, bool)
+    assert isinstance(v0.has_user_info, bool)
+    assert isinstance(v0.is_fake, bool)
+    assert isinstance(v0.is_overlapped, bool)
+    assert isinstance(v0.is_floating, bool)
+    assert isinstance(v0.is_spoiled, bool)
+
+    # Boolean methods
+    assert isinstance(v0.is_stk_var(), bool)
+    assert isinstance(v0.is_reg_var(), bool)
+    assert isinstance(v0.is_scattered(), bool)
+    assert isinstance(v0.is_thisarg(), bool)
+    assert isinstance(v0.is_dummy_arg(), bool)
+
+    # Arguments list
+    args = lvars.arguments
+    assert isinstance(args, list)
+    assert all(isinstance(a, MicroLocalVar) for a in args)
+    assert all(a.is_arg for a in args)
+
+    # find_by_name
+    found = lvars.find_by_name(v0.name)
+    assert found is not None
+    assert found.name == v0.name
+    assert lvars.find_by_name('__nonexistent_var__') is None
+
+    # find_lvar
+    found2 = lvars.find_lvar(v0.location, v0.width)
+    assert found2 is not None
+    assert found2.name == v0.name
+
+    # argidx and retvaridx
+    assert isinstance(mf.argidx, list)
+    assert isinstance(mf.retvaridx, int)
+
+    # Text representations
+    assert isinstance(str(v0), str)
+    assert len(str(v0)) > 0
+    assert 'MicroLocalVar' in repr(v0)
+    assert 'MicroLocalVars' in repr(lvars)
+
+    # Raw access
+    assert v0.raw_var is not None
+    assert lvars.raw_lvars is not None
 
