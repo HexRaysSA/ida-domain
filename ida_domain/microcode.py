@@ -542,8 +542,11 @@ class MicroCallArg:
     micro-operand).
     """
 
-    def __init__(self, raw: mcallarg_t):
+    def __init__(
+        self, raw: mcallarg_t, _parent_call: Optional[MicroCallInfo] = None
+    ):
         self._raw = raw
+        self._parent_call = _parent_call
 
     @property
     def raw_arg(self) -> mcallarg_t:
@@ -608,8 +611,11 @@ class MicroCallInfo:
     return type, and spoiled/dead registers.
     """
 
-    def __init__(self, raw: mcallinfo_t):
+    def __init__(
+        self, raw: mcallinfo_t, _parent_op: Optional[MicroOperand] = None
+    ):
         self._raw = raw
+        self._parent_op = _parent_op
 
     @property
     def raw_call_info(self) -> mcallinfo_t:
@@ -705,7 +711,7 @@ class MicroCallInfo:
     def args(self) -> List[MicroCallArg]:
         """List of call arguments as :class:`MicroCallArg` wrappers."""
         raw_args = self._raw.args
-        return [MicroCallArg(raw_args.at(i)) for i in range(raw_args.size())]
+        return [MicroCallArg(raw_args.at(i), self) for i in range(raw_args.size())]
 
     @property
     def arg_count(self) -> int:
@@ -741,8 +747,11 @@ class MicroLocalVar:
     Provides access to the variable's name, type, location, and flags.
     """
 
-    def __init__(self, raw: lvar_t):
+    def __init__(
+        self, raw: lvar_t, _parent_vars: Optional[MicroLocalVars] = None
+    ):
         self._raw = raw
+        self._parent_vars = _parent_vars
 
     @property
     def raw_var(self) -> lvar_t:
@@ -951,11 +960,11 @@ class MicroLocalVars:
             raise IndexError(
                 f'Variable index out of range (0..{self._raw.size() - 1})'
             )
-        return MicroLocalVar(self._raw.at(i))
+        return MicroLocalVar(self._raw.at(i), self)
 
     def __iter__(self) -> Iterator[MicroLocalVar]:
         for i in range(self._raw.size()):
-            yield MicroLocalVar(self._raw.at(i))
+            yield MicroLocalVar(self._raw.at(i), self)
 
     def find_by_name(self, name: str) -> Optional[MicroLocalVar]:
         """Find a variable by name.
@@ -972,7 +981,7 @@ class MicroLocalVars:
         for i in range(self._raw.size()):
             v = self._raw.at(i)
             if v.name == name:
-                return MicroLocalVar(v)
+                return MicroLocalVar(v, self)
         return None
 
     def find_lvar(self, location: vdloc_t, width: int) -> Optional[MicroLocalVar]:
@@ -988,7 +997,7 @@ class MicroLocalVars:
         idx = self._raw.find_lvar(location, width)
         if idx < 0:
             return None
-        return MicroLocalVar(self._raw.at(idx))
+        return MicroLocalVar(self._raw.at(idx), self)
 
     def find_stkvar(self, spoff: int, width: int) -> Optional[MicroLocalVar]:
         """Find a stack variable by its stack offset and width.
@@ -1003,12 +1012,12 @@ class MicroLocalVars:
         idx = self._raw.find_stkvar(spoff, width)
         if idx < 0:
             return None
-        return MicroLocalVar(self._raw.at(idx))
+        return MicroLocalVar(self._raw.at(idx), self)
 
     @property
     def arguments(self) -> List[MicroLocalVar]:
         """List of variables that are function arguments."""
-        return [MicroLocalVar(self._raw.at(i))
+        return [MicroLocalVar(self._raw.at(i), self)
                 for i in range(self._raw.size())
                 if self._raw.at(i).is_arg_var]
 
@@ -1037,8 +1046,11 @@ class MicroOperand:
 
     _T = MicroOperandType  # shorthand for type checks
 
-    def __init__(self, raw: mop_t):
+    def __init__(
+        self, raw: mop_t, _parent_insn: Optional[MicroInstruction] = None
+    ):
         self._raw = raw
+        self._parent_insn = _parent_insn
 
     # -- factories ---------------------------------------------------------
 
@@ -1250,7 +1262,12 @@ class MicroOperand:
     def sub_instruction(self) -> Optional[MicroInstruction]:
         """Nested :class:`MicroInstruction` for ``mop_d`` operands, or *None*."""
         if self._raw.t == self._T.SUB_INSN:
-            return MicroInstruction(self._raw.d)
+            parent_block = (
+                self._parent_insn._parent_block
+                if self._parent_insn is not None
+                else None
+            )
+            return MicroInstruction(self._raw.d, parent_block)
         return None
 
     @property
@@ -1271,7 +1288,7 @@ class MicroOperand:
     def call_info(self) -> Optional[MicroCallInfo]:
         """Call information for ``mop_f`` operands, or *None*."""
         if self._raw.t == self._T.CALL_INFO:
-            return MicroCallInfo(self._raw.f)
+            return MicroCallInfo(self._raw.f, self)
         return None
 
     @property
@@ -1285,7 +1302,7 @@ class MicroOperand:
     def address_target(self) -> Optional[MicroOperand]:
         """Inner operand of an address-of (``mop_a``) operand, or *None*."""
         if self._raw.t == self._T.ADDR_OF:
-            return MicroOperand(self._raw.a)
+            return MicroOperand(self._raw.a, self._parent_insn)
         return None
 
     @property
@@ -1293,8 +1310,8 @@ class MicroOperand:
         """(low, high) operand pair for ``mop_p`` operands, or *None*."""
         if self._raw.t == self._T.PAIR:
             return (
-                MicroOperand(self._raw.pair.lop),
-                MicroOperand(self._raw.pair.hop),
+                MicroOperand(self._raw.pair.lop, self._parent_insn),
+                MicroOperand(self._raw.pair.hop, self._parent_insn),
             )
         return None
 
@@ -1555,7 +1572,7 @@ class MicroInstruction:
     @property
     def l(self) -> MicroOperand:
         """Left operand."""
-        return MicroOperand(self._raw.l)
+        return MicroOperand(self._raw.l, self)
 
     @l.setter
     def l(self, operand: MicroOperand) -> None:
@@ -1564,7 +1581,7 @@ class MicroInstruction:
     @property
     def r(self) -> MicroOperand:
         """Right operand."""
-        return MicroOperand(self._raw.r)
+        return MicroOperand(self._raw.r, self)
 
     @r.setter
     def r(self, operand: MicroOperand) -> None:
@@ -1573,7 +1590,7 @@ class MicroInstruction:
     @property
     def d(self) -> MicroOperand:
         """Destination operand."""
-        return MicroOperand(self._raw.d)
+        return MicroOperand(self._raw.d, self)
 
     @d.setter
     def d(self, operand: MicroOperand) -> None:
@@ -1633,7 +1650,9 @@ class MicroInstruction:
 
         False for sub-instructions nested inside an operand (``mop_d``).
         """
-        return self._parent_block is not None
+        if self._parent_block is None:
+            return False
+        return self._parent_block.contains_instruction(self)
 
     # -- iteration ---------------------------------------------------------
 
@@ -1728,7 +1747,7 @@ class MicroInstruction:
         num_op, other_op = result
         if num_op is None:
             return None
-        return MicroOperand(num_op), MicroOperand(other_op)
+        return MicroOperand(num_op, self), MicroOperand(other_op, self)
 
     def find_ins_op(
         self, opcode: MicroOpcode = MicroOpcode.NOP
@@ -1749,7 +1768,10 @@ class MicroInstruction:
         insn, other_op = result
         if insn is None:
             return None
-        return MicroInstruction(insn), MicroOperand(other_op)
+        return (
+            MicroInstruction(insn, self._parent_block),
+            MicroOperand(other_op, self),
+        )
 
     @property
     def modifies_d(self) -> bool:
@@ -2658,7 +2680,13 @@ class MicroBlockArray:
     def find_mop(
         self, ctx: Any, ea: int, is_dest: bool, locations: MicroLocationSet
     ) -> Optional[MicroOperand]:
-        """Find a micro-operand by context, address, and location set."""
+        """Find a micro-operand by context, address, and location set.
+
+        Note: The returned operand does not carry a parent instruction
+        reference because ``find_mop`` does not expose which instruction
+        the operand belongs to.  The caller must hold a reference to this
+        :class:`MicroBlockArray` while using the result.
+        """
         result = self._raw.find_mop(ctx, ea, is_dest, locations._raw)
         if result:
             return MicroOperand(result)
@@ -2778,7 +2806,12 @@ class MicroBlockArray:
         self._raw.set_maturity(int(maturity))
 
     def create_helper_call(self, ea: int, helper_name: str) -> MicroInstruction:
-        """Create a call to a helper function."""
+        """Create a call to a helper function.
+
+        The returned instruction is detached (not yet in any block).
+        The caller must hold a reference to this :class:`MicroBlockArray`
+        while using the result.
+        """
         insn = self._raw.create_helper_call(ea, helper_name)
         return MicroInstruction(insn)
 
@@ -3096,7 +3129,8 @@ class MicroInstructionVisitor(ida_hexrays.minsn_visitor_t):
 
     def visit_minsn(self) -> int:
         is_top = self.curins.obj_id == self.topins.obj_id
-        parent = MicroBlock(self.blk) if is_top else None
+        mba = MicroBlockArray(self.blk.mba)
+        parent = MicroBlock(self.blk, mba) if is_top else None
         return self.visit(MicroInstruction(self.curins, parent))
 
     def visit(self, insn: MicroInstruction) -> int:
@@ -3111,7 +3145,10 @@ class MicroOperandVisitor(ida_hexrays.mop_visitor_t):
     """
 
     def visit_mop(self, op: Any, type_: Any, is_target: bool) -> int:
-        return self.visit(MicroOperand(op), type_, is_target)
+        mba = MicroBlockArray(self.mba)
+        blk = MicroBlock(self.blk, mba)
+        insn = MicroInstruction(self.curins, blk)
+        return self.visit(MicroOperand(op, insn), type_, is_target)
 
     def visit(self, operand: MicroOperand, type_info: Any, is_target: bool) -> int:
         """Override this. Return 0 to continue, non-zero to stop."""
@@ -3138,7 +3175,8 @@ class MicroInstructionOptimizer(ida_hexrays.optinsn_t):
     """
 
     def func(self, blk: Any, ins: Any, optflags: int = 0) -> int:
-        mb = MicroBlock(blk)
+        mba = MicroBlockArray(blk.mba)
+        mb = MicroBlock(blk, mba)
         mi = MicroInstruction(ins, mb)
         return self.optimize(mb, mi, optflags)
 
@@ -3170,7 +3208,8 @@ class MicroBlockOptimizer(ida_hexrays.optblock_t):
     """
 
     def func(self, blk: Any) -> int:
-        mb = MicroBlock(blk)
+        mba = MicroBlockArray(blk.mba)
+        mb = MicroBlock(blk, mba)
         return self.optimize(mb)
 
     def optimize(self, block: MicroBlock) -> int:
