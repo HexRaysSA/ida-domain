@@ -24,7 +24,7 @@ from typing_extensions import TYPE_CHECKING, Any, Iterator, List, Optional, Tupl
 from .base import DatabaseEntity, check_db_open, decorate_all_methods
 
 if TYPE_CHECKING:
-    from ida_hexrays import vdloc_t
+    from ida_hexrays import ivlset_t, valrng_t, vdloc_t, vivl_t
     from ida_idaapi import ea_t
     from ida_typeinf import argloc_t, tinfo_t
 
@@ -693,9 +693,9 @@ class MicroCallInfo:
         return MicroLocationSet(self._raw.pass_regs)
 
     @property
-    def visible_memory(self) -> MicroLocationSet:
-        """Visible memory set."""
-        return MicroLocationSet(self._raw.visible_memory)
+    def visible_memory(self) -> ivlset_t:
+        """Memory visible to the call (``ivlset_t``)."""
+        return self._raw.visible_memory
 
     @property
     def call_spd(self) -> int:
@@ -1258,6 +1258,22 @@ class MicroOperand:
             return self._raw.s.off
         return None
 
+    def get_stkvar(self) -> Optional[Tuple[int, int]]:
+        """Resolve a stack variable operand to its frame index and IDA offset.
+
+        Returns:
+            A tuple ``(frame_index, ida_offset)`` or *None* if this is not
+            a stack variable operand or the variable cannot be resolved.
+            *frame_index* is the index of the struct member in the frame,
+            *ida_offset* is the IDA-style stack offset.
+        """
+        if self._raw.t != self._T.STACK_VAR:
+            return None
+        idx = self._raw.get_stkvar()
+        if idx < 0:
+            return None
+        return (idx, self._raw.s.off)
+
     @property
     def sub_instruction(self) -> Optional[MicroInstruction]:
         """Nested :class:`MicroInstruction` for ``mop_d`` operands, or *None*."""
@@ -1347,6 +1363,18 @@ class MicroOperand:
 
     # -- constant predicates -----------------------------------------------
 
+    def is_constant(self, is_signed: bool = True) -> Optional[int]:
+        """Retrieve the value of a constant integer operand.
+
+        Args:
+            is_signed: Interpret the value as signed.
+
+        Returns:
+            The integer value if the operand is a numeric constant
+            (``mop_n``), or *None* otherwise.
+        """
+        return self._raw.is_constant(is_signed)
+
     @property
     def is_zero(self) -> bool:
         """True if this is a numeric zero constant."""
@@ -1392,6 +1420,16 @@ class MicroOperand:
     def is_bit_reg(self) -> bool:
         """True if this is a bit register (including condition codes)."""
         return self._raw.is_bit_reg()
+
+    @property
+    def is_scattered(self) -> bool:
+        """True if this is a scattered operand."""
+        return self._raw.is_scattered()
+
+    @property
+    def is_01(self) -> bool:
+        """True if the operand can only be 0 or 1 (bit register, set result, etc.)."""
+        return self._raw.is01()
 
     def is_sign_extended_from(self, nbytes: int) -> bool:
         """True if the high bytes are sign-extended from *nbytes*.
@@ -1447,6 +1485,108 @@ class MicroOperand:
     def erase_but_keep_size(self) -> None:
         """Reset this operand to empty but preserve the size field."""
         self._raw.erase_but_keep_size()
+
+    # -- transformations ---------------------------------------------------
+
+    def make_low_half(self, width: int) -> bool:
+        """Extract the low half of this operand.
+
+        Args:
+            width: Desired size in bytes (must be smaller than current size).
+
+        Returns:
+            True on success.
+        """
+        return self._raw.make_low_half(width)
+
+    def make_high_half(self, width: int) -> bool:
+        """Extract the high half of this operand.
+
+        Args:
+            width: Desired size in bytes (must be smaller than current size).
+
+        Returns:
+            True on success.
+        """
+        return self._raw.make_high_half(width)
+
+    def make_first_half(self, width: int) -> bool:
+        """Extract the first part (endianness-independent).
+
+        Args:
+            width: Desired size in bytes.
+
+        Returns:
+            True on success.
+        """
+        return self._raw.make_first_half(width)
+
+    def make_second_half(self, width: int) -> bool:
+        """Extract the second part (endianness-independent).
+
+        Args:
+            width: Desired size in bytes.
+
+        Returns:
+            True on success.
+        """
+        return self._raw.make_second_half(width)
+
+    def change_size(self, new_size: int) -> bool:
+        """Change operand size, discarding extra high bytes or zero-extending.
+
+        Args:
+            new_size: New size in bytes.
+
+        Returns:
+            True on success.
+        """
+        return self._raw.change_size(new_size)
+
+    def double_size(self) -> bool:
+        """Double the operand size (e.g. 4 -> 8), zero-extending.
+
+        Returns:
+            True on success.
+        """
+        return self._raw.double_size()
+
+    def apply_xdu(self, new_size: int, ea: int = ida_idaapi.BADADDR) -> None:
+        """Apply zero-extension to *new_size* bytes.
+
+        Args:
+            new_size: Target size in bytes.
+            ea: Source address for the extending instruction.
+        """
+        self._raw.apply_xdu(ea, new_size)
+
+    def apply_xds(self, new_size: int, ea: int = ida_idaapi.BADADDR) -> None:
+        """Apply sign-extension to *new_size* bytes.
+
+        Args:
+            new_size: Target size in bytes.
+            ea: Source address for the extending instruction.
+        """
+        self._raw.apply_xds(ea, new_size)
+
+    def shift_mop(self, offset: int) -> bool:
+        """Shift the operand start by *offset* bytes.
+
+        Positive offsets move toward higher bytes (shrink from the low end),
+        negative offsets move toward lower bytes (grow from the high end).
+
+        Examples::
+
+            AH.1  shift_mop(-1) → AX.2
+            #0x12345678.4  shift_mop(3) → #0x12.1
+
+        Args:
+            offset: Number of bytes to shift.
+
+        Returns:
+            True on success.
+        """
+        return self._raw.shift_mop(offset)
 
     # -- text / display ----------------------------------------------------
 
@@ -1823,6 +1963,223 @@ class MicroInstruction:
         """
         return self._raw.for_all_ops(visitor)
 
+    # -- instruction flags -------------------------------------------------
+
+    @property
+    def is_combined(self) -> bool:
+        """True if this instruction was combined from several."""
+        return self._raw.is_combined()
+
+    @property
+    def is_assert(self) -> bool:
+        """True if this is an assertion instruction."""
+        return self._raw.is_assert()
+
+    @property
+    def is_fpinsn(self) -> bool:
+        """True if this is a floating-point instruction (flag-based)."""
+        return self._raw.is_fpinsn()
+
+    @property
+    def is_persistent(self) -> bool:
+        """True if this instruction must not be deleted."""
+        return self._raw.is_persistent()
+
+    @property
+    def is_propagatable(self) -> bool:
+        """True if this instruction is propagatable."""
+        return self._raw.is_propagatable()
+
+    @property
+    def is_combinable(self) -> bool:
+        """True if this instruction is combinable."""
+        return self._raw.is_combinable()
+
+    @property
+    def is_optional(self) -> bool:
+        """True if this instruction is optional (may be dropped)."""
+        return self._raw.is_optional()
+
+    @property
+    def is_tailcall(self) -> bool:
+        """True if this call has been recognized as a tail call."""
+        return self._raw.is_tailcall()
+
+    @property
+    def is_farcall(self) -> bool:
+        """True if this is a far call."""
+        return self._raw.is_farcall()
+
+    @property
+    def is_cleaning_pop(self) -> bool:
+        """True if this pop instruction cleans up the stack."""
+        return self._raw.is_cleaning_pop()
+
+    @property
+    def is_multimov(self) -> bool:
+        """True if this is a multi-move (struct/memcpy)."""
+        return self._raw.is_multimov()
+
+    @property
+    def is_ignlowsrc(self) -> bool:
+        """True if low part of the source operand should be ignored."""
+        return self._raw.is_ignlowsrc()
+
+    @property
+    def is_extstx(self) -> bool:
+        """True if this stx uses a sign-extended offset."""
+        return self._raw.is_extstx()
+
+    @property
+    def is_alloca(self) -> bool:
+        """True if this is an ``alloca`` call."""
+        return self._raw.is_alloca()
+
+    @property
+    def is_like_move(self) -> bool:
+        """True if this is structurally similar to a ``mov`` instruction."""
+        return self._raw.is_like_move()
+
+    @property
+    def is_mbarrier(self) -> bool:
+        """True if this is a memory barrier instruction."""
+        return self._raw.is_mbarrier()
+
+    @property
+    def is_bswap(self) -> bool:
+        """True if this is a byte-swap instruction."""
+        return self._raw.is_bswap()
+
+    @property
+    def is_memcpy(self) -> bool:
+        """True if this is a memcpy operation."""
+        return self._raw.is_memcpy()
+
+    @property
+    def is_memset(self) -> bool:
+        """True if this is a memset operation."""
+        return self._raw.is_memset()
+
+    @property
+    def is_readflags(self) -> bool:
+        """True if this instruction reads flags."""
+        return self._raw.is_readflags()
+
+    @property
+    def is_inverted_jx(self) -> bool:
+        """True if this conditional jump has been inverted."""
+        return self._raw.is_inverted_jx()
+
+    @property
+    def is_wild_match(self) -> bool:
+        """True if wild-matching is enabled for this instruction."""
+        return self._raw.is_wild_match()
+
+    @property
+    def is_unknown_call(self) -> bool:
+        """True if this is a call to an unknown target."""
+        return self._raw.is_unknown_call()
+
+    def set_combined(self) -> None:
+        """Mark this instruction as combined."""
+        self._raw.set_combined()
+
+    def clr_combined(self) -> None:
+        """Clear the combined flag."""
+        self._raw.clr_combined()
+
+    def set_assert(self) -> None:
+        """Mark this instruction as an assertion."""
+        self._raw.set_assert()
+
+    def clr_assert(self) -> None:
+        """Clear the assertion flag."""
+        self._raw.clr_assert()
+
+    def set_fpinsn(self) -> None:
+        """Mark this as a floating-point instruction."""
+        self._raw.set_fpinsn()
+
+    def clr_fpinsn(self) -> None:
+        """Clear the floating-point instruction flag."""
+        self._raw.clr_fpinsn()
+
+    def set_persistent(self) -> None:
+        """Mark this instruction as persistent (must not be deleted)."""
+        self._raw.set_persistent()
+
+    def set_combinable(self) -> None:
+        """Mark this instruction as combinable."""
+        self._raw.set_combinable()
+
+    def clr_combinable(self) -> None:
+        """Clear the combinable flag."""
+        self._raw.clr_combinable()
+
+    def set_optional(self) -> None:
+        """Mark this instruction as optional."""
+        self._raw.set_optional()
+
+    def set_tailcall(self) -> None:
+        """Mark this call as a tail call."""
+        self._raw.set_tailcall()
+
+    def clr_tailcall(self) -> None:
+        """Clear the tail call flag."""
+        self._raw.clr_tailcall()
+
+    def set_farcall(self) -> None:
+        """Mark this as a far call."""
+        self._raw.set_farcall()
+
+    def set_cleaning_pop(self) -> None:
+        """Mark this pop as a cleaning pop."""
+        self._raw.set_cleaning_pop()
+
+    def set_multimov(self) -> None:
+        """Mark this as a multi-move instruction."""
+        self._raw.set_multimov()
+
+    def clr_multimov(self) -> None:
+        """Clear the multi-move flag."""
+        self._raw.clr_multimov()
+
+    def set_ignlowsrc(self) -> None:
+        """Set the ignore-low-source flag."""
+        self._raw.set_ignlowsrc()
+
+    def clr_ignlowsrc(self) -> None:
+        """Clear the ignore-low-source flag."""
+        self._raw.clr_ignlowsrc()
+
+    def set_extstx(self) -> None:
+        """Mark stx as using sign-extended offset."""
+        self._raw.set_extstx()
+
+    def set_mbarrier(self) -> None:
+        """Mark this as a memory barrier."""
+        self._raw.set_mbarrier()
+
+    def set_inverted_jx(self) -> None:
+        """Mark this conditional jump as inverted."""
+        self._raw.set_inverted_jx()
+
+    def set_wild_match(self) -> None:
+        """Enable wild-matching for this instruction."""
+        self._raw.set_wild_match()
+
+    def set_noret_icall(self) -> None:
+        """Mark this indirect call as non-returning."""
+        self._raw.set_noret_icall()
+
+    def clr_noret_icall(self) -> None:
+        """Clear the non-returning indirect call flag."""
+        self._raw.clr_noret_icall()
+
+    def clr_propagatable(self) -> None:
+        """Clear the propagatable flag."""
+        self._raw.clr_propagatable()
+
     # -- mutation ----------------------------------------------------------
 
     def make_nop(self) -> None:
@@ -1872,7 +2229,7 @@ class MicroInstruction:
         self._parent_block.mark_lists_dirty()
 
     def set_ea(self, ea: int) -> None:
-        """Change the effective address of this instruction."""
+        """Change the effective address of this instruction and all sub-instructions."""
         self._raw.setaddr(ea)
 
     # -- text / display ----------------------------------------------------
@@ -1883,6 +2240,21 @@ class MicroInstruction:
         if remove_tags:
             text = ida_lines.tag_remove(text)
         return text
+
+    # -- comparison --------------------------------------------------------
+
+    def equal_insns(self, other: MicroInstruction, eqflags: int = 0) -> bool:
+        """Structural comparison with fine-grained control.
+
+        Args:
+            other: Instruction to compare with.
+            eqflags: Combination of ``EQ_*`` flags from ``ida_hexrays``:
+                ``EQ_IGNSIZE`` (1) — ignore operand sizes,
+                ``EQ_IGNCODE`` (2) — ignore opcode,
+                ``EQ_CMPDEST`` (4) — compare destination operand,
+                ``EQ_OPTINSN`` (8) — optimizer comparison mode.
+        """
+        return self._raw.equal_insns(other._raw, eqflags)
 
     # -- dunder protocols --------------------------------------------------
 
@@ -2243,6 +2615,119 @@ class MicroBlock:
         """
         return MicroLocationSet(self._raw.build_def_list(insn._raw, maymust))
 
+    def append_use_list(
+        self,
+        target: MicroLocationSet,
+        operand: MicroOperand,
+        maymust: int = 0,
+    ) -> None:
+        """Append operand use-locations to an existing set.
+
+        Unlike :meth:`build_use_list` which returns a fresh set, this
+        appends to *target*, allowing incremental construction.
+
+        Args:
+            target: Location set to append to.
+            operand: The operand to analyze.
+            maymust: ``MUST_ACCESS`` (0) or ``MAY_ACCESS`` (1).
+        """
+        self._raw.append_use_list(target._raw, operand._raw, maymust)
+
+    def append_def_list(
+        self,
+        target: MicroLocationSet,
+        operand: MicroOperand,
+        maymust: int = 0,
+    ) -> None:
+        """Append operand def-locations to an existing set.
+
+        Args:
+            target: Location set to append to.
+            operand: The operand to analyze.
+            maymust: ``MUST_ACCESS`` (0) or ``MAY_ACCESS`` (1).
+        """
+        self._raw.append_def_list(target._raw, operand._raw, maymust)
+
+    def build_lists(self, kill_deads: bool = False) -> int:
+        """Build def-use lists and optionally eliminate dead instructions.
+
+        Args:
+            kill_deads: If True, delete dead instructions.
+
+        Returns:
+            Number of eliminated instructions.
+        """
+        return self._raw.build_lists(kill_deads)
+
+    def optimize_insn(self, insn: MicroInstruction, optflags: int = 0) -> int:
+        """Optimize a single instruction in the context of this block.
+
+        May modify other instructions in the block but will not destroy
+        top-level instructions (converts them to NOPs instead).
+
+        Args:
+            insn: A top-level instruction in this block.
+            optflags: Optimization flag bits.
+
+        Returns:
+            Number of changes made.
+        """
+        return self._raw.optimize_insn(insn._raw, optflags)
+
+    def is_rhs_redefined(
+        self,
+        insn: MicroInstruction,
+        start: MicroInstruction,
+        end: Optional[MicroInstruction] = None,
+    ) -> bool:
+        """Check if the right-hand side of *insn* is redefined in a range.
+
+        Args:
+            insn: Instruction whose source operands to check.
+            start: Start of the range (top-level instruction).
+            end: End of the range (exclusive, top-level instruction).
+                If *None*, checks to the end of the block.
+        """
+        end_raw = end._raw if end is not None else None
+        return self._raw.is_rhs_redefined(insn._raw, start._raw, end_raw)
+
+    def get_valranges(
+        self,
+        operand: MicroOperand,
+        vrflags: int = 0,
+        insn: Optional[MicroInstruction] = None,
+    ) -> Optional[valrng_t]:
+        """Compute the possible value range for an operand.
+
+        When *insn* is ``None``, computes ranges at the block level.
+        When *insn* is given, computes ranges at that specific instruction.
+
+        Requires that value-range analysis has been performed (maturity
+        ``GLBOPT1`` or higher).
+
+        Args:
+            operand: The operand to query (typically a register or stack
+                variable).  A ``vivl_t`` is constructed from its underlying
+                ``mop_t`` automatically.
+            vrflags: Flags controlling the analysis (default 0).
+            insn: If given, compute the range at this instruction.
+
+        Returns:
+            A ``valrng_t`` with the result, or *None* if the range
+            could not be determined.
+        """
+        vivl = ida_hexrays.vivl_t(operand._raw)
+        res = ida_hexrays.valrng_t()
+        if insn is not None:
+            ok = self._raw.get_valranges(res, vivl, insn._raw, vrflags)
+        else:
+            ok = self._raw.get_valranges(res, vivl, vrflags)
+        return res if ok else None
+
+    def request_propagation(self) -> None:
+        """Request value propagation for this block."""
+        self._raw.request_propagation()
+
     def find_first_use(
         self,
         locations: MicroLocationSet,
@@ -2251,13 +2736,18 @@ class MicroBlock:
     ) -> Optional[MicroInstruction]:
         """Find the first instruction after *start* that uses *locations*.
 
+        .. warning::
+            *locations* is **modified** during the search: redefined
+            locations are removed from the set.  Pass a :meth:`copy`
+            if you need to preserve the original.
+
         Args:
             locations: The set of locations to search for.
             start: Start searching from this instruction.
             end: Stop searching at this instruction (exclusive). If *None*,
                 searches to the end of the block.
         """
-        end_raw = end._raw if end is not None else self._raw.tail
+        end_raw = end._raw if end is not None else None
         result = self._raw.find_first_use(locations._raw, start._raw, end_raw)
         if result:
             return MicroInstruction(result, self)
@@ -2277,7 +2767,7 @@ class MicroBlock:
             end: Stop searching at this instruction (exclusive). If *None*,
                 searches to the end of the block.
         """
-        end_raw = end._raw if end is not None else self._raw.tail
+        end_raw = end._raw if end is not None else None
         result = self._raw.find_redefinition(locations._raw, start._raw, end_raw)
         if result:
             return MicroInstruction(result, self)
@@ -2775,9 +3265,43 @@ class MicroBlockArray:
         blk = self._raw.insert_block(index)
         return MicroBlock(blk, self)
 
-    def remove_block(self, block: MicroBlock) -> None:
-        """Remove a block."""
-        self._raw.remove_block(block._raw)
+    def remove_block(self, block: MicroBlock) -> bool:
+        """Remove a block.
+
+        Returns:
+            True if at least one other block became empty or unreachable.
+        """
+        return self._raw.remove_block(block._raw)
+
+    def remove_blocks(self, start: int, end: int) -> bool:
+        """Remove a range of blocks by serial number.
+
+        Args:
+            start: First block serial to remove (inclusive).
+            end: Last block serial to remove (exclusive).
+
+        Returns:
+            True if at least one other block became empty or unreachable.
+        """
+        return self._raw.remove_blocks(start, end)
+
+    def split_block(
+        self, block: MicroBlock, start_insn: MicroInstruction
+    ) -> MicroBlock:
+        """Split a block at the given instruction.
+
+        A new block is inserted after *block*, and all instructions from
+        *start_insn* to the end of *block* are moved to the new block.
+
+        Args:
+            block: Block to split.
+            start_insn: First instruction to move to the new block.
+
+        Returns:
+            The newly created :class:`MicroBlock`.
+        """
+        raw = self._raw.split_block(block._raw, start_insn._raw)
+        return MicroBlock(raw, self)
 
     def copy_block(
         self,
@@ -2888,6 +3412,16 @@ class MicroBlockArray:
         """
         return MicroError(self._raw.optimize_global())
 
+    def alloc_lvars(self) -> None:
+        """Allocate local variables.
+
+        Must be called only immediately after :meth:`optimize_global`,
+        with no modifications to the microcode.  Converts registers,
+        stack variables, and similar operands into ``mop_l``.  After
+        this call the microcode reaches its final state.
+        """
+        self._raw.alloc_lvars()
+
     def build_graph(self) -> None:
         """Build (or rebuild) the block-level control flow graph.
 
@@ -2896,6 +3430,84 @@ class MicroBlockArray:
         be further analyzed or verified.
         """
         self._raw.build_graph()
+
+    # -- stack offset conversion -------------------------------------------
+
+    def stkoff_vd2ida(self, vd_offset: int) -> int:
+        """Convert a decompiler stack offset to an IDA stack offset.
+
+        Args:
+            vd_offset: Decompiler-style stack offset.
+
+        Returns:
+            IDA-style stack offset.
+        """
+        return self._raw.stkoff_vd2ida(vd_offset)
+
+    def stkoff_ida2vd(self, ida_offset: int) -> int:
+        """Convert an IDA stack offset to a decompiler stack offset.
+
+        Args:
+            ida_offset: IDA-style stack offset.
+
+        Returns:
+            Decompiler-style stack offset.
+        """
+        return self._raw.stkoff_ida2vd(ida_offset)
+
+    def idaloc2vd(self, loc: Any, width: int) -> Any:
+        """Convert an IDA ``argloc_t`` to a decompiler ``vdloc_t``.
+
+        Args:
+            loc: An ``argloc_t`` location.
+            width: Size in bytes.
+
+        Returns:
+            A ``vdloc_t`` location.
+        """
+        return self._raw.idaloc2vd(loc, width)
+
+    def vd2idaloc(self, loc: Any, width: int, spd: Optional[int] = None) -> Any:
+        """Convert a decompiler ``vdloc_t`` to an IDA ``argloc_t``.
+
+        Args:
+            loc: A ``vdloc_t`` location.
+            width: Size in bytes.
+            spd: Optional stack pointer delta.
+
+        Returns:
+            An ``argloc_t`` location.
+        """
+        if spd is not None:
+            return self._raw.vd2idaloc(loc, width, spd)
+        return self._raw.vd2idaloc(loc, width)
+
+    # -- frame/stack properties --------------------------------------------
+
+    @property
+    def tmpstk_size(self) -> int:
+        """Size of the temporary stack area in bytes."""
+        return self._raw.tmpstk_size
+
+    @property
+    def frsize(self) -> int:
+        """Size of the local variables area in bytes."""
+        return self._raw.frsize
+
+    @property
+    def stacksize(self) -> int:
+        """Total stack size used by the function in bytes."""
+        return self._raw.stacksize
+
+    @property
+    def inargoff(self) -> int:
+        """Offset of the incoming arguments area."""
+        return self._raw.inargoff
+
+    @property
+    def retsize(self) -> int:
+        """Size of the return address on the stack."""
+        return self._raw.retsize
 
     # -- serialization -----------------------------------------------------
 
@@ -2908,6 +3520,26 @@ class MicroBlockArray:
         """Deserialize a microcode function from bytes."""
         raw = mba_t.deserialize(data)
         return MicroBlockArray(raw)
+
+    # -- debugging ---------------------------------------------------------
+
+    def dump(self) -> None:
+        """Dump microcode to a file for debugging.
+
+        The file is created in the directory pointed to by the ``IDA_DUMPDIR``
+        environment variable. Dump is only created when IDA is run under a
+        debugger.
+        """
+        self._raw.dump()
+
+    def dump_mba(self, title: str, verify: bool = True) -> None:
+        """Dump microcode with a title and optional verification.
+
+        Args:
+            title: Title/header for the dump output.
+            verify: If True, verify microcode consistency before dumping.
+        """
+        self._raw.dump_mba(verify, title)
 
     # -- text / display ----------------------------------------------------
 
@@ -3001,16 +3633,50 @@ class MicroGraph:
         return self._raw.get_du(gctype)
 
     def is_redefined_globally(
-        self, locations: MicroLocationSet, block: int, insn: MicroInstruction
+        self,
+        locations: MicroLocationSet,
+        block1: int,
+        block2: int,
+        insn1: MicroInstruction,
+        insn2: MicroInstruction,
+        maymust: int = 0,
     ) -> bool:
-        """Check if locations are redefined globally from the given point."""
-        return self._raw.is_redefined_globally(locations._raw, block, insn._raw)
+        """Check if locations are redefined globally between two points.
+
+        Args:
+            locations: Location set to check.
+            block1: First block serial.
+            block2: Second block serial.
+            insn1: First instruction.
+            insn2: Second instruction.
+            maymust: ``MUST_ACCESS`` (0) or ``MAY_ACCESS`` (1).
+        """
+        return self._raw.is_redefined_globally(
+            locations._raw, block1, block2, insn1._raw, insn2._raw, maymust
+        )
 
     def is_used_globally(
-        self, locations: MicroLocationSet, block: int, insn: MicroInstruction
+        self,
+        locations: MicroLocationSet,
+        block1: int,
+        block2: int,
+        insn1: MicroInstruction,
+        insn2: MicroInstruction,
+        maymust: int = 0,
     ) -> bool:
-        """Check if locations are used globally from the given point."""
-        return self._raw.is_used_globally(locations._raw, block, insn._raw)
+        """Check if locations are used globally between two points.
+
+        Args:
+            locations: Location set to check.
+            block1: First block serial.
+            block2: Second block serial.
+            insn1: First instruction.
+            insn2: Second instruction.
+            maymust: ``MUST_ACCESS`` (0) or ``MAY_ACCESS`` (1).
+        """
+        return self._raw.is_used_globally(
+            locations._raw, block1, block2, insn1._raw, insn2._raw, maymust
+        )
 
     def __repr__(self) -> str:
         return f'MicroGraph(blocks={self._raw.node_qty()})'
@@ -3051,13 +3717,93 @@ class MicroLocationSet:
         """Union this set with *other* in-place."""
         self._raw.add(other._raw)
 
+    def add_register(self, mreg: int, size: int) -> bool:
+        """Add a micro-register range to the set.
+
+        Args:
+            mreg: Micro-register number.
+            size: Size in bytes.
+
+        Returns:
+            True if the set changed.
+        """
+        return self._raw.add(mreg, size)
+
+    def add_memory(self, ea: int, size: int) -> bool:
+        """Add a memory range to the set.
+
+        Args:
+            ea: Memory address.
+            size: Size in bytes.
+
+        Returns:
+            True if the set changed.
+        """
+        return self._raw.addmem(ea, size)
+
     def subtract(self, other: MicroLocationSet) -> None:
         """Subtract *other* from this set in-place."""
         self._raw.sub(other._raw)
 
+    def subtract_register(self, mreg: int, size: int) -> bool:
+        """Remove a micro-register range from the set.
+
+        Args:
+            mreg: Micro-register number.
+            size: Size in bytes.
+
+        Returns:
+            True if the set changed.
+        """
+        return self._raw.sub(mreg, size)
+
     def has_common(self, other: MicroLocationSet) -> bool:
         """True if this set has any locations in common with *other*."""
         return self._raw.has_common(other._raw)
+
+    def has_register(self, mreg: int) -> bool:
+        """True if the given micro-register is in the set.
+
+        Args:
+            mreg: Micro-register number.
+        """
+        return self._raw.has(mreg)
+
+    def has_all_register(self, mreg: int, size: int) -> bool:
+        """True if the *entire* register range is in the set.
+
+        Args:
+            mreg: Micro-register number.
+            size: Size in bytes.
+        """
+        return self._raw.has_all(mreg, size)
+
+    def has_any_register(self, mreg: int, size: int) -> bool:
+        """True if *any* part of the register range is in the set.
+
+        Args:
+            mreg: Micro-register number.
+            size: Size in bytes.
+        """
+        return self._raw.has_any(mreg, size)
+
+    @property
+    def has_memory(self) -> bool:
+        """True if the set contains any memory locations."""
+        return self._raw.has_memory()
+
+    @property
+    def count(self) -> int:
+        """Number of individual locations in the set."""
+        return self._raw.count()
+
+    def clear(self) -> None:
+        """Remove all locations from this set."""
+        self._raw.clear()
+
+    def to_text(self) -> str:
+        """Get text representation of this location set."""
+        return self._raw.dstr()
 
     def __bool__(self) -> bool:
         return not self._raw.empty()
@@ -3109,8 +3855,11 @@ class MicroLocationSet:
         """
         return self._raw.includes(other._raw)
 
+    def __str__(self) -> str:
+        return self.to_text()
+
     def __repr__(self) -> str:
-        return f'MicroLocationSet(empty={self._raw.empty()})'
+        return f'MicroLocationSet(count={self._raw.count()}, empty={self._raw.empty()})'
 
 
 # ---------------------------------------------------------------------------
@@ -3286,6 +4035,45 @@ def _microcode_error_from(hf: Any, location: str) -> MicrocodeError:
     if errea is not None:
         parts.append(f'at 0x{errea:x}')
     return MicrocodeError(' — '.join(parts), code=code, errea=errea)
+
+
+# ---------------------------------------------------------------------------
+# Free functions
+# ---------------------------------------------------------------------------
+
+
+def reg2mreg(processor_reg: int) -> int:
+    """Map a processor register number to a micro-register number.
+
+    Args:
+        processor_reg: Processor register number (e.g. from ``ida_idp``).
+
+    Returns:
+        Micro-register id, or ``mr_none`` if the register has no mapping.
+    """
+    return ida_hexrays.reg2mreg(processor_reg)
+
+
+def mreg2reg(mreg: int, width: int) -> int:
+    """Map a micro-register number to a processor register number.
+
+    Args:
+        mreg: Micro-register number.
+        width: Size of the micro-register in bytes.
+
+    Returns:
+        Processor register id, or -1 if no mapping exists.
+    """
+    return ida_hexrays.mreg2reg(mreg, width)
+
+
+def get_hexrays_version() -> str:
+    """Get the Hex-Rays decompiler version string.
+
+    Returns:
+        Version in the form ``"major.minor.revision.build-date"``.
+    """
+    return ida_hexrays.get_hexrays_version()
 
 
 # ---------------------------------------------------------------------------

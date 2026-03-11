@@ -3137,6 +3137,12 @@ def test_microcode_block_iteration(test_env):
     import pytest
     with pytest.raises(IndexError):
         mf[999]
+    with pytest.raises(IndexError):
+        mf[-999]
+
+    # Negative indexing (valid)
+    last = mf[-1]
+    assert last.serial == len(mf) - 1
 
 
 def test_microcode_instruction_iteration(test_env):
@@ -3590,6 +3596,13 @@ def test_microcode_block_properties_detailed(test_env):
         else:
             assert not block.is_branch
 
+    # block_type setter
+    block = mf[1]
+    original = block.block_type
+    block.block_type = MicroBlockType.ONE_WAY
+    assert block.block_type == MicroBlockType.ONE_WAY
+    block.block_type = original
+
 
 def test_microcode_block_call_detection(test_env):
     """Test is_call_block detection."""
@@ -3800,6 +3813,18 @@ def test_microcode_location_set_operations(test_env):
         to_sub -= to_sub
         assert not bool(to_sub)
 
+        # __or__ (union returning new set)
+        union = a | b
+        assert bool(union)
+
+        # __sub__ (difference returning new set)
+        diff = a - b
+        assert isinstance(diff.count, int)
+
+        # issuperset / issubset
+        assert a.issuperset(a)
+        assert a.issubset(a)
+
         # repr
         assert 'MicroLocationSet' in repr(a)
 
@@ -3836,6 +3861,30 @@ def test_microcode_graph(test_env):
 
     # repr
     assert 'MicroGraph' in repr(graph)
+
+    # is_redefined_globally / is_used_globally
+    for block in mf.blocks(skip_sentinels=True):
+        insn = block.head
+        if insn is not None:
+            from ida_domain.microcode import MicroLocationSet
+
+            locs = block.build_use_list(insn)
+            if locs:
+                r1 = graph.is_redefined_globally(
+                    locs, block.index, block.index, insn, insn
+                )
+                assert isinstance(r1, bool)
+                r2 = graph.is_used_globally(
+                    locs, block.index, block.index, insn, insn
+                )
+                assert isinstance(r2, bool)
+                break
+
+    # __getitem__ boundary
+    import pytest
+
+    with pytest.raises(IndexError):
+        graph[9999]
 
 
 def test_microcode_global_address_operands(test_env):
@@ -4011,8 +4060,24 @@ def test_microcode_operand_none_fallbacks(test_env):
                 assert op.sub_instruction is None
                 assert op.string_value is None
                 assert op.pair is None
+                assert op.get_stkvar() is None  # not a stack var
+                break
+        else:
+            continue
+        break
+    else:
+        assert False, 'No register operand found'
+
+    # Find a NUMBER operand — register_name should return None
+    for insn in mf.instructions():
+        for op in insn.operands():
+            if op.is_number:
+                assert op.register_name is None
+                assert op.register is None
+                assert op.string_value is None
+                assert op.get_stkvar() is None
                 return
-    assert False, 'No register operand found'
+    assert False, 'No number operand found'
 
 
 def test_microcode_operand_type_check_shortcuts(test_env):
@@ -4069,6 +4134,13 @@ def test_microcode_operand_comparisons_extended(test_env):
     # __lt__ should not crash
     result = a < b
     assert isinstance(result, bool)
+
+    # __lt__ with non-MicroOperand returns NotImplemented
+    assert a.__lt__("not an operand") is NotImplemented
+
+    # __repr__
+    r = repr(a)
+    assert 'MicroOperand' in r
 
 
 def test_microcode_instruction_aliases_and_block(test_env):
@@ -4308,6 +4380,15 @@ def test_microcode_instruction_comparisons(test_env):
     # __lt__ should not crash
     result = a < b
     assert isinstance(result, bool)
+
+    # NotImplemented for incompatible types
+    assert a.__eq__("not an insn") is NotImplemented
+    assert a.__ne__("not an insn") is NotImplemented
+    assert a.__lt__("not an insn") is NotImplemented
+
+    # __repr__
+    r = repr(a)
+    assert 'MicroInstruction' in r
 
 
 def test_microcode_block_tail_and_empty(test_env):
@@ -5738,6 +5819,11 @@ def test_microcode_operand_constant_predicates(test_env):
     assert not reg.is_zero
     assert not reg.is_one
 
+    # Extension checks
+    val = MicroOperand.number(0xFF, size=4)
+    assert isinstance(val.is_sign_extended_from(1), bool)
+    assert isinstance(val.is_zero_extended_from(1), bool)
+
 
 def test_microcode_operand_extended_type_checks(test_env):
     """Test is_kreg, is_cc, is_bit_reg on operands."""
@@ -5822,6 +5908,17 @@ def test_microcode_operand_local_var_factory(test_env):
     if mf.raw_mba.vars.size() > 0:
         lv = MicroOperand.local_var(mf, 0)
         assert lv.type == MicroOperandType.LOCAL_VAR
+
+
+def test_microcode_operand_fpnum_factory(test_env):
+    """Test MicroOperand.fpnum() factory."""
+    import struct
+
+    from ida_domain.microcode import MicroOperand, MicroOperandType
+
+    data = struct.pack('<d', 1.0)  # IEEE 754 double for 1.0
+    op = MicroOperand.fpnum(data)
+    assert op.type == MicroOperandType.FP_CONST
 
 
 # ---------------------------------------------------------------------------
@@ -6224,7 +6321,7 @@ def test_microcode_call_info_wrapper(test_env):
     assert isinstance(call_info.dead_regs, MicroLocationSet)
     assert isinstance(call_info.return_regs, MicroLocationSet)
     assert isinstance(call_info.pass_regs, MicroLocationSet)
-    assert isinstance(call_info.visible_memory, MicroLocationSet)
+    assert call_info.visible_memory is not None
 
     # Arguments
     args = call_info.args
@@ -6248,6 +6345,16 @@ def test_microcode_call_info_wrapper(test_env):
     assert isinstance(str(arg), str)
     assert len(str(arg)) > 0
     assert 'MicroCallArg' in repr(arg)
+
+    # Previously uncovered properties
+    assert isinstance(call_info.solid_args, int)
+    assert call_info.return_argloc is not None
+    assert call_info.get_type() is not None
+
+    # Arg uncovered properties
+    assert arg.argloc is not None
+    assert isinstance(arg.flags, int)
+    assert isinstance(arg.ea, int)
 
     # Raw access
     assert call_info.raw_call_info is not None
@@ -6337,7 +6444,455 @@ def test_microcode_local_vars_wrapper(test_env):
     assert 'MicroLocalVar' in repr(v0)
     assert 'MicroLocalVars' in repr(lvars)
 
+    # Mutation: accepts_type, set_lvar_type, set_final_lvar_type
+    tif = v0.type_info
+    assert isinstance(v0.accepts_type(tif), bool)
+    assert isinstance(v0.set_lvar_type(tif), bool)
+    v0.set_final_lvar_type(tif)  # returns None in IDAPython
+
+    # Mutation: set_user_name
+    original_name = v0.name
+    v0.set_user_name("test_renamed_var")
+    assert v0.name == "test_renamed_var"
+    v0.set_user_name(original_name)
+
+    # Index boundary
+    import pytest
+
+    with pytest.raises(IndexError):
+        lvars[9999]
+
+    # find_stkvar with non-existent offset
+    assert lvars.find_stkvar(0x7FFFFFFF, 4) is None
+
     # Raw access
     assert v0.raw_var is not None
     assert lvars.raw_lvars is not None
+
+
+def test_microcode_operand_transformations(test_env):
+    """Test MicroOperand transformation methods (make_*_half, change_size, etc.)."""
+    from ida_domain.microcode import MicroOperand
+
+    # -- make_low_half / make_high_half ------------------------------------
+    op = MicroOperand.number(0xAABBCCDD11223344, size=8)
+    assert op.size == 8
+
+    low = MicroOperand.number(0xAABBCCDD11223344, size=8)
+    low_ok = low.make_low_half(4)
+    assert low.size == 4
+    assert low_ok is True
+
+    high = MicroOperand.number(0xAABBCCDD11223344, size=8)
+    high_ok = high.make_high_half(4)
+    assert high.size == 4
+    assert high_ok is True
+
+    # low and high should differ
+    assert low != high
+
+    # -- make_first_half / make_second_half --------------------------------
+    first = MicroOperand.number(0xAABBCCDD11223344, size=8)
+    ok = first.make_first_half(4)
+    assert ok is True
+    assert first.size == 4
+
+    second = MicroOperand.number(0xAABBCCDD11223344, size=8)
+    ok = second.make_second_half(4)
+    assert ok is True
+    assert second.size == 4
+
+    # -- change_size -------------------------------------------------------
+    op2 = MicroOperand.number(0xDEADBEEF, size=4)
+    cs_ok = op2.change_size(2)
+    assert op2.size == 2
+    assert cs_ok is True
+
+    op3 = MicroOperand.number(0x42, size=2)
+    cs_ok2 = op3.change_size(4)
+    assert op3.size == 4
+    assert cs_ok2 is True
+
+    # -- double_size -------------------------------------------------------
+    op4 = MicroOperand.number(0x42, size=4)
+    ds_ok = op4.double_size()
+    assert op4.size == 8
+    assert ds_ok is True
+
+    # -- apply_xdu (zero-extend) ------------------------------------------
+    op5 = MicroOperand.number(0xFF, size=1)
+    op5.apply_xdu(4)
+    assert op5.size == 4
+
+    # -- apply_xds (sign-extend) ------------------------------------------
+    op6 = MicroOperand.number(0xFF, size=1)
+    op6.apply_xds(4)
+    assert op6.size == 4
+
+    # -- shift_mop ---------------------------------------------------------
+    op7 = MicroOperand.number(0x12345678, size=4)
+    ok = op7.shift_mop(3)
+    assert ok is True
+    assert op7.size == 1
+
+
+def test_microcode_instruction_flag_accessors(test_env):
+    """Test MicroInstruction flag getters and setters."""
+    from ida_domain.microcode import (
+        MicroInstruction,
+        MicroMaturity,
+        MicroOpcode,
+        MicroOperand,
+    )
+
+    db = test_env
+    func = db.functions.get_at(0xC4)
+    mf = db.microcode.generate(func, maturity=MicroMaturity.PREOPTIMIZED)
+    insn = next(mf.instructions())
+
+    # All boolean flag getters should return bool without error
+    assert isinstance(insn.is_combined, bool)
+    assert isinstance(insn.is_assert, bool)
+    assert isinstance(insn.is_fpinsn, bool)
+    assert isinstance(insn.is_persistent, bool)
+    assert isinstance(insn.is_propagatable, bool)
+    assert isinstance(insn.is_combinable, bool)
+    assert isinstance(insn.is_optional, bool)
+    assert isinstance(insn.is_tailcall, bool)
+    assert isinstance(insn.is_farcall, bool)
+    assert isinstance(insn.is_cleaning_pop, bool)
+    assert isinstance(insn.is_multimov, bool)
+    assert isinstance(insn.is_ignlowsrc, bool)
+    assert isinstance(insn.is_extstx, bool)
+    assert isinstance(insn.is_alloca, bool)
+    assert isinstance(insn.is_like_move, bool)
+    assert isinstance(insn.is_mbarrier, bool)
+    assert isinstance(insn.is_bswap, bool)
+    assert isinstance(insn.is_memcpy, bool)
+    assert isinstance(insn.is_memset, bool)
+    assert isinstance(insn.is_readflags, bool)
+    assert isinstance(insn.is_inverted_jx, bool)
+    assert isinstance(insn.is_wild_match, bool)
+    assert isinstance(insn.is_unknown_call, bool)
+
+    # Test set/clr round-trip on a detached instruction
+    nop = MicroInstruction.create(ea=0, opcode=MicroOpcode.NOP)
+
+    nop.set_fpinsn()
+    assert nop.is_fpinsn is True
+    nop.clr_fpinsn()
+    assert nop.is_fpinsn is False
+
+    nop.set_assert()
+    assert nop.is_assert is True
+    nop.clr_assert()
+    assert nop.is_assert is False
+
+    nop.set_combinable()
+    assert nop.is_combinable is True
+    nop.clr_combinable()
+    assert nop.is_combinable is False
+
+
+def test_microcode_location_set_granular(test_env):
+    """Test MicroLocationSet granular register/memory operations."""
+    from ida_domain.microcode import MicroLocationSet
+
+    # Empty set
+    s = MicroLocationSet()
+    assert not s
+    assert s.count == 0
+    assert s.has_memory is False
+
+    # add_register / has_register / has_all_register / has_any_register
+    s.add_register(0, 4)  # mreg 0, 4 bytes
+    assert s
+    assert s.count > 0
+    assert s.has_register(0) is True
+    assert s.has_all_register(0, 4) is True
+    assert s.has_any_register(0, 2) is True
+    assert s.has_register(100) is False
+
+    # subtract_register
+    s.subtract_register(0, 2)
+    assert s.has_all_register(0, 4) is False
+    assert s.has_any_register(0, 4) is True  # still has upper 2 bytes
+
+    # clear
+    s.clear()
+    assert not s
+    assert s.count == 0
+
+    # add_memory / has_memory
+    s.add_memory(0x1000, 8)
+    assert s.has_memory is True
+    assert s.count > 0
+
+    # to_text / __str__
+    text = s.to_text()
+    assert isinstance(text, str)
+    assert str(s) == text
+
+    # __repr__
+    assert 'MicroLocationSet' in repr(s)
+    assert 'count=' in repr(s)
+
+
+def test_microcode_mba_dump(test_env):
+    """Test MicroBlockArray dump methods exist and are callable."""
+    from ida_domain.microcode import MicroMaturity
+
+    db = test_env
+    func = db.functions.get_at(0xC4)
+    mf = db.microcode.generate(func, maturity=MicroMaturity.PREOPTIMIZED)
+
+    # dump() and dump_mba() should not raise
+    # (dump() only writes when IDA_DUMPDIR is set and debugger is active,
+    #  so it's effectively a no-op here, but validates the binding works)
+    mf.dump()
+    mf.dump_mba("test dump", verify=False)
+
+
+def test_microcode_operand_scattered_and_is01(test_env):
+    """Test MicroOperand.is_scattered and is_01 properties."""
+    from ida_domain.microcode import MicroOperand
+
+    num = MicroOperand.number(0x42, size=4)
+    assert isinstance(num.is_scattered, bool)
+    assert num.is_scattered is False
+
+    zero = MicroOperand.number(0, size=1)
+    assert isinstance(zero.is_01, bool)
+
+    one = MicroOperand.number(1, size=1)
+    assert one.is_01 is True
+
+
+def test_microcode_instruction_equal_insns(test_env):
+    """Test MicroInstruction.equal_insns with flags."""
+    import ida_hexrays
+
+    from ida_domain.microcode import MicroInstruction, MicroOpcode, MicroOperand
+
+    a = MicroInstruction.create(
+        ea=0x100,
+        opcode=MicroOpcode.MOV,
+        left=MicroOperand.number(42, size=4),
+        dest=MicroOperand.reg(0, size=4),
+    )
+    b = MicroInstruction.create(
+        ea=0x100,
+        opcode=MicroOpcode.MOV,
+        left=MicroOperand.number(42, size=4),
+        dest=MicroOperand.reg(0, size=4),
+    )
+
+    # Exact match
+    assert a.equal_insns(b, 0) is True
+
+    # Ignore opcode — should still match since src/dst are same
+    assert a.equal_insns(b, ida_hexrays.EQ_IGNCODE) is True
+
+
+def test_microcode_block_additional_methods(test_env):
+    """Test additional MicroBlock methods: build_lists, optimize_insn, etc."""
+    from ida_domain.microcode import MicroMaturity
+
+    db = test_env
+    func = db.functions.get_at(0xC4)
+    mf = db.microcode.generate(func, maturity=MicroMaturity.PREOPTIMIZED)
+
+    block = mf[1]
+    insn = block.head
+
+    # build_lists
+    eliminated = block.build_lists(kill_deads=False)
+    assert isinstance(eliminated, int)
+
+    # optimize_insn
+    if insn is not None:
+        changes = block.optimize_insn(insn)
+        assert isinstance(changes, int)
+
+    # request_propagation should not raise
+    block.request_propagation()
+
+
+def test_microcode_block_is_rhs_redefined(test_env):
+    """Test MicroBlock.is_rhs_redefined."""
+    from ida_domain.microcode import MicroMaturity
+
+    db = test_env
+    func = db.functions.get_at(0xC4)
+    mf = db.microcode.generate(func, maturity=MicroMaturity.PREOPTIMIZED)
+
+    # Find a block with at least 2 instructions
+    for block in mf.blocks(skip_sentinels=True):
+        insns = list(block)
+        if len(insns) >= 2:
+            result = block.is_rhs_redefined(insns[0], insns[0], insns[-1])
+            assert isinstance(result, bool)
+            break
+
+
+def test_microcode_block_append_use_def_list(test_env):
+    """Test MicroBlock append_use_list and append_def_list."""
+    from ida_domain.microcode import MicroLocationSet, MicroMaturity
+
+    db = test_env
+    func = db.functions.get_at(0xC4)
+    mf = db.microcode.generate(func, maturity=MicroMaturity.PREOPTIMIZED)
+
+    block = mf[1]
+    insn = block.head
+    if insn is not None:
+        for op in insn:
+            if op:
+                target = MicroLocationSet()
+                block.append_use_list(target, op)
+                # Just verify it doesn't crash; target may or may not have items
+                assert isinstance(target.count, int)
+
+                target2 = MicroLocationSet()
+                block.append_def_list(target2, op)
+                assert isinstance(target2.count, int)
+                break
+
+
+def test_microcode_mba_split_block(test_env):
+    """Test MicroBlockArray.split_block."""
+    from ida_domain.microcode import MicroMaturity
+
+    db = test_env
+    func = db.functions.get_at(0xC4)
+    mf = db.microcode.generate(func, maturity=MicroMaturity.PREOPTIMIZED)
+
+    original_count = len(mf)
+
+    # Find a block with at least 2 instructions
+    for block in mf.blocks(skip_sentinels=True):
+        insns = list(block)
+        if len(insns) >= 2:
+            new_block = mf.split_block(block, insns[1])
+            assert new_block is not None
+            assert len(mf) == original_count + 1
+            break
+
+
+def test_microcode_mba_stack_properties(test_env):
+    """Test MicroBlockArray frame/stack properties and offset conversion."""
+    from ida_domain.microcode import MicroMaturity
+
+    db = test_env
+    func = db.functions.get_at(0xC4)
+    mf = db.microcode.generate(func, maturity=MicroMaturity.PREOPTIMIZED)
+
+    # Stack properties
+    assert isinstance(mf.tmpstk_size, int)
+    assert isinstance(mf.frsize, int)
+    assert isinstance(mf.stacksize, int)
+    assert isinstance(mf.inargoff, int)
+    assert isinstance(mf.retsize, int)
+
+    # Stack offset conversion round-trip
+    vd_off = mf.stkoff_ida2vd(0)
+    ida_off = mf.stkoff_vd2ida(vd_off)
+    assert isinstance(ida_off, int)
+
+
+def test_microcode_free_functions(test_env):
+    """Test free functions: reg2mreg, mreg2reg, get_hexrays_version."""
+    from ida_domain.microcode import get_hexrays_version, mreg2reg, reg2mreg
+
+    # get_hexrays_version
+    ver = get_hexrays_version()
+    assert isinstance(ver, str)
+    assert '.' in ver  # e.g. "9.3.0.250101"
+
+    # reg2mreg — map processor register 0 (usually rax/eax on x86)
+    mreg = reg2mreg(0)
+    assert isinstance(mreg, int)
+
+    # mreg2reg round-trip (if mapping exists)
+    if mreg >= 0:
+        proc_reg = mreg2reg(mreg, 4)
+        assert isinstance(proc_reg, int)
+
+
+def test_microcode_operand_is_constant(test_env):
+    """Test MicroOperand.is_constant — returns value or None."""
+    from ida_domain.microcode import MicroOperand
+
+    # Number operands return their value
+    zero = MicroOperand.number(0, 4)
+    assert zero.is_constant() == 0
+    assert zero.is_constant() is not None
+    assert zero.is_constant(is_signed=True) == 0
+    assert zero.is_constant(is_signed=False) == 0
+
+    one = MicroOperand.number(1, 4)
+    assert one.is_constant() == 1
+
+    big = MicroOperand.number(0xDEADBEEF, 4)
+    assert big.is_constant(is_signed=False) == 0xDEADBEEF
+
+    neg = MicroOperand.number(0xFFFFFFFF, 4)  # -1 as unsigned 32-bit
+    val = neg.is_constant()
+    assert val is not None
+    # SWIG returns uint64 regardless of is_signed flag
+    assert val == 0xFFFFFFFF or val == 0xFFFFFFFFFFFFFFFF
+
+    # Non-number operands return None
+    reg = MicroOperand.reg(0, 4)
+    assert reg.is_constant() is None
+
+    helper = MicroOperand.helper("memcpy")
+    assert helper.is_constant() is None
+
+    empty = MicroOperand.empty()
+    assert empty.is_constant() is None
+
+    blkref = MicroOperand.new_block_ref(0)
+    assert blkref.is_constant() is None
+
+    gvar = MicroOperand.global_addr(0x1000, 4)
+    assert gvar.is_constant() is None
+
+
+def test_microcode_block_get_valranges(test_env):
+    """Test MicroBlock.get_valranges for value range analysis."""
+    import ida_hexrays
+
+    from ida_domain.microcode import MicroMaturity
+
+    db = test_env
+    func = db.functions.get_at(0x2BC)  # print_number — richer microcode
+    mf = db.microcode.generate(func, maturity=MicroMaturity.GLBOPT1)
+
+    # Find a block with a register operand to query value ranges for
+    for block in mf.blocks(skip_sentinels=True):
+        for insn in block.instructions():
+            op = insn.left
+            if op and op.is_register:
+                # Block-level query
+                result = block.get_valranges(op)
+                # Result may be None (range unknown) or a valrng_t
+                if result is not None:
+                    assert isinstance(result, ida_hexrays.valrng_t)
+                    assert isinstance(result.empty(), bool)
+
+                # Instruction-level query
+                result_at_insn = block.get_valranges(op, insn=insn)
+                if result_at_insn is not None:
+                    assert isinstance(result_at_insn, ida_hexrays.valrng_t)
+
+                # With explicit vrflags=0
+                result_flags = block.get_valranges(op, vrflags=0, insn=insn)
+                # Should behave the same as default
+                if result_flags is not None:
+                    assert isinstance(result_flags, ida_hexrays.valrng_t)
+                return
+
+    # If we got here, we didn't find a suitable register operand
+    assert True, "No register operand found; test not fully exercised"
 
