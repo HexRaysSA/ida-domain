@@ -6894,5 +6894,5 @@ def test_microcode_block_get_valranges(test_env):
                 return
 
     # If we got here, we didn't find a suitable register operand
-    assert True, "No register operand found; test not fully exercised"
+    assert False, "No register operand found; test not fully exercised"
 
