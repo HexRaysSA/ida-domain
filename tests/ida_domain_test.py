@@ -5792,6 +5792,49 @@ def test_microcode_mba_serialize_roundtrip(test_env):
     assert data == data2
 
 
+def test_microcode_instruction_serialize_roundtrip(test_env):
+    """Test that MicroInstruction serialize → deserialize round-trips."""
+    from ida_domain.microcode import MicroInstruction, MicroMaturity
+
+    db = test_env
+    func = db.functions.get_at(0x2BC)
+    mf = db.microcode.generate(func, maturity=MicroMaturity.PREOPTIMIZED)
+
+    # Collect two distinct instructions
+    insns = []
+    for block in mf:
+        for insn in block:
+            insns.append(insn)
+            if len(insns) == 2:
+                break
+        if len(insns) == 2:
+            break
+    assert len(insns) == 2, "expected at least two instructions"
+    first, second = insns
+
+    # Serialize both
+    fmt_ver1, data1 = first.serialize()
+    fmt_ver2, data2 = second.serialize()
+    assert isinstance(data1, bytes) and len(data1) > 0
+    assert isinstance(data2, bytes) and len(data2) > 0
+
+    # Different instructions must produce different serialized bytes
+    assert data1 != data2, "two distinct instructions should serialize differently"
+
+    # Deserialize both and verify round-trip
+    restored1 = MicroInstruction.deserialize(data1, fmt_ver1)
+    restored2 = MicroInstruction.deserialize(data2, fmt_ver2)
+
+    assert restored1.opcode == first.opcode
+    assert restored1.ea == first.ea
+    assert restored2.opcode == second.opcode
+    assert restored2.ea == second.ea
+
+    # Re-serialize should produce identical bytes
+    assert restored1.serialize() == (fmt_ver1, data1)
+    assert restored2.serialize() == (fmt_ver2, data2)
+
+
 # ---------------------------------------------------------------------------
 # Operand constant predicates
 # ---------------------------------------------------------------------------

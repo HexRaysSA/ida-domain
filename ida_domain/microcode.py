@@ -2265,6 +2265,33 @@ class MicroInstruction:
         """
         return self._raw.equal_insns(other._raw, eqflags)
 
+    # -- serialization -----------------------------------------------------
+
+    def serialize(self) -> Tuple[int, bytes]:
+        """Serialize this instruction to bytes.
+
+        Returns:
+            A tuple ``(format_version, data)`` where *format_version* is
+            the serialization format used and *data* is the serialized bytes.
+        """
+        return self._raw.serialize()
+
+    @staticmethod
+    def deserialize(data: bytes, format_version: int) -> MicroInstruction:
+        """Deserialize an instruction from bytes.
+
+        Args:
+            data: Serialized instruction bytes (as returned by :meth:`serialize`).
+            format_version: The format version returned by :meth:`serialize`.
+
+        Returns:
+            A new :class:`MicroInstruction`.
+        """
+        raw = minsn_t(0)
+        if not raw.deserialize(data, format_version):
+            raise MicrocodeError("failed to deserialize instruction")
+        return MicroInstruction(raw)
+
     # -- dunder protocols --------------------------------------------------
 
     def __iter__(self) -> Iterator[MicroOperand]:
