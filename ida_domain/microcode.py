@@ -628,7 +628,7 @@ class MicroCallInfo:
         return self._raw.callee
 
     @property
-    def solid_args(self) -> int:
+    def fixed_arg_count(self) -> int:
         """Number of solid (non-variadic) arguments."""
         return self._raw.solid_args
 
@@ -698,12 +698,12 @@ class MicroCallInfo:
         return self._raw.visible_memory
 
     @property
-    def call_spd(self) -> int:
+    def call_stack_pointer_delta(self) -> int:
         """Stack pointer delta at the call point."""
         return self._raw.call_spd
 
     @property
-    def stkargs_top(self) -> int:
+    def stack_args_top(self) -> int:
         """Top of stack arguments area."""
         return self._raw.stkargs_top
 
@@ -786,7 +786,7 @@ class MicroLocalVar:
         return self._raw.width
 
     @property
-    def def_ea(self) -> ea_t:
+    def definition_address(self) -> ea_t:
         """Address where this variable is first defined."""
         return self._raw.defea
 
@@ -862,11 +862,11 @@ class MicroLocalVar:
         """True if this variable is spoiled."""
         return self._raw.is_spoiled_var
 
-    def is_stk_var(self) -> bool:
+    def is_stack_variable(self) -> bool:
         """True if this variable is on the stack."""
         return self._raw.is_stk_var()
 
-    def is_reg_var(self) -> bool:
+    def is_register_variable(self) -> bool:
         """True if this variable is in a register."""
         return self._raw.is_reg_var()
 
@@ -884,7 +884,7 @@ class MicroLocalVar:
 
     # -- mutation ----------------------------------------------------------
 
-    def set_lvar_type(self, tif: tinfo_t) -> bool:
+    def set_type(self, tif: tinfo_t) -> bool:
         """Set the variable type.
 
         Args:
@@ -895,7 +895,7 @@ class MicroLocalVar:
         """
         return self._raw.set_lvar_type(tif)
 
-    def set_final_lvar_type(self, tif: tinfo_t) -> bool:
+    def set_final_type(self, tif: tinfo_t) -> bool:
         """Set the final variable type (no further propagation).
 
         Args:
@@ -1258,7 +1258,7 @@ class MicroOperand:
             return self._raw.s.off
         return None
 
-    def get_stkvar(self) -> Optional[Tuple[int, int]]:
+    def get_stack_variable(self) -> Optional[Tuple[int, int]]:
         """Resolve a stack variable operand to its frame index and IDA offset.
 
         Returns:
@@ -1407,12 +1407,12 @@ class MicroOperand:
     # -- extended type checks ----------------------------------------------
 
     @property
-    def is_kreg(self) -> bool:
+    def is_kernel_register(self) -> bool:
         """True if this is a kernel register."""
         return self._raw.is_kreg()
 
     @property
-    def is_cc(self) -> bool:
+    def is_condition_code(self) -> bool:
         """True if this is a condition code register."""
         return self._raw.is_cc()
 
@@ -1427,7 +1427,7 @@ class MicroOperand:
         return self._raw.is_scattered()
 
     @property
-    def is_01(self) -> bool:
+    def is_boolean(self) -> bool:
         """True if the operand can only be 0 or 1 (bit register, set result, etc.)."""
         return self._raw.is01()
 
@@ -1551,7 +1551,7 @@ class MicroOperand:
         """
         return self._raw.double_size()
 
-    def apply_xdu(self, new_size: int, ea: int = ida_idaapi.BADADDR) -> None:
+    def apply_zero_extension(self, new_size: int, ea: int = ida_idaapi.BADADDR) -> None:
         """Apply zero-extension to *new_size* bytes.
 
         Args:
@@ -1560,7 +1560,7 @@ class MicroOperand:
         """
         self._raw.apply_xdu(ea, new_size)
 
-    def apply_xds(self, new_size: int, ea: int = ida_idaapi.BADADDR) -> None:
+    def apply_sign_extension(self, new_size: int, ea: int = ida_idaapi.BADADDR) -> None:
         """Apply sign-extension to *new_size* bytes.
 
         Args:
@@ -1569,7 +1569,7 @@ class MicroOperand:
         """
         self._raw.apply_xds(ea, new_size)
 
-    def shift_mop(self, offset: int) -> bool:
+    def shift_operand(self, offset: int) -> bool:
         """Shift the operand start by *offset* bytes.
 
         Positive offsets move toward higher bytes (shrink from the low end),
@@ -1577,8 +1577,8 @@ class MicroOperand:
 
         Examples::
 
-            AH.1  shift_mop(-1) → AX.2
-            #0x12345678.4  shift_mop(3) → #0x12.1
+            AH.1  shift_operand(-1) → AX.2
+            #0x12345678.4  shift_operand(3) → #0x12.1
 
         Args:
             offset: Number of bytes to shift.
@@ -1871,7 +1871,7 @@ class MicroInstruction:
         """
         return self._raw.is_noret_call(flags)
 
-    def find_num_op(
+    def find_numeric_operand(
         self,
     ) -> Optional[Tuple[MicroOperand, MicroOperand]]:
         """Find the numeric operand (``l`` or ``r``) of this instruction.
@@ -1889,7 +1889,7 @@ class MicroInstruction:
             return None
         return MicroOperand(num_op, self), MicroOperand(other_op, self)
 
-    def find_ins_op(
+    def find_sub_instruction_operand(
         self, opcode: MicroOpcode = MicroOpcode.NOP
     ) -> Optional[Tuple[MicroInstruction, MicroOperand]]:
         """Find a sub-instruction operand (``l`` or ``r``) with the given opcode.
@@ -1914,7 +1914,7 @@ class MicroInstruction:
         )
 
     @property
-    def modifies_d(self) -> bool:
+    def modifies_dest(self) -> bool:
         """True if this instruction writes to its ``d`` operand.
 
         Some instructions (e.g. ``stx``) do not modify ``d``.
@@ -1939,7 +1939,7 @@ class MicroInstruction:
 
     # -- recursive visitors ------------------------------------------------
 
-    def for_all_insns(self, visitor: MicroInstructionVisitor) -> int:
+    def for_all_instructions(self, visitor: MicroInstructionVisitor) -> int:
         """Recursively visit all sub-instructions in this instruction tree.
 
         Args:
@@ -1951,7 +1951,7 @@ class MicroInstruction:
         """
         return self._raw.for_all_insns(visitor)
 
-    def for_all_ops(self, visitor: MicroOperandVisitor) -> int:
+    def for_all_operands(self, visitor: MicroOperandVisitor) -> int:
         """Recursively visit all operands in this instruction tree.
 
         Args:
@@ -1976,7 +1976,7 @@ class MicroInstruction:
         return self._raw.is_assert()
 
     @property
-    def is_fpinsn(self) -> bool:
+    def is_floating_point_insn(self) -> bool:
         """True if this is a floating-point instruction (flag-based)."""
         return self._raw.is_fpinsn()
 
@@ -2021,12 +2021,12 @@ class MicroInstruction:
         return self._raw.is_multimov()
 
     @property
-    def is_ignlowsrc(self) -> bool:
+    def is_ignore_low_source(self) -> bool:
         """True if low part of the source operand should be ignored."""
         return self._raw.is_ignlowsrc()
 
     @property
-    def is_extstx(self) -> bool:
+    def is_extended_store(self) -> bool:
         """True if this stx uses a sign-extended offset."""
         return self._raw.is_extstx()
 
@@ -2041,7 +2041,7 @@ class MicroInstruction:
         return self._raw.is_like_move()
 
     @property
-    def is_mbarrier(self) -> bool:
+    def is_memory_barrier(self) -> bool:
         """True if this is a memory barrier instruction."""
         return self._raw.is_mbarrier()
 
@@ -2066,7 +2066,7 @@ class MicroInstruction:
         return self._raw.is_readflags()
 
     @property
-    def is_inverted_jx(self) -> bool:
+    def is_inverted_jump(self) -> bool:
         """True if this conditional jump has been inverted."""
         return self._raw.is_inverted_jx()
 
@@ -2096,11 +2096,11 @@ class MicroInstruction:
         """Clear the assertion flag."""
         self._raw.clr_assert()
 
-    def set_fpinsn(self) -> None:
+    def set_floating_point_insn(self) -> None:
         """Mark this as a floating-point instruction."""
         self._raw.set_fpinsn()
 
-    def clr_fpinsn(self) -> None:
+    def clr_floating_point_insn(self) -> None:
         """Clear the floating-point instruction flag."""
         self._raw.clr_fpinsn()
 
@@ -2144,23 +2144,23 @@ class MicroInstruction:
         """Clear the multi-move flag."""
         self._raw.clr_multimov()
 
-    def set_ignlowsrc(self) -> None:
+    def set_ignore_low_source(self) -> None:
         """Set the ignore-low-source flag."""
         self._raw.set_ignlowsrc()
 
-    def clr_ignlowsrc(self) -> None:
+    def clr_ignore_low_source(self) -> None:
         """Clear the ignore-low-source flag."""
         self._raw.clr_ignlowsrc()
 
-    def set_extstx(self) -> None:
+    def set_extended_store(self) -> None:
         """Mark stx as using sign-extended offset."""
         self._raw.set_extstx()
 
-    def set_mbarrier(self) -> None:
+    def set_memory_barrier(self) -> None:
         """Mark this as a memory barrier."""
         self._raw.set_mbarrier()
 
-    def set_inverted_jx(self) -> None:
+    def set_inverted_jump(self) -> None:
         """Mark this conditional jump as inverted."""
         self._raw.set_inverted_jx()
 
@@ -2228,7 +2228,7 @@ class MicroInstruction:
         self.optimize_solo()
         self._parent_block.mark_lists_dirty()
 
-    def set_ea(self, ea: int) -> None:
+    def set_address(self, ea: int) -> None:
         """Change the effective address of this instruction and all sub-instructions."""
         self._raw.setaddr(ea)
 
@@ -2243,7 +2243,7 @@ class MicroInstruction:
 
     # -- comparison --------------------------------------------------------
 
-    def equal_insns(self, other: MicroInstruction, eqflags: int = 0) -> bool:
+    def equals(self, other: MicroInstruction, eqflags: int = 0) -> bool:
         """Structural comparison with fine-grained control.
 
         Args:
@@ -2459,12 +2459,12 @@ class MicroBlock:
         return self._raw.serial + 1
 
     @property
-    def npred(self) -> int:
+    def predecessor_count(self) -> int:
         """Number of predecessor blocks."""
         return self._raw.npred()
 
     @property
-    def nsucc(self) -> int:
+    def successor_count(self) -> int:
         """Number of successor blocks."""
         return self._raw.nsucc()
 
@@ -2488,7 +2488,7 @@ class MicroBlock:
     def __len__(self) -> int:
         return sum(1 for _ in self)
 
-    def for_all_insns(self, visitor: MicroInstructionVisitor) -> int:
+    def for_all_instructions(self, visitor: MicroInstructionVisitor) -> int:
         """Visit all instructions in this block (including sub-instructions).
 
         Args:
@@ -2499,7 +2499,7 @@ class MicroBlock:
         """
         return self._raw.for_all_insns(visitor)
 
-    def for_all_ops(self, visitor: MicroOperandVisitor) -> int:
+    def for_all_operands(self, visitor: MicroOperandVisitor) -> int:
         """Visit all operands in this block (including sub-instruction operands).
 
         Args:
@@ -2891,7 +2891,7 @@ class MicroBlock:
             blocks_traversed += 1
             if blocks_traversed > max_blocks:
                 break
-            if block.npred != 1:
+            if block.predecessor_count != 1:
                 break
             block = next(block.predecessors())
             cur_start = None  # search from tail of predecessor
@@ -3078,13 +3078,13 @@ class MicroBlockArray:
         return MicroLocalVars(self._raw.vars, self)
 
     @property
-    def argidx(self) -> List[int]:
+    def argument_indices(self) -> List[int]:
         """Indices of function arguments in the local variable list."""
         raw = self._raw.argidx
         return [raw.at(i) for i in range(raw.size())]
 
     @property
-    def retvaridx(self) -> int:
+    def return_variable_index(self) -> int:
         """Index of the return variable in the local variable list, or -1."""
         return self._raw.retvaridx
 
@@ -3184,7 +3184,7 @@ class MicroBlockArray:
 
     # -- visitor dispatch --------------------------------------------------
 
-    def for_all_topinsns(self, visitor: MicroInstructionVisitor) -> int:
+    def for_all_top_instructions(self, visitor: MicroInstructionVisitor) -> int:
         """Visit all top-level instructions across all blocks.
 
         Args:
@@ -3195,7 +3195,7 @@ class MicroBlockArray:
         """
         return self._raw.for_all_topinsns(visitor)
 
-    def for_all_insns(self, visitor: MicroInstructionVisitor) -> int:
+    def for_all_instructions(self, visitor: MicroInstructionVisitor) -> int:
         """Visit all instructions (including sub-instructions) across all blocks.
 
         Args:
@@ -3206,7 +3206,7 @@ class MicroBlockArray:
         """
         return self._raw.for_all_insns(visitor)
 
-    def for_all_ops(self, visitor: MicroOperandVisitor) -> int:
+    def for_all_operands(self, visitor: MicroOperandVisitor) -> int:
         """Visit all operands across all blocks and sub-instructions.
 
         Args:
@@ -3219,7 +3219,7 @@ class MicroBlockArray:
 
     # -- mutation ----------------------------------------------------------
 
-    def alloc_kreg(self, size: int, check_size: bool = True) -> int:
+    def alloc_kernel_register(self, size: int, check_size: bool = True) -> int:
         """Allocate a kernel register.
 
         Kernel registers are temporary registers that do not interfere
@@ -3235,16 +3235,16 @@ class MicroBlockArray:
         """
         return self._raw.alloc_kreg(size, check_size)
 
-    def free_kreg(self, reg: int, size: int) -> None:
+    def free_kernel_register(self, reg: int, size: int) -> None:
         """Free a previously allocated kernel register.
 
         Args:
-            reg: The micro-register number returned by :meth:`alloc_kreg`.
+            reg: The micro-register number returned by :meth:`alloc_kernel_register`.
             size: Size of the register in bytes (must match allocation).
         """
         self._raw.free_kreg(reg, size)
 
-    def alloc_fict_ea(self, real_ea: int = ida_idaapi.BADADDR) -> int:
+    def alloc_fictional_address(self, real_ea: int = ida_idaapi.BADADDR) -> int:
         """Allocate a fictional address for new instructions or variables.
 
         Fictional addresses are unique addresses from an unallocated
@@ -3412,7 +3412,7 @@ class MicroBlockArray:
         """
         return MicroError(self._raw.optimize_global())
 
-    def alloc_lvars(self) -> None:
+    def alloc_local_variables(self) -> None:
         """Allocate local variables.
 
         Must be called only immediately after :meth:`optimize_global`,
@@ -3433,7 +3433,7 @@ class MicroBlockArray:
 
     # -- stack offset conversion -------------------------------------------
 
-    def stkoff_vd2ida(self, vd_offset: int) -> int:
+    def stack_offset_decompiler_to_ida(self, vd_offset: int) -> int:
         """Convert a decompiler stack offset to an IDA stack offset.
 
         Args:
@@ -3444,7 +3444,7 @@ class MicroBlockArray:
         """
         return self._raw.stkoff_vd2ida(vd_offset)
 
-    def stkoff_ida2vd(self, ida_offset: int) -> int:
+    def stack_offset_ida_to_decompiler(self, ida_offset: int) -> int:
         """Convert an IDA stack offset to a decompiler stack offset.
 
         Args:
@@ -3455,7 +3455,7 @@ class MicroBlockArray:
         """
         return self._raw.stkoff_ida2vd(ida_offset)
 
-    def idaloc2vd(self, loc: Any, width: int) -> Any:
+    def location_ida_to_decompiler(self, loc: Any, width: int) -> Any:
         """Convert an IDA ``argloc_t`` to a decompiler ``vdloc_t``.
 
         Args:
@@ -3467,7 +3467,7 @@ class MicroBlockArray:
         """
         return self._raw.idaloc2vd(loc, width)
 
-    def vd2idaloc(self, loc: Any, width: int, spd: Optional[int] = None) -> Any:
+    def location_decompiler_to_ida(self, loc: Any, width: int, spd: Optional[int] = None) -> Any:
         """Convert a decompiler ``vdloc_t`` to an IDA ``argloc_t``.
 
         Args:
@@ -3485,12 +3485,12 @@ class MicroBlockArray:
     # -- frame/stack properties --------------------------------------------
 
     @property
-    def tmpstk_size(self) -> int:
+    def temp_stack_size(self) -> int:
         """Size of the temporary stack area in bytes."""
         return self._raw.tmpstk_size
 
     @property
-    def frsize(self) -> int:
+    def frame_size(self) -> int:
         """Size of the local variables area in bytes."""
         return self._raw.frsize
 
@@ -3500,7 +3500,7 @@ class MicroBlockArray:
         return self._raw.stacksize
 
     @property
-    def inargoff(self) -> int:
+    def incoming_args_offset(self) -> int:
         """Offset of the incoming arguments area."""
         return self._raw.inargoff
 
@@ -3532,7 +3532,7 @@ class MicroBlockArray:
         """
         self._raw.dump()
 
-    def dump_mba(self, title: str, verify: bool = True) -> None:
+    def dump_with_title(self, title: str, verify: bool = True) -> None:
         """Dump microcode with a title and optional verification.
 
         Args:
