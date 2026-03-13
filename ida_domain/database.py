@@ -25,6 +25,7 @@ from .heads import Heads
 from .hooks import HooksList  # type: ignore
 from .imports import Imports
 from .instructions import Instructions
+from .microcode import Microcode
 from .names import Names
 from .segments import Segments
 from .signature_files import SignatureFiles
@@ -892,6 +893,11 @@ class Database:
     def signature_files(self) -> SignatureFiles:
         """Handler that provides access to signature file operations."""
         return SignatureFiles(self)
+
+    @property
+    def microcode(self) -> Microcode:
+        """Handler that provides access to microcode operations."""
+        return Microcode(self)
 
     @property
     def xrefs(self) -> Xrefs:
