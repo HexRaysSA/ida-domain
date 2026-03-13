@@ -16,7 +16,7 @@ import ida_typeinf
 from ida_idaapi import ea_t
 from typing_extensions import TYPE_CHECKING, List, Literal, Optional, Tuple, Type, Union
 
-from .base import check_db_open
+from .base import DatabaseError, check_db_open
 from .bytes import Bytes
 from .comments import Comments
 from .entries import Entries
@@ -370,11 +370,6 @@ class IdaCommandOptions:
                 logger.error(f"Unknown debug flag '{name}'")
         return value
 
-
-class DatabaseError(Exception):
-    """Exception for database operations."""
-
-    pass
 
 
 class Database:

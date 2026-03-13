@@ -19,6 +19,8 @@ from .base import (
     DatabaseEntity,
     InvalidEAError,
     InvalidParameterError,
+    NoValueError,
+    UnsupportedValueError,
     check_db_open,
     decorate_all_methods,
 )
@@ -163,23 +165,6 @@ class ByteFlags(IntFlag):
     N_CUST = ida_bytes.FF_N_CUST
     """Custom representation?"""
 
-
-class NoValueError(ValueError):
-    """
-    Raised when a read operation is attempted on an uninitialized address.
-    """
-
-    def __init__(self, ea: ea_t) -> None:
-        super().__init__(f'The effective address: 0x{ea:x} has no value')
-
-
-class UnsupportedValueError(ValueError):
-    """
-    Raised when a read operation is attempted on a value which has an unsupported format.
-    """
-
-    def __init__(self, message: str) -> None:
-        super().__init__(message)
 
 
 logger = logging.getLogger(__name__)

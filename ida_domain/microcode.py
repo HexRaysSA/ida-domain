@@ -25,6 +25,7 @@ from .base import (
     DatabaseEntity,
     _CheckAttrSupport,
     _since_ida,
+    DecompilerError,
     check_db_open,
     decorate_all_methods,
     requires_ida,
@@ -372,7 +373,7 @@ class MicroError(IntEnum, metaclass=_CheckAttrSupport):
     EMULATOR = _since_ida('9.2', ida_hexrays, 'MERR_EMULATOR')
 
 
-class MicrocodeError(Exception):
+class MicrocodeError(DecompilerError):
     """Raised when microcode generation or decompilation fails.
 
     Attributes:
