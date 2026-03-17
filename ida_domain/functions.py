@@ -31,6 +31,7 @@ from .flowchart import FlowChart, FlowChartFlags
 
 if TYPE_CHECKING:
     from .database import Database
+    from .microcode import MicroBlockArray
 
 logger = logging.getLogger(__name__)
 
@@ -721,22 +722,23 @@ class Functions(DatabaseEntity):
             pseudocode.append(line)
         return pseudocode
 
-    def get_microcode(self, func: func_t, remove_tags: bool = True) -> List[str]:
+    def get_microcode(self, func: func_t) -> MicroBlockArray:
         """
-        Retrieves the microcode of the given function.
+        Generates microcode for the given function.
+
+        Delegates to ``db.microcode.generate()``.
 
         Args:
             func: The function instance.
-            remove_tags: If True, removes IDA color/formatting tags from the output.
 
         Returns:
-            A list of strings, each representing a line of microcode. Returns empty list if
-            function is invalid or decompilation fails.
+            A :class:`~ida_domain.microcode.MicroBlockArray` representing the
+            generated microcode.
 
         Raises:
-            RuntimeError: If microcode generation fails for the function.
+            MicrocodeError: If microcode generation fails for the function.
         """
-        return self.database.bytes.get_microcode_between(func.start_ea, func.end_ea, remove_tags)
+        return self.database.microcode.generate(func)
 
     def get_signature(self, func: func_t) -> str:
         """

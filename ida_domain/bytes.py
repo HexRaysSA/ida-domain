@@ -26,6 +26,7 @@ from .strings import StringType
 
 if TYPE_CHECKING:
     from .database import Database
+    from .microcode import MicroBlockArray
 
 
 class SearchFlags(IntFlag):
@@ -2096,57 +2097,21 @@ class Bytes(DatabaseEntity):
             ea = ida_bytes.find_bytes(pattern, ea + 1, None, end_ea)
         return results
 
-    def get_microcode_between(
-        self, start_ea: ea_t, end_ea: ea_t, remove_tags: bool = True
-    ) -> List[str]:
+    def get_microcode_between(self, start_ea: ea_t, end_ea: ea_t) -> MicroBlockArray:
         """
-        Retrieves the microcode of the given range.
+        Generates microcode for the given address range.
+
+        Delegates to ``db.microcode.generate_for_range()``.
 
         Args:
             start_ea: The range start.
             end_ea: The range end.
-            remove_tags: If True, removes IDA color/formatting tags from the output.
 
         Returns:
-            A list of strings, each representing a line of microcode. Returns empty list if
-            range is invalid or decompilation fails.
+            A :class:`~ida_domain.microcode.MicroBlockArray` representing the
+            generated microcode.
 
         Raises:
-            RuntimeError: If microcode generation fails for the range.
+            MicrocodeError: If microcode generation fails for the range.
         """
-        mbr = ida_hexrays.mba_ranges_t()
-        mbr.ranges.push_back(ida_range.range_t(start_ea, end_ea))
-        hf = ida_hexrays.hexrays_failure_t()
-        ml = ida_hexrays.mlist_t()
-        mba = ida_hexrays.gen_microcode(
-            mbr, hf, ml, ida_hexrays.DECOMP_WARNINGS, ida_hexrays.MMAT_GENERATED
-        )
-
-        if not mba:
-            raise RuntimeError(f'Failed to generate microcode for range {start_ea:x}:{end_ea:x}')
-
-        microcode = []
-        mba.build_graph()
-        total = mba.qty
-        for i in range(total):
-            if i == 0:
-                continue
-
-            block = mba.get_mblock(i)
-            if block.type == ida_hexrays.BLT_STOP:
-                continue
-
-            vp = ida_hexrays.qstring_printer_t(None, True)
-            block._print(vp)
-            lines = vp.get_s().split('\n')
-
-            if not remove_tags:
-                microcode.extend(lines)
-                continue
-
-            for line in lines:
-                line = ida_lines.tag_remove(line)
-                if line:
-                    microcode.append(line.strip())
-
-        return microcode
+        return self.database.microcode.generate_for_range(start_ea, end_ea)
