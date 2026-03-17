@@ -10,6 +10,12 @@ import pytest
 from packaging.version import Version
 
 import ida_domain  # isort: skip
+
+def min_ida_version(v: str) -> pytest.MarkDecorator:
+    return pytest.mark.skipif(
+        ida_domain.__ida_version__ < Version(v),
+        reason=f"requires IDA {v}+",
+    )
 import ida_typeinf
 from ida_idaapi import BADADDR
 
@@ -3171,6 +3177,7 @@ def test_microcode_instruction_iteration(test_env):
     assert skip_count <= total
 
 
+@min_ida_version("9.2")
 def test_microcode_operand_access(test_env):
     """Test operand type-specific accessors across all operand types."""
     from ida_domain.microcode import MicroOperandType
@@ -3887,6 +3894,7 @@ def test_microcode_graph(test_env):
         graph[9999]
 
 
+@min_ida_version("9.2")
 def test_microcode_global_address_operands(test_env):
     """Test GLOBAL_ADDR operand type (mop_v) via level1_func which has CALL targets."""
     from ida_domain.microcode import MicroOperandType
@@ -4798,6 +4806,7 @@ def test_microcode_operand_block_ref_factory(test_env):
     assert bool(op) is True
 
 
+@min_ida_version("9.2")
 def test_microcode_operand_global_addr_factory(test_env):
     """Test MicroOperand.global_addr() static factory."""
     from ida_domain.microcode import MicroOperand, MicroOperandType
@@ -4842,6 +4851,7 @@ def test_microcode_operand_from_insn_factory(test_env):
     assert sub.opcode == MicroOpcode.ADD
 
 
+@min_ida_version("9.2")
 def test_microcode_operand_stack_var_factory(test_env):
     """Test MicroOperand.stack_var() creates a stack variable operand."""
     from ida_domain.microcode import MicroOperand, MicroOperandType

@@ -4,7 +4,9 @@ import functools
 import logging
 from collections.abc import Callable
 
+import ida_kernwin
 from ida_idaapi import ea_t
+from packaging.version import Version
 from typing_extensions import TYPE_CHECKING, Any, Optional, ParamSpec, TypeVar, cast
 
 logger = logging.getLogger(__name__)
@@ -102,6 +104,27 @@ def decorate_all_methods(decorator: Callable[[F], F]) -> Callable[[C], C]:
         return cls
 
     return decorate
+
+
+def requires_ida(min_version: str) -> Callable[[Callable[P, R]], Callable[P, R]]:
+    """Decorator that raises an error if the IDA version is below *min_version*."""
+    _required = Version(min_version)
+    _current = Version(ida_kernwin.get_kernel_version())
+
+    def decorator(fn: Callable[P, R]) -> Callable[P, R]:
+        if _current >= _required:
+            return fn
+
+        @functools.wraps(fn)
+        def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+            raise NotImplementedError(
+                f'{fn.__qualname__} requires IDA {min_version}+, '
+                f'current version is {_current}'
+            )
+
+        return wrapper
+
+    return decorator
 
 
 def check_db_open(fn: Callable[P, R]) -> Callable[P, R]:

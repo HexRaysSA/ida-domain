@@ -21,7 +21,7 @@ from ida_hexrays import (
 )
 from typing_extensions import TYPE_CHECKING, Any, Iterator, List, Optional, Tuple
 
-from .base import DatabaseEntity, check_db_open, decorate_all_methods
+from .base import DatabaseEntity, check_db_open, decorate_all_methods, requires_ida
 
 if TYPE_CHECKING:
     from ida_hexrays import ivlset_t, valrng_t, vdloc_t, vivl_t
@@ -1344,10 +1344,12 @@ class MicroOperand:
         return self._raw.t == self._T.NUMBER
 
     @property
+    @requires_ida("9.2")
     def is_stack_var(self) -> bool:
         return self._raw.is_stkvar()
 
     @property
+    @requires_ida("9.2")
     def is_global_address(self) -> bool:
         return self._raw.is_glbvar()
 
