@@ -6579,7 +6579,7 @@ def test_microcode_instruction_flag_accessors(test_env):
 
     nop.set_floating_point_insn()
     assert nop.is_floating_point_insn is True
-    nop.clr_fpinsn()
+    nop.clr_floating_point_insn()
     assert nop.is_floating_point_insn is False
 
     nop.set_assert()

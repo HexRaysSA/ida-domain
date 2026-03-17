@@ -361,8 +361,10 @@ class MicroError(IntEnum):
     DSLOT = ida_hexrays.MERR_DSLOT
     STOP = ida_hexrays.MERR_STOP
     CLOUD = ida_hexrays.MERR_CLOUD
-    EMULATOR = ida_hexrays.MERR_EMULATOR
     LOOP = ida_hexrays.MERR_LOOP
+    # IDA 9.1+
+    if hasattr(ida_hexrays, "MERR_EMULATOR"):
+        EMULATOR = ida_hexrays.MERR_EMULATOR
 
 
 class MicrocodeError(Exception):
