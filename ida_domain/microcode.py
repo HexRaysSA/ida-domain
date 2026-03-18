@@ -21,7 +21,14 @@ from ida_hexrays import (
 )
 from typing_extensions import TYPE_CHECKING, Any, Iterator, List, Optional, Tuple
 
-from .base import DatabaseEntity, check_db_open, decorate_all_methods, requires_ida
+from .base import (
+    DatabaseEntity,
+    _CheckAttrSupport,
+    _since_ida,
+    check_db_open,
+    decorate_all_methods,
+    requires_ida,
+)
 
 if TYPE_CHECKING:
     from ida_hexrays import ivlset_t, valrng_t, vdloc_t, vivl_t
@@ -319,7 +326,7 @@ class MicroBlockFlags(IntFlag):
     VALRANGES = ida_hexrays.MBL_VALRANGES
 
 
-class MicroError(IntEnum):
+class MicroError(IntEnum, metaclass=_CheckAttrSupport):
     """Microcode error/return codes corresponding to MERR_* constants."""
 
     # Success / control flow
@@ -362,9 +369,7 @@ class MicroError(IntEnum):
     STOP = ida_hexrays.MERR_STOP
     CLOUD = ida_hexrays.MERR_CLOUD
     LOOP = ida_hexrays.MERR_LOOP
-    # IDA 9.1+
-    if hasattr(ida_hexrays, "MERR_EMULATOR"):
-        EMULATOR = ida_hexrays.MERR_EMULATOR
+    EMULATOR = _since_ida('9.2', ida_hexrays, 'MERR_EMULATOR')
 
 
 class MicrocodeError(Exception):
