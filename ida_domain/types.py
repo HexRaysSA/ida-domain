@@ -28,15 +28,12 @@ from ida_typeinf import (
     udm_t,
     udt_type_data_t,
 )
-from packaging.version import Version
 from typing_extensions import TYPE_CHECKING, Callable, Dict, Iterator, List, Optional, Tuple, Union
 
-from . import __ida_version__
 from .base import (
     DatabaseEntity,
     InvalidEAError,
     InvalidParameterError,
-    NotSupportedWarning,
     _CheckAttrSupport,
     _is_supported,
     _since_ida,
@@ -228,8 +225,9 @@ class UdtDetails:
         UdtAttr.MS_STRUCT: lambda t: t.is_msstruct(),
         UdtAttr.CPP_OBJ: lambda t: t.is_cppobj(),
         UdtAttr.VFTABLE: lambda t: t.is_vftable(),
-        UdtAttr.TUPLE: _is_tuple,
     }
+    if _is_supported('UdtAttr', 'TUPLE', warn=False):
+        _HANDLERS[UdtAttr.TUPLE] = _is_tuple
 
     def __init__(self) -> None:
         self._attributes: Optional[UdtAttr] = None

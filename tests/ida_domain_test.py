@@ -4089,6 +4089,7 @@ def test_microcode_operand_none_fallbacks(test_env):
     assert False, 'No number operand found'
 
 
+@min_ida_version("9.2")
 def test_microcode_operand_type_check_shortcuts(test_env):
     """Test is_stack_var, is_string, is_pair type-check shortcuts."""
     from ida_domain.microcode import MicroMaturity, MicroOperandType
