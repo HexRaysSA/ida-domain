@@ -91,7 +91,7 @@ def _since_ida(
         EMULATOR = _since_ida('9.2', ida_hexrays, 'MERR_EMULATOR')
 
         # Wrap an existing value
-        TUPLE = _since_ida('9.2', value=auto())
+        TUPLE = _since_ida('9.2', value=4)
 
     Args:
         min_version: Minimum IDA version (e.g. ``"9.2"``).
@@ -209,17 +209,16 @@ def decorate_all_methods(decorator: Callable[[F], F]) -> Callable[[C], C]:
 def requires_ida(min_version: str) -> Callable[[Callable[P, R]], Callable[P, R]]:
     """Decorator that raises an error if the IDA version is below *min_version*."""
     _required = Version(min_version)
-    _current = Version(ida_kernwin.get_kernel_version())
 
     def decorator(fn: Callable[P, R]) -> Callable[P, R]:
-        if _current >= _required:
+        if _ida_version >= _required:
             return fn
 
         @functools.wraps(fn)
         def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
             raise NotImplementedError(
                 f'{fn.__qualname__} requires IDA {min_version}+, '
-                f'current version is {_current}'
+                f'current version is {_ida_version}'
             )
 
         return wrapper

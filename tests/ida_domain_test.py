@@ -10,12 +10,6 @@ import pytest
 from packaging.version import Version
 
 import ida_domain  # isort: skip
-
-def min_ida_version(v: str) -> pytest.MarkDecorator:
-    return pytest.mark.skipif(
-        ida_domain.__ida_version__ < Version(v),
-        reason=f"requires IDA {v}+",
-    )
 import ida_typeinf
 from ida_idaapi import BADADDR
 
@@ -30,6 +24,13 @@ from ida_domain.types import TypeDetails, TypeKind
 
 idb_path: str = ''
 logger = logging.getLogger(__name__)
+
+
+def min_ida_version(v: str) -> pytest.MarkDecorator:
+    return pytest.mark.skipif(
+        ida_domain.__ida_version__ < Version(v),
+        reason=f"requires IDA {v}+",
+    )
 
 
 # Global setup (runs ONCE)
