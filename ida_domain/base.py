@@ -38,6 +38,12 @@ def _is_supported(type_name: str, attr: str, warn: bool = True) -> bool:
 
 
 class _CheckAttrSupport(EnumMeta):
+    @classmethod
+    def __prepare__(mcs, name: str, bases: Any, **kwargs: Any) -> Any:  # type: ignore[override]
+        global _PLACEHOLDER_COUNTER
+        _PLACEHOLDER_COUNTER = -9999
+        return super().__prepare__(name, bases, **kwargs)
+
     def __new__(mcs, name: str, bases: Any, namespace: Any, **kwargs: Any) -> Any:
         # Capture _GatedInt values before super().__new__ converts them to int
         for mname, mval in namespace.items():
