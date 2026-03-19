@@ -3007,7 +3007,7 @@ def test_migrated_examples(global_setup):
                 db.execute_script(script_path)
             except DatabaseError as e:
                 assert False, f'Example {script_path.name} failed to run, error {e}'
-            print(f'Executing migrated IDA Python example {script_path.name} finised\n<<<=====')
+            print(f'Executing migrated IDA Python example {script_path.name} finished\n<<<=====')
 
 
 def test_complex_variable_access(tiny_c_env):
@@ -5417,7 +5417,7 @@ def test_microcode_block_replace_instruction_wrong_block(test_env):
     assert insn_in_b1 is not None
 
     nop = MicroInstruction.create(insn_in_b1.ea, MicroOpcode.NOP)
-    with pytest.raises(InvalidParameterError, match="old_insn"):
+    with pytest.raises(InvalidParameterError, match="is not in this block"):
         block0.replace_instruction(insn_in_b1, nop)
 
 

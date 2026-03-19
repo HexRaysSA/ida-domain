@@ -188,7 +188,7 @@ class Segments(DatabaseEntity):
             The created segment_t on success, or None on failure.
         """
 
-        # Sanit check for ea valid range
+        # Sanity check for ea valid range
         if start_ea >= end_ea:
             raise InvalidParameterError('start_ea', start_ea, 'must be strictly less than end_ea')
 
@@ -243,13 +243,13 @@ class Segments(DatabaseEntity):
             InvalidParameterError: If seg_size is <= 0.
             DatabaseError: If there are no existing segments to append after.
         """
-        # Sanit check for size
+        # Sanity check for size
         if seg_size is None or seg_size <= 0:
             raise InvalidParameterError('seg_size', seg_size, 'must be a positive integer/ea')
 
         # Find last segment
         last_seg = ida_segment.get_last_seg()
-        if last_seg is None:  # Theres one last segment ?
+        if last_seg is None:  # No segments exist in database
             # No segments exist in database: require explicit addresses via add.
             raise DatabaseError(
                 'No existing segments found, cannot append. Use add(...) with explicit addresses.'
