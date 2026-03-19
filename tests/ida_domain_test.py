@@ -26,6 +26,13 @@ idb_path: str = ''
 logger = logging.getLogger(__name__)
 
 
+def min_ida_version(v: str) -> pytest.MarkDecorator:
+    return pytest.mark.skipif(
+        ida_domain.__ida_version__ < Version(v),
+        reason=f"requires IDA {v}+",
+    )
+
+
 # Global setup (runs ONCE)
 @pytest.fixture(scope='module', autouse=True)
 def global_setup():
@@ -3171,6 +3178,7 @@ def test_microcode_instruction_iteration(test_env):
     assert skip_count <= total
 
 
+@min_ida_version("9.2")
 def test_microcode_operand_access(test_env):
     """Test operand type-specific accessors across all operand types."""
     from ida_domain.microcode import MicroOperandType
@@ -3887,6 +3895,7 @@ def test_microcode_graph(test_env):
         graph[9999]
 
 
+@min_ida_version("9.2")
 def test_microcode_global_address_operands(test_env):
     """Test GLOBAL_ADDR operand type (mop_v) via level1_func which has CALL targets."""
     from ida_domain.microcode import MicroOperandType
@@ -4080,6 +4089,7 @@ def test_microcode_operand_none_fallbacks(test_env):
     assert False, 'No number operand found'
 
 
+@min_ida_version("9.2")
 def test_microcode_operand_type_check_shortcuts(test_env):
     """Test is_stack_var, is_string, is_pair type-check shortcuts."""
     from ida_domain.microcode import MicroMaturity, MicroOperandType
@@ -4798,6 +4808,7 @@ def test_microcode_operand_block_ref_factory(test_env):
     assert bool(op) is True
 
 
+@min_ida_version("9.2")
 def test_microcode_operand_global_addr_factory(test_env):
     """Test MicroOperand.global_addr() static factory."""
     from ida_domain.microcode import MicroOperand, MicroOperandType
@@ -4842,6 +4853,7 @@ def test_microcode_operand_from_insn_factory(test_env):
     assert sub.opcode == MicroOpcode.ADD
 
 
+@min_ida_version("9.2")
 def test_microcode_operand_stack_var_factory(test_env):
     """Test MicroOperand.stack_var() creates a stack variable operand."""
     from ida_domain.microcode import MicroOperand, MicroOperandType
@@ -6579,7 +6591,7 @@ def test_microcode_instruction_flag_accessors(test_env):
 
     nop.set_floating_point_insn()
     assert nop.is_floating_point_insn is True
-    nop.clr_fpinsn()
+    nop.clr_floating_point_insn()
     assert nop.is_floating_point_insn is False
 
     nop.set_assert()

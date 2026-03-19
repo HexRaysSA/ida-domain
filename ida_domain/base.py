@@ -2,12 +2,120 @@ from __future__ import annotations
 
 import functools
 import logging
+import warnings
 from collections.abc import Callable
+from enum import EnumMeta
 
+import ida_kernwin
 from ida_idaapi import ea_t
-from typing_extensions import TYPE_CHECKING, Any, Optional, ParamSpec, TypeVar, cast
+from packaging.version import Version
+from typing_extensions import TYPE_CHECKING, Any, Dict, Optional, ParamSpec, Tuple, TypeVar, cast
 
 logger = logging.getLogger(__name__)
+
+_ida_version = Version(ida_kernwin.get_kernel_version())
+
+
+class NotSupportedWarning(Warning):
+    """Warning for unsupported features in the underlying idapython API"""
+
+    pass
+
+
+_VERSION_SUPPORT_CHECK: Dict[Tuple[str, str], Callable[[], bool]] = {}
+
+
+def _is_supported(type_name: str, attr: str, warn: bool = True) -> bool:
+    checker = _VERSION_SUPPORT_CHECK.get((type_name, attr))
+    supported = checker is None or checker()
+    if not supported and warn:
+        warnings.warn(
+            f'{type_name}.{attr} is not supported in IDA version {_ida_version}',
+            category=NotSupportedWarning,
+            stacklevel=1,
+        )
+    return supported
+
+
+class _GatedInt(int):
+    """An int that carries a minimum IDA version requirement."""
+
+    min_version: Version
+    needs_placeholder: bool
+
+    def __new__(
+        cls, value: int, min_version: str, needs_placeholder: bool = False,
+    ) -> _GatedInt:
+        obj = super().__new__(cls, value)
+        obj.min_version = Version(min_version)
+        obj.needs_placeholder = needs_placeholder
+        return obj
+
+
+class _CheckAttrSupport(EnumMeta):
+    def __new__(mcs, name: str, bases: Any, namespace: Any, **kwargs: Any) -> Any:
+        # Capture _GatedInt values before super().__new__ converts them to int
+        placeholder = -1
+        for mname, mval in list(namespace.items()):
+            if isinstance(mval, _GatedInt):
+                req = mval.min_version
+
+                def _check(v: Version = req) -> bool:
+                    return _ida_version >= v
+
+                _VERSION_SUPPORT_CHECK[(name, mname)] = _check
+
+                if mval.needs_placeholder:
+                    dict.__setitem__(
+                        namespace, mname, _GatedInt(placeholder, str(req)),
+                    )
+                    placeholder -= 1
+
+        cls = super().__new__(mcs, name, bases, namespace, **kwargs)
+        return cls
+
+    def __getattribute__(cls, name):  # type: ignore
+        obj = super().__getattribute__(name)
+        _is_supported(type(obj).__name__, name)
+        return obj
+
+
+def _since_ida(
+    min_version: str,
+    module: Optional[object] = None,
+    attr: Optional[str] = None,
+    *,
+    value: Any = None,
+) -> int:
+    """Mark an enum member as requiring a minimum IDA version.
+
+    The returned value is a :class:`_GatedInt` that
+    :class:`_CheckAttrSupport` detects during enum class creation
+    and auto-registers a version check for.
+
+    Can be used in two ways::
+
+        # Read a constant from an IDA module (placeholder if missing)
+        EMULATOR = _since_ida('9.2', ida_hexrays, 'MERR_EMULATOR')
+
+        # Wrap an existing value
+        TUPLE = _since_ida('9.2', value=64)
+
+    Args:
+        min_version: Minimum IDA version (e.g. ``"9.2"``).
+        module: The ``ida_*`` module to read the constant from.
+        attr: Constant name in *module* (e.g. ``"MERR_EMULATOR"``).
+        value: Direct value to wrap (mutually exclusive with module/attr).
+    """
+    if value is not None:
+        return _GatedInt(value, min_version)
+    if module is not None and attr is not None:
+        resolved = getattr(module, attr, None)
+        if resolved is not None:
+            return _GatedInt(resolved, min_version)
+        return _GatedInt(0, min_version, needs_placeholder=True)
+    raise ValueError('_since_ida requires either (module, attr) or value=')
+
 
 if TYPE_CHECKING:
     from .database import Database
@@ -102,6 +210,26 @@ def decorate_all_methods(decorator: Callable[[F], F]) -> Callable[[C], C]:
         return cls
 
     return decorate
+
+
+def requires_ida(min_version: str) -> Callable[[Callable[P, R]], Callable[P, R]]:
+    """Decorator that raises an error if the IDA version is below *min_version*."""
+    _required = Version(min_version)
+
+    def decorator(fn: Callable[P, R]) -> Callable[P, R]:
+        if _ida_version >= _required:
+            return fn
+
+        @functools.wraps(fn)
+        def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+            raise NotImplementedError(
+                f'{fn.__qualname__} requires IDA {min_version}+, '
+                f'current version is {_ida_version}'
+            )
+
+        return wrapper
+
+    return decorator
 
 
 def check_db_open(fn: Callable[P, R]) -> Callable[P, R]:

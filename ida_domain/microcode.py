@@ -21,7 +21,14 @@ from ida_hexrays import (
 )
 from typing_extensions import TYPE_CHECKING, Any, Iterator, List, Optional, Tuple
 
-from .base import DatabaseEntity, check_db_open, decorate_all_methods
+from .base import (
+    DatabaseEntity,
+    _CheckAttrSupport,
+    _since_ida,
+    check_db_open,
+    decorate_all_methods,
+    requires_ida,
+)
 
 if TYPE_CHECKING:
     from ida_hexrays import ivlset_t, valrng_t, vdloc_t, vivl_t
@@ -319,7 +326,7 @@ class MicroBlockFlags(IntFlag):
     VALRANGES = ida_hexrays.MBL_VALRANGES
 
 
-class MicroError(IntEnum):
+class MicroError(IntEnum, metaclass=_CheckAttrSupport):
     """Microcode error/return codes corresponding to MERR_* constants."""
 
     # Success / control flow
@@ -361,8 +368,8 @@ class MicroError(IntEnum):
     DSLOT = ida_hexrays.MERR_DSLOT
     STOP = ida_hexrays.MERR_STOP
     CLOUD = ida_hexrays.MERR_CLOUD
-    EMULATOR = ida_hexrays.MERR_EMULATOR
     LOOP = ida_hexrays.MERR_LOOP
+    EMULATOR = _since_ida('9.2', ida_hexrays, 'MERR_EMULATOR')
 
 
 class MicrocodeError(Exception):
@@ -1342,10 +1349,12 @@ class MicroOperand:
         return self._raw.t == self._T.NUMBER
 
     @property
+    @requires_ida("9.2")
     def is_stack_var(self) -> bool:
         return self._raw.is_stkvar()
 
     @property
+    @requires_ida("9.2")
     def is_global_address(self) -> bool:
         return self._raw.is_glbvar()
 
