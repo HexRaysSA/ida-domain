@@ -23,9 +23,9 @@ from typing_extensions import TYPE_CHECKING, Any, Iterator, List, Optional, Tupl
 
 from .base import (
     DatabaseEntity,
+    DecompilerError,
     _CheckAttrSupport,
     _since_ida,
-    DecompilerError,
     check_db_open,
     decorate_all_methods,
     requires_ida,
