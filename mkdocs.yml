@@ -108,7 +108,7 @@ plugins:
         python:
           paths: [ "ida_domain" ]
           options:
-            docstring_style: sphinx
+            docstring_style: google
             # Shows links to other members in signatures
             signature_crossrefs: true
             # Orders members by source order, rather than alphabetical
