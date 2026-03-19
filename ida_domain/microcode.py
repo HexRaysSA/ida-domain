@@ -24,6 +24,7 @@ from typing_extensions import TYPE_CHECKING, Any, Iterator, List, Optional, Tupl
 from .base import (
     DatabaseEntity,
     DecompilerError,
+    InvalidParameterError,
     _CheckAttrSupport,
     _since_ida,
     check_db_open,
@@ -2226,10 +2227,10 @@ class MicroInstruction:
         obtained from a :class:`MicroBlock`).
 
         Raises:
-            RuntimeError: If the parent block is not known.
+            DecompilerError: If the parent block is not known.
         """
         if self._parent_block is None:
-            raise RuntimeError(
+            raise DecompilerError(
                 "Cannot mark lists dirty: parent block unknown. "
                 "Use block.replace_instruction() or ensure the instruction "
                 "was obtained from a block."
@@ -2989,10 +2990,10 @@ class MicroBlock:
             new_insn: The replacement instruction.
 
         Raises:
-            ValueError: If *old_insn* is not found in this block.
+            InvalidParameterError: If *old_insn* is not found in this block.
         """
         if not self.contains_instruction(old_insn):
-            raise ValueError("old_insn is not in this block")
+            raise InvalidParameterError("old_insn", old_insn, "is not in this block")
         old_insn.swap(new_insn)
         old_insn.optimize_solo()
         self.mark_lists_dirty()

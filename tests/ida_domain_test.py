@@ -14,7 +14,7 @@ import ida_typeinf
 from ida_idaapi import BADADDR
 
 import ida_domain.flowchart
-from ida_domain.base import InvalidParameterError
+from ida_domain.base import DatabaseError, DecompilerError, InvalidParameterError
 from ida_domain.bytes import SearchFlags
 from ida_domain.database import IdaCommandOptions
 from ida_domain.instructions import Instructions
@@ -2934,7 +2934,7 @@ def test_api_examples():
         with ida_domain.Database.open(str(idb_path), ida_options, save_on_close=False) as db:
             try:
                 db.execute_script(script_path)
-            except RuntimeError as e:
+            except DatabaseError as e:
                 assert False, f'Example {script_path.name} failed to run, error {e}'
 
 
@@ -3005,7 +3005,7 @@ def test_migrated_examples(global_setup):
             print(f'>>>========\nExecuting migrated IDA Python example {script_path.name}')
             try:
                 db.execute_script(script_path)
-            except RuntimeError as e:
+            except DatabaseError as e:
                 assert False, f'Example {script_path.name} failed to run, error {e}'
             print(f'Executing migrated IDA Python example {script_path.name} finised\n<<<=====')
 
@@ -5400,7 +5400,7 @@ def test_microcode_block_replace_instruction(test_env):
 
 
 def test_microcode_block_replace_instruction_wrong_block(test_env):
-    """Test replace_instruction raises ValueError for wrong block."""
+    """Test replace_instruction raises InvalidParameterError for wrong block."""
     import pytest
 
     from ida_domain.microcode import MicroInstruction, MicroOpcode
@@ -5417,7 +5417,7 @@ def test_microcode_block_replace_instruction_wrong_block(test_env):
     assert insn_in_b1 is not None
 
     nop = MicroInstruction.create(insn_in_b1.ea, MicroOpcode.NOP)
-    with pytest.raises(ValueError, match="old_insn is not in this block"):
+    with pytest.raises(InvalidParameterError, match="old_insn"):
         block0.replace_instruction(insn_in_b1, nop)
 
 
@@ -5441,7 +5441,7 @@ def test_microcode_instruction_replace_with(test_env):
 
 
 def test_microcode_instruction_replace_with_no_parent(test_env):
-    """Test replace_with raises RuntimeError when parent block is unknown."""
+    """Test replace_with raises DecompilerError when parent block is unknown."""
     import pytest
 
     from ida_domain.microcode import MicroInstruction, MicroOpcode
@@ -5450,7 +5450,7 @@ def test_microcode_instruction_replace_with_no_parent(test_env):
     insn = MicroInstruction.create(0x1000, MicroOpcode.NOP)
     replacement = MicroInstruction.create(0x1000, MicroOpcode.NOP)
 
-    with pytest.raises(RuntimeError, match="parent block unknown"):
+    with pytest.raises(DecompilerError, match="parent block unknown"):
         insn.replace_with(replacement)
 
 
