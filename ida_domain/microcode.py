@@ -2267,6 +2267,7 @@ class MicroInstruction:
 
     # -- serialization -----------------------------------------------------
 
+    @requires_ida("9.4")
     def serialize(self) -> Tuple[int, bytes]:
         """Serialize this instruction to bytes.
 

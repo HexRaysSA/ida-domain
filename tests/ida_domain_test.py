@@ -5792,6 +5792,7 @@ def test_microcode_mba_serialize_roundtrip(test_env):
     assert data == data2
 
 
+@min_ida_version("9.4")
 def test_microcode_instruction_serialize_roundtrip(test_env):
     """Test that MicroInstruction serialize → deserialize round-trips."""
     from ida_domain.microcode import MicroInstruction, MicroMaturity
