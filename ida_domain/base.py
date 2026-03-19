@@ -37,16 +37,26 @@ def _is_supported(type_name: str, attr: str, warn: bool = True) -> bool:
     return supported
 
 
-class _CheckAttrSupport(EnumMeta):
-    @classmethod
-    def __prepare__(mcs, name: str, bases: Any, **kwargs: Any) -> Any:  # type: ignore[override]
-        global _PLACEHOLDER_COUNTER
-        _PLACEHOLDER_COUNTER = -9999
-        return super().__prepare__(name, bases, **kwargs)
+class _GatedInt(int):
+    """An int that carries a minimum IDA version requirement."""
 
+    min_version: Version
+    needs_placeholder: bool
+
+    def __new__(
+        cls, value: int, min_version: str, needs_placeholder: bool = False,
+    ) -> _GatedInt:
+        obj = super().__new__(cls, value)
+        obj.min_version = Version(min_version)
+        obj.needs_placeholder = needs_placeholder
+        return obj
+
+
+class _CheckAttrSupport(EnumMeta):
     def __new__(mcs, name: str, bases: Any, namespace: Any, **kwargs: Any) -> Any:
         # Capture _GatedInt values before super().__new__ converts them to int
-        for mname, mval in namespace.items():
+        placeholder = -1
+        for mname, mval in list(namespace.items()):
             if isinstance(mval, _GatedInt):
                 req = mval.min_version
 
@@ -55,6 +65,12 @@ class _CheckAttrSupport(EnumMeta):
 
                 _VERSION_SUPPORT_CHECK[(name, mname)] = _check
 
+                if mval.needs_placeholder:
+                    dict.__setitem__(
+                        namespace, mname, _GatedInt(placeholder, str(req)),
+                    )
+                    placeholder -= 1
+
         cls = super().__new__(mcs, name, bases, namespace, **kwargs)
         return cls
 
@@ -62,20 +78,6 @@ class _CheckAttrSupport(EnumMeta):
         obj = super().__getattribute__(name)
         _is_supported(type(obj).__name__, name)
         return obj
-
-
-class _GatedInt(int):
-    """An int that carries a minimum IDA version requirement."""
-
-    min_version: Version
-
-    def __new__(cls, value: int, min_version: str) -> _GatedInt:
-        obj = super().__new__(cls, value)
-        obj.min_version = Version(min_version)
-        return obj
-
-
-_PLACEHOLDER_COUNTER = -9999
 
 
 def _since_ida(
@@ -97,7 +99,7 @@ def _since_ida(
         EMULATOR = _since_ida('9.2', ida_hexrays, 'MERR_EMULATOR')
 
         # Wrap an existing value
-        TUPLE = _since_ida('9.2', value=4)
+        TUPLE = _since_ida('9.2', value=64)
 
     Args:
         min_version: Minimum IDA version (e.g. ``"9.2"``).
@@ -105,15 +107,13 @@ def _since_ida(
         attr: Constant name in *module* (e.g. ``"MERR_EMULATOR"``).
         value: Direct value to wrap (mutually exclusive with module/attr).
     """
-    global _PLACEHOLDER_COUNTER
     if value is not None:
         return _GatedInt(value, min_version)
     if module is not None and attr is not None:
         resolved = getattr(module, attr, None)
-        if resolved is None:
-            _PLACEHOLDER_COUNTER -= 1
-            resolved = _PLACEHOLDER_COUNTER
-        return _GatedInt(resolved, min_version)
+        if resolved is not None:
+            return _GatedInt(resolved, min_version)
+        return _GatedInt(0, min_version, needs_placeholder=True)
     raise ValueError('_since_ida requires either (module, attr) or value=')
 
 
