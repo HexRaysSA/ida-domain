@@ -10,7 +10,7 @@ from typing_extensions import TYPE_CHECKING, Iterator, Optional
 if TYPE_CHECKING:
     from .database import Database
 
-from .base import DatabaseEntity, check_db_open, decorate_all_methods
+from .base import DatabaseEntity, InvalidParameterError, check_db_open, decorate_all_methods
 
 
 @dataclass(frozen=True)
@@ -24,9 +24,9 @@ class ForwarderInfo:
 
     def __post_init__(self) -> None:
         if self.ordinal < 0:
-            raise ValueError(f'Invalid ordinal number: {self.ordinal}')
+            raise InvalidParameterError('ordinal', self.ordinal, 'must be non-negative')
         if not self.name or not self.name.strip():
-            raise ValueError('Forwarder name cannot be empty')
+            raise InvalidParameterError('name', self.name, 'forwarder name cannot be empty')
 
 
 @dataclass(frozen=True)

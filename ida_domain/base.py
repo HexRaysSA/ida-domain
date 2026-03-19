@@ -166,7 +166,15 @@ P = ParamSpec('P')
 R = TypeVar('R')
 
 
-class InvalidEAError(LookupError):
+class IdaDomainError(Exception):
+    """
+    Base exception for all ida-domain errors.
+    """
+
+    pass
+
+
+class InvalidEAError(IdaDomainError, LookupError):
     """
     Raised when an operation is attempted on an invalid effective address.
     """
@@ -175,7 +183,7 @@ class InvalidEAError(LookupError):
         super().__init__(f'Invalid effective address: 0x{ea:x}')
 
 
-class InvalidParameterError(ValueError):
+class InvalidParameterError(IdaDomainError, ValueError):
     """
     Raised when a function receives invalid arguments.
     """
@@ -184,9 +192,43 @@ class InvalidParameterError(ValueError):
         super().__init__(f'Invalid parameter {parameter} value {str(value)}: {message}')
 
 
-class DatabaseNotLoadedError(RuntimeError):
+class DatabaseNotLoadedError(IdaDomainError, RuntimeError):
     """
     Raised when an operation is attempted on a closed database.
+    """
+
+    pass
+
+
+class DatabaseError(IdaDomainError):
+    """
+    Raised when a database operation fails.
+    """
+
+    pass
+
+
+class NoValueError(IdaDomainError, ValueError):
+    """
+    Raised when a read operation is attempted on an uninitialized address.
+    """
+
+    def __init__(self, ea: ea_t) -> None:
+        super().__init__(f'The effective address: 0x{ea:x} has no value')
+
+
+class UnsupportedValueError(IdaDomainError, ValueError):
+    """
+    Raised when a read operation is attempted on a value which has an unsupported format.
+    """
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+
+
+class DecompilerError(IdaDomainError):
+    """
+    Raised when a decompiler operation fails.
     """
 
     pass

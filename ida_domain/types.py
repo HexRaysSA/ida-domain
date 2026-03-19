@@ -32,6 +32,7 @@ from typing_extensions import TYPE_CHECKING, Callable, Dict, Iterator, List, Opt
 
 from .base import (
     DatabaseEntity,
+    DatabaseError,
     InvalidEAError,
     InvalidParameterError,
     _CheckAttrSupport,
@@ -1007,7 +1008,7 @@ class StructBuilder:
             The constructed tinfo_t.
 
         Raises:
-            RuntimeError: If struct creation fails.
+            DatabaseError: If struct creation fails.
         """
         udt = udt_type_data_t()
         udt.is_union = False
@@ -1018,11 +1019,11 @@ class StructBuilder:
             else:
                 udt_member = udt.add_member(name, member_type)
             if udt_member is None:
-                raise RuntimeError(f"Failed to add member '{name}' to struct '{self._name}'")
+                raise DatabaseError(f"Failed to add member '{name}' to struct '{self._name}'")
 
         result = tinfo_t()
         if not result.create_udt(udt, BTF_STRUCT):
-            raise RuntimeError(f"Failed to create struct '{self._name}'")
+            raise DatabaseError(f"Failed to create struct '{self._name}'")
 
         return result
 
@@ -1040,7 +1041,7 @@ class StructBuilder:
         if library is None:
             library = ida_typeinf.get_idati()
         if result.set_named_type(library, self._name) < 0:
-            raise RuntimeError(f"Failed to save struct '{self._name}' to library")
+            raise DatabaseError(f"Failed to save struct '{self._name}' to library")
         return result
 
 
@@ -1087,7 +1088,7 @@ class UnionBuilder:
             The constructed tinfo_t.
 
         Raises:
-            RuntimeError: If union creation fails.
+            DatabaseError: If union creation fails.
         """
         udt = udt_type_data_t()
         udt.is_union = True
@@ -1095,11 +1096,11 @@ class UnionBuilder:
         for name, member_type in self._members:
             udt_member = udt.add_member(name, member_type)
             if udt_member is None:
-                raise RuntimeError(f"Failed to add member '{name}' to union '{self._name}'")
+                raise DatabaseError(f"Failed to add member '{name}' to union '{self._name}'")
 
         result = tinfo_t()
         if not result.create_udt(udt, BTF_UNION):
-            raise RuntimeError(f"Failed to create union '{self._name}'")
+            raise DatabaseError(f"Failed to create union '{self._name}'")
 
         return result
 
@@ -1117,7 +1118,7 @@ class UnionBuilder:
         if library is None:
             library = ida_typeinf.get_idati()
         if result.set_named_type(library, self._name) < 0:
-            raise RuntimeError(f"Failed to save union '{self._name}' to library")
+            raise DatabaseError(f"Failed to save union '{self._name}' to library")
         return result
 
 
@@ -1175,7 +1176,7 @@ class EnumBuilder:
             The constructed tinfo_t.
 
         Raises:
-            RuntimeError: If enum creation fails.
+            DatabaseError: If enum creation fails.
         """
         enum_data = enum_type_data_t()
 
@@ -1187,7 +1188,7 @@ class EnumBuilder:
 
         result = tinfo_t()
         if not result.create_enum(enum_data):
-            raise RuntimeError(f"Failed to create enum '{self._name}'")
+            raise DatabaseError(f"Failed to create enum '{self._name}'")
 
         return result
 
@@ -1205,7 +1206,7 @@ class EnumBuilder:
         if library is None:
             library = ida_typeinf.get_idati()
         if result.set_named_type(library, self._name) < 0:
-            raise RuntimeError(f"Failed to save enum '{self._name}' to library")
+            raise DatabaseError(f"Failed to save enum '{self._name}' to library")
         return result
 
 
@@ -1286,7 +1287,7 @@ class FuncTypeBuilder:
             The constructed tinfo_t.
 
         Raises:
-            RuntimeError: If function type creation fails.
+            DatabaseError: If function type creation fails.
         """
         ftd = func_type_data_t()
 
@@ -1307,7 +1308,7 @@ class FuncTypeBuilder:
 
         result = tinfo_t()
         if not result.create_func(ftd):
-            raise RuntimeError('Failed to create function type')
+            raise DatabaseError('Failed to create function type')
 
         return result
 
@@ -1416,14 +1417,14 @@ class Types(DatabaseEntity):
             name: The name of the type.
 
         Raises:
-            RuntimeError: If the import operation failed.
+            DatabaseError: If the import operation failed.
 
         Returns:
             The ordinal number of the imported type.
         """
         result = ida_typeinf.copy_named_type(ida_typeinf.get_idati(), source, name)
         if result == 0:
-            raise RuntimeError(f'error importing type {name}')
+            raise DatabaseError(f'error importing type {name}')
         return result
 
     def export_type(self, destination: til_t, name: str) -> int:
@@ -1438,7 +1439,7 @@ class Types(DatabaseEntity):
             name: The name of the type.
 
         Raises:
-            RuntimeError: If the export operation failed.
+            DatabaseError: If the export operation failed.
 
         Returns:
             The ordinal number of the imported type.
@@ -1446,7 +1447,7 @@ class Types(DatabaseEntity):
         ida_typeinf.enable_numbered_types(destination, True)
         result = ida_typeinf.copy_named_type(destination, ida_typeinf.get_idati(), name)
         if result == 0:
-            raise RuntimeError(f'error exporting type {name}')
+            raise DatabaseError(f'error exporting type {name}')
         return result
 
     def copy_type(self, source: til_t, destination: til_t, name: str) -> int:
@@ -1459,14 +1460,14 @@ class Types(DatabaseEntity):
             name: The name of the type.
 
         Raises:
-            RuntimeError: If the copy operation failed.
+            DatabaseError: If the copy operation failed.
 
         Returns:
             The ordinal number of the copied type.
         """
         result = ida_typeinf.copy_named_type(source, destination, name)
         if result == 0:
-            raise RuntimeError(f'error exporting type {name}')
+            raise DatabaseError(f'error exporting type {name}')
         return result
 
     def parse_header_file(
