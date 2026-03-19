@@ -30,6 +30,7 @@ nav:
       - ref/heads.md
       - ref/imports.md
       - ref/instructions.md
+      - ref/microcode.md
       - ref/names.md
       - ref/operands.md
       - ref/segments.md
