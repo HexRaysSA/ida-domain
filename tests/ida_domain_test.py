@@ -5830,6 +5830,9 @@ def test_microcode_instruction_serialize_roundtrip(test_env):
     assert restored1.ea == first.ea
     assert restored2.opcode == second.opcode
     assert restored2.ea == second.ea
+    # Verify structural equality to catch operand/aux-field mismatches
+    assert restored1.equals(first)
+    assert restored2.equals(second)
 
     # Re-serialize should produce identical bytes
     assert restored1.serialize() == (fmt_ver1, data1)
