@@ -568,7 +568,7 @@ class Functions(DatabaseEntity):
 
         Raises:
             InvalidEAError: If the start_ea/end_ea are specified but they are not
-            in the database range.
+                in the database range.
         """
         if not self.database.is_valid_ea(start_ea, strict_check=False):
             raise InvalidEAError(start_ea)

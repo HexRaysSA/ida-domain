@@ -393,7 +393,7 @@ class Database:
           by calling `Database.open()` without arguments
 
     Example:
-    ```python
+        ```python
         # Library mode: Open and automatically close a database
         with Database.open("path/to/file.exe", save_on_close=True) as db:
             print(f"Loaded: {db.path}")
@@ -405,7 +405,7 @@ class Database:
 
         # IDA mode: Get handle to current database
         db = Database.open()  # or Database.open(None)
-    ```
+        ```
     """
 
     def __init__(self, hooks: Optional[HooksList] = None) -> None:
@@ -490,7 +490,7 @@ class Database:
                 when running inside IDA GUI.
 
         Example:
-        ```python
+            ```python
             # Library mode: Open a new database with custom options
             with Database.open(
                 "malware.exe",
@@ -503,7 +503,7 @@ class Database:
             # IDA GUI mode: Get current database
             db = Database.open()  # path=None
             # Work with the currently open database
-        ```
+            ```
         """
         db = Database(hooks=hooks)
         db.save_on_close = save_on_close
