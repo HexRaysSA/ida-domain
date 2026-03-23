@@ -196,7 +196,7 @@ class MicroOpcode(IntEnum):
         return ida_hexrays.is_mcode_commutative(self.value)
 
     @property
-    def is_fpu(self) -> bool:
+    def is_floating_point(self) -> bool:
         """True for floating-point opcodes (``f2i`` through ``fdiv``)."""
         return ida_hexrays.is_mcode_fpu(self.value)
 
@@ -800,7 +800,7 @@ class MicroLocalVar:
         return self._raw.defea
 
     @property
-    def def_block(self) -> int:
+    def definition_block(self) -> int:
         """Block index where this variable is first defined."""
         return self._raw.defblk
 
@@ -1352,7 +1352,7 @@ class MicroOperand:
 
     @property
     @requires_ida("9.2")
-    def is_stack_var(self) -> bool:
+    def is_stack_variable(self) -> bool:
         return self._raw.is_stkvar()
 
     @property
@@ -1428,7 +1428,7 @@ class MicroOperand:
         return self._raw.is_cc()
 
     @property
-    def is_bit_reg(self) -> bool:
+    def is_bit_register(self) -> bool:
         """True if this is a bit register (including condition codes)."""
         return self._raw.is_bit_reg()
 
@@ -1839,9 +1839,9 @@ class MicroInstruction:
         """True if this is a set-condition instruction (``setnz``..``setle``)."""
         return self.opcode.is_set
 
-    def is_fpu(self) -> bool:
+    def is_floating_point(self) -> bool:
         """True if this is a floating-point instruction."""
-        return self.opcode.is_fpu
+        return self.opcode.is_floating_point
 
     def is_commutative(self) -> bool:
         """True if this instruction's opcode is commutative."""
@@ -2919,7 +2919,7 @@ class MicroBlock:
                 # If it's a mov with a trackable source, follow the chain.
                 if found.opcode == MicroOpcode.MOV:
                     src = found.l
-                    if src.is_register or src.is_stack_var:
+                    if src.is_register or src.is_stack_variable:
                         cur_operand = src
                         cur_start = found
                         continue
