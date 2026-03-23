@@ -4091,7 +4091,7 @@ def test_microcode_operand_none_fallbacks(test_env):
 
 @min_ida_version("9.2")
 def test_microcode_operand_type_check_shortcuts(test_env):
-    """Test is_stack_var, is_string, is_pair type-check shortcuts."""
+    """Test is_stack_variable, is_string, is_pair type-check shortcuts."""
     from ida_domain.microcode import MicroMaturity, MicroOperandType
 
     db = test_env
@@ -4104,13 +4104,13 @@ def test_microcode_operand_type_check_shortcuts(test_env):
     for insn in mf.instructions():
         for op in insn.operands():
             if op.type == MicroOperandType.STACK_VAR:
-                assert op.is_stack_var
+                assert op.is_stack_variable
                 assert op.stack_offset is not None
                 found_stack = True
             else:
-                # Verify is_stack_var is False for other types
+                # Verify is_stack_variable is False for other types
                 if op.is_register:
-                    assert not op.is_stack_var
+                    assert not op.is_stack_variable
 
             # is_string and is_pair should be False for most operands
             if op.is_register or op.is_number:
@@ -4273,12 +4273,12 @@ def test_microcode_opcode_category_properties(test_env):
     assert MicroOpcode.SHL.is_commutative is False
 
     # -- FPU
-    assert MicroOpcode.FADD.is_fpu is True
-    assert MicroOpcode.FDIV.is_fpu is True
-    assert MicroOpcode.F2I.is_fpu is True
-    assert MicroOpcode.FNEG.is_fpu is True
-    assert MicroOpcode.ADD.is_fpu is False
-    assert MicroOpcode.MOV.is_fpu is False
+    assert MicroOpcode.FADD.is_floating_point is True
+    assert MicroOpcode.FDIV.is_floating_point is True
+    assert MicroOpcode.F2I.is_floating_point is True
+    assert MicroOpcode.FNEG.is_floating_point is True
+    assert MicroOpcode.ADD.is_floating_point is False
+    assert MicroOpcode.MOV.is_floating_point is False
 
     # -- Propagatable (can appear in sub-instructions)
     assert MicroOpcode.ADD.is_propagatable is True
@@ -4359,7 +4359,7 @@ def test_microcode_instruction_category_methods(test_env):
         assert insn.is_jump() == opc.is_jump
         assert insn.is_flow() == opc.is_flow
         assert insn.is_set() == opc.is_set
-        assert insn.is_fpu() == opc.is_fpu
+        assert insn.is_floating_point() == opc.is_floating_point
         assert insn.is_commutative() == opc.is_commutative
 
     assert found_any, "Expected at least one instruction"
@@ -4864,7 +4864,7 @@ def test_microcode_operand_stack_var_factory(test_env):
 
     op = MicroOperand.stack_var(mf, 0x10)
     assert op.type == MicroOperandType.STACK_VAR
-    assert op.is_stack_var is True
+    assert op.is_stack_variable is True
 
 
 def test_microcode_instruction_create_nop(test_env):
@@ -5837,7 +5837,7 @@ def test_microcode_operand_constant_predicates(test_env):
 
 
 def test_microcode_operand_extended_type_checks(test_env):
-    """Test is_kreg, is_cc, is_bit_reg on operands."""
+    """Test is_kreg, is_cc, is_bit_register on operands."""
     import ida_hexrays
 
     from ida_domain.microcode import MicroOperand
@@ -5845,19 +5845,19 @@ def test_microcode_operand_extended_type_checks(test_env):
     # Condition code register (mreg 0 is cc on x86)
     cc_reg = MicroOperand.reg(0, 1)
     assert cc_reg.is_condition_code
-    assert cc_reg.is_bit_reg  # cc regs are bit regs
+    assert cc_reg.is_bit_register  # cc regs are bit regs
 
     # General-purpose register — mr_first is the start of GP regs
     gp_reg = MicroOperand.reg(ida_hexrays.mr_first, 4)
     assert not gp_reg.is_kernel_register
     assert not gp_reg.is_condition_code
-    assert not gp_reg.is_bit_reg
+    assert not gp_reg.is_bit_register
 
     # Non-register operand
     num = MicroOperand.number(5, 4)
     assert not num.is_kernel_register
     assert not num.is_condition_code
-    assert not num.is_bit_reg
+    assert not num.is_bit_register
 
 
 def test_microcode_operand_may_use_aliased_memory(test_env):
@@ -6401,7 +6401,7 @@ def test_microcode_local_vars_wrapper(test_env):
     assert isinstance(v0.width, int)
     assert v0.width > 0
     assert isinstance(v0.definition_address, int)
-    assert isinstance(v0.def_block, int)
+    assert isinstance(v0.definition_block, int)
     assert isinstance(v0.comment, str)
     assert isinstance(v0.divisor, int)
     assert v0.type_info is not None

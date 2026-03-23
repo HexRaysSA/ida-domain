@@ -109,6 +109,8 @@ plugins:
         python:
           paths: [ "ida_domain" ]
           options:
+            extensions:
+              - docs/_extensions/requires_ida.py:RequiresIdaExtension
             docstring_style: sphinx
             # Shows links to other members in signatures
             signature_crossrefs: true
