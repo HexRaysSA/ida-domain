@@ -15,6 +15,10 @@ from ida_typeinf import (
     BT_INT64,
     BT_VOID,
     BTF_STRUCT,
+    BTF_UINT8,
+    BTF_UINT16,
+    BTF_UINT32,
+    BTF_UINT64,
     BTF_UNION,
     BTMT_DOUBLE,
     PIO_IGNORE_PTRS,
@@ -55,7 +59,7 @@ from .base import (
 )
 
 if TYPE_CHECKING:
-    from ida_idaapi import ea_t
+    from ida_idaapi import ea_t, object_t
 
     from .database import Database
 
@@ -1631,7 +1635,7 @@ class Types(DatabaseEntity):
             raise InvalidEAError(ea)
         return ida_typeinf.apply_tinfo(ea, type, flags)
 
-    def apply_from_declaration(
+    def apply_declaration_at(
         self,
         ea: ea_t,
         decl: str,
@@ -1658,7 +1662,7 @@ class Types(DatabaseEntity):
             InvalidParameterError: If the declaration cannot be parsed.
 
         Example:
-            >>> db.types.apply_from_declaration(0x401000, "int __fastcall foo(int x)")
+            >>> db.types.apply_declaration_at(0x401000, "int __fastcall foo(int x)")
         """
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
@@ -2088,18 +2092,25 @@ class Types(DatabaseEntity):
             >>> int32 = db.types.create_primitive(4, signed=True)
             >>> uint8 = db.types.create_primitive(1, signed=False)
         """
-        size_to_type = {
+        signed_types = {
             1: BT_INT8,
             2: BT_INT16,
             4: BT_INT32,
             8: BT_INT64,
         }
+        unsigned_types = {
+            1: BTF_UINT8,
+            2: BTF_UINT16,
+            4: BTF_UINT32,
+            8: BTF_UINT64,
+        }
 
-        if size not in size_to_type:
+        if size not in signed_types:
             raise InvalidParameterError('size', size, 'must be 1, 2, 4, or 8')
 
+        type_map = signed_types if signed else unsigned_types
         result = tinfo_t()
-        result.create_simple_type(size_to_type[size])
+        result.create_simple_type(type_map[size])
         return result
 
     def create_float(self, size: int = 4) -> tinfo_t:
@@ -2347,25 +2358,27 @@ class Types(DatabaseEntity):
         type_bytes, fields_bytes, _ = result
         return type_bytes, fields_bytes if fields_bytes else b''
 
-    def retrieve_object_at(
-        self, type_info: tinfo_t, ea: ea_t, flags: ObjectIOFlags = ObjectIOFlags.NONE
-    ) -> Dict[str, Any]:
+    def parse_structure_at(
+        self, ea: ea_t, type_info: tinfo_t, flags: ObjectIOFlags = ObjectIOFlags.NONE
+    ) -> object_t:
         """
         Reconstruct a typed object from a database address.
 
         Reads memory at the specified address according to the type layout
-        and returns a dictionary representation of the structure.
+        and returns an ``object_t`` whose attributes correspond to the structure
+        members.  Nested structures become nested ``object_t`` instances.
+        Members can be accessed by attribute (``obj.x``) or by key (``obj['x']``).
 
         Args:
-            type_info: Type describing the structure layout.
             ea: Effective address to read from.
+            type_info: Type describing the structure layout.
             flags: ObjectIOFlags controlling behavior:
                 - NONE: Default behavior
                 - NOATTR_FAIL: Treat missing attributes as failures
                 - IGNORE_PTRS: Don't follow pointers during conversion
 
         Returns:
-            Dictionary with member names as keys and values extracted
+            An ``object_t`` with member names as attributes and values extracted
             according to the type definition.
 
         Raises:
@@ -2375,8 +2388,8 @@ class Types(DatabaseEntity):
 
         Example:
             >>> point_type = db.types.get_by_name("Point")
-            >>> data = db.types.retrieve_object_at(point_type, 0x401000)
-            >>> print(data)  # {'x': 10, 'y': 20}
+            >>> data = db.types.parse_structure_at(0x401000, point_type)
+            >>> data.x  # 10
         """
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
@@ -2395,25 +2408,27 @@ class Types(DatabaseEntity):
             return result[1]
         return result
 
-    def retrieve_object_from_bytes(
+    def parse_structure_from_bytes(
         self, type_info: tinfo_t, data: bytes, flags: ObjectIOFlags = ObjectIOFlags.NONE
-    ) -> Dict[str, Any]:
+    ) -> object_t:
         """
         Reconstruct a typed object from a packed bytes buffer.
 
         Deserializes a previously packed buffer according to the type layout
-        and returns a dictionary representation.
+        and returns an ``object_t`` whose attributes correspond to the structure
+        members.  Nested structures become nested ``object_t`` instances.
+        Members can be accessed by attribute (``obj.x``) or by key (``obj['x']``).
 
         Args:
             type_info: Type describing the structure layout.
-            data: Packed bytes buffer (typically from store_object_to_bytes).
+            data: Packed bytes buffer (typically from serialize_structure_to_bytes).
             flags: ObjectIOFlags controlling behavior:
                 - NONE: Default behavior
                 - NOATTR_FAIL: Treat missing attributes as failures
                 - IGNORE_PTRS: Don't follow pointers during conversion
 
         Returns:
-            Dictionary with member names as keys and values.
+            An ``object_t`` with member names as attributes and values.
 
         Raises:
             InvalidParameterError: If type_info cannot be serialized or data is empty.
@@ -2421,9 +2436,9 @@ class Types(DatabaseEntity):
 
         Example:
             >>> point_type = db.types.get_by_name("Point")
-            >>> packed = db.types.store_object_to_bytes(point_type, {'x': 10, 'y': 20})
-            >>> data = db.types.retrieve_object_from_bytes(point_type, packed)
-            >>> print(data)  # {'x': 10, 'y': 20}
+            >>> packed = db.types.serialize_structure_to_bytes(point_type, {'x': 10, 'y': 20})
+            >>> data = db.types.parse_structure_from_bytes(point_type, packed)
+            >>> data.x  # 10
         """
         if not isinstance(data, bytes) or len(data) == 0:
             raise InvalidParameterError('data', data, 'must be non-empty bytes')
@@ -2442,10 +2457,10 @@ class Types(DatabaseEntity):
             return result[1]
         return result
 
-    def store_object_at(
+    def store_structure_at(
         self,
-        type_info: tinfo_t,
         ea: ea_t,
+        type_info: tinfo_t,
         obj: Dict[str, Any],
         flags: ObjectIOFlags = ObjectIOFlags.NONE,
     ) -> None:
@@ -2456,8 +2471,8 @@ class Types(DatabaseEntity):
         the binary representation to the specified database address.
 
         Args:
-            type_info: Type describing the structure layout.
             ea: Effective address to write to.
+            type_info: Type describing the structure layout.
             obj: Dictionary with member names and values to store.
             flags: ObjectIOFlags controlling behavior:
                 - NONE: Default behavior
@@ -2471,7 +2486,7 @@ class Types(DatabaseEntity):
 
         Example:
             >>> point_type = db.types.get_by_name("Point")
-            >>> db.types.store_object_at(point_type, 0x401000, {'x': 10, 'y': 20})
+            >>> db.types.store_structure_at(0x401000, point_type, {'x': 10, 'y': 20})
         """
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
@@ -2488,7 +2503,7 @@ class Types(DatabaseEntity):
         if result != 0:
             raise RuntimeError(f'Failed to pack object to address 0x{ea:x}: error code {result}')
 
-    def store_object_to_bytes(
+    def serialize_structure_to_bytes(
         self,
         type_info: tinfo_t,
         obj: Dict[str, Any],
@@ -2500,7 +2515,7 @@ class Types(DatabaseEntity):
 
         Converts a dictionary to binary representation according to the type
         layout. The resulting bytes can be stored, transmitted, or later
-        deserialized with retrieve_object_from_bytes.
+        deserialized with parse_structure_from_bytes.
 
         Args:
             type_info: Type describing the structure layout.
@@ -2521,7 +2536,7 @@ class Types(DatabaseEntity):
 
         Example:
             >>> point_type = db.types.get_by_name("Point")
-            >>> packed = db.types.store_object_to_bytes(point_type, {'x': 10, 'y': 20})
+            >>> packed = db.types.serialize_structure_to_bytes(point_type, {'x': 10, 'y': 20})
             >>> print(len(packed))  # 8 (two 4-byte integers)
         """
         if not isinstance(obj, dict):
