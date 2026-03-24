@@ -1,6 +1,6 @@
 """
 This is equivalent of automatic_steps.py from IDAPython examples
-Original: https://github.com/idapython/src/blob/master/examples/debugger/automatic_steps.py
+Original: https://github.com/HexRaysSA/ida-sdk/blob/main/src/plugins/idapython/examples/debugger/dbghooks/automatic_steps.py
 NOTE: Partially migrated - uses Domain hooks with legacy debugger control
 """
 

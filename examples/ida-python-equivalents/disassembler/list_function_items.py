@@ -1,6 +1,6 @@
 """
 This is equivalent of list_function_items.py from IDAPython examples
-Original: https://github.com/idapython/src/blob/master/examples/disassembler/list_function_items.py
+Original: https://github.com/HexRaysSA/ida-sdk/blob/main/src/plugins/idapython/examples/disassembler/list_function_items.py
 """
 
 import ida_domain

@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import logging
-import warnings
 from dataclasses import dataclass
-from enum import Enum, EnumMeta, Flag, IntEnum, IntFlag, auto
+from enum import Enum, Flag, IntEnum, IntFlag, auto
 from pathlib import Path
 
 import ida_nalt
@@ -31,7 +30,6 @@ from ida_typeinf import (
     udm_t,
     udt_type_data_t,
 )
-from packaging.version import Version
 from typing_extensions import (
     TYPE_CHECKING,
     Any,
@@ -44,11 +42,14 @@ from typing_extensions import (
     Union,
 )
 
-from . import __ida_version__
 from .base import (
     DatabaseEntity,
+    DatabaseError,
     InvalidEAError,
     InvalidParameterError,
+    _CheckAttrSupport,
+    _is_supported,
+    _since_ida,
     check_db_open,
     decorate_all_methods,
 )
@@ -60,38 +61,6 @@ if TYPE_CHECKING:
 
 
 logger = logging.getLogger(__name__)
-
-
-class NotSupportedWarning(Warning):
-    """Warning for unsupported features in the underlying idapython API"""
-
-    pass
-
-
-warnings.simplefilter('ignore', category=NotSupportedWarning)
-
-_VERSION_SUPPORT_CHECK: Dict[Tuple[str, str], Callable[[], bool]] = {
-    ('UdtAttr', 'TUPLE'): lambda: __ida_version__ >= Version('9.2')
-}
-
-
-def _is_supported(type_name: str, attr: str, warn: bool = True) -> bool:
-    checker = _VERSION_SUPPORT_CHECK.get((type_name, attr))
-    supported = checker is None or checker()
-    if not supported and warn:
-        warnings.warn(
-            f'{type_name}.{attr} is not supported in IDA version {__ida_version__}',
-            category=NotSupportedWarning,
-            stacklevel=1,
-        )
-    return supported
-
-
-class _CheckAttrSupport(EnumMeta):
-    def __getattribute__(cls, name):  # type: ignore
-        obj = super().__getattribute__(name)
-        _is_supported(type(obj).__name__, name)
-        return obj
 
 
 class LibraryAddFlags(IntFlag):
@@ -257,13 +226,13 @@ class TypeKind(Enum):
 class UdtAttr(Flag, metaclass=_CheckAttrSupport):
     """User Defined Type flags"""
 
-    CPP_OBJ = auto()
-    FIXED = auto()
-    MS_STRUCT = auto()
-    UNALIGNED = auto()
-    VFTABLE = auto()
-    UNION = auto()
-    TUPLE = auto()
+    CPP_OBJ = 1
+    FIXED = 2
+    MS_STRUCT = 4
+    UNALIGNED = 8
+    VFTABLE = 16
+    UNION = 32
+    TUPLE = _since_ida('9.2', value=64)
 
 
 class UdtDetails:
@@ -272,8 +241,7 @@ class UdtDetails:
     @staticmethod
     def _is_tuple(u: udt_type_data_t) -> bool:
         type_name = UdtAttr.__name__
-        attr_name = str(UdtAttr.TUPLE.name)
-        if _is_supported(type_name, attr_name, warn=False):
+        if _is_supported(type_name, 'TUPLE', warn=False):
             return u.is_tuple()
         return False
 
@@ -283,8 +251,9 @@ class UdtDetails:
         UdtAttr.MS_STRUCT: lambda t: t.is_msstruct(),
         UdtAttr.CPP_OBJ: lambda t: t.is_cppobj(),
         UdtAttr.VFTABLE: lambda t: t.is_vftable(),
-        UdtAttr.TUPLE: _is_tuple,
     }
+    if _is_supported('UdtAttr', 'TUPLE', warn=False):
+        _HANDLERS[UdtAttr.TUPLE] = _is_tuple
 
     def __init__(self) -> None:
         self._attributes: Optional[UdtAttr] = None
@@ -1064,7 +1033,7 @@ class StructBuilder:
             The constructed tinfo_t.
 
         Raises:
-            RuntimeError: If struct creation fails.
+            DatabaseError: If struct creation fails.
         """
         udt = udt_type_data_t()
         udt.is_union = False
@@ -1075,11 +1044,11 @@ class StructBuilder:
             else:
                 udt_member = udt.add_member(name, member_type)
             if udt_member is None:
-                raise RuntimeError(f"Failed to add member '{name}' to struct '{self._name}'")
+                raise DatabaseError(f"Failed to add member '{name}' to struct '{self._name}'")
 
         result = tinfo_t()
         if not result.create_udt(udt, BTF_STRUCT):
-            raise RuntimeError(f"Failed to create struct '{self._name}'")
+            raise DatabaseError(f"Failed to create struct '{self._name}'")
 
         return result
 
@@ -1097,7 +1066,7 @@ class StructBuilder:
         if library is None:
             library = ida_typeinf.get_idati()
         if result.set_named_type(library, self._name) < 0:
-            raise RuntimeError(f"Failed to save struct '{self._name}' to library")
+            raise DatabaseError(f"Failed to save struct '{self._name}' to library")
         return result
 
 
@@ -1144,7 +1113,7 @@ class UnionBuilder:
             The constructed tinfo_t.
 
         Raises:
-            RuntimeError: If union creation fails.
+            DatabaseError: If union creation fails.
         """
         udt = udt_type_data_t()
         udt.is_union = True
@@ -1152,11 +1121,11 @@ class UnionBuilder:
         for name, member_type in self._members:
             udt_member = udt.add_member(name, member_type)
             if udt_member is None:
-                raise RuntimeError(f"Failed to add member '{name}' to union '{self._name}'")
+                raise DatabaseError(f"Failed to add member '{name}' to union '{self._name}'")
 
         result = tinfo_t()
         if not result.create_udt(udt, BTF_UNION):
-            raise RuntimeError(f"Failed to create union '{self._name}'")
+            raise DatabaseError(f"Failed to create union '{self._name}'")
 
         return result
 
@@ -1174,7 +1143,7 @@ class UnionBuilder:
         if library is None:
             library = ida_typeinf.get_idati()
         if result.set_named_type(library, self._name) < 0:
-            raise RuntimeError(f"Failed to save union '{self._name}' to library")
+            raise DatabaseError(f"Failed to save union '{self._name}' to library")
         return result
 
 
@@ -1232,7 +1201,7 @@ class EnumBuilder:
             The constructed tinfo_t.
 
         Raises:
-            RuntimeError: If enum creation fails.
+            DatabaseError: If enum creation fails.
         """
         enum_data = enum_type_data_t()
 
@@ -1244,7 +1213,7 @@ class EnumBuilder:
 
         result = tinfo_t()
         if not result.create_enum(enum_data):
-            raise RuntimeError(f"Failed to create enum '{self._name}'")
+            raise DatabaseError(f"Failed to create enum '{self._name}'")
 
         return result
 
@@ -1262,7 +1231,7 @@ class EnumBuilder:
         if library is None:
             library = ida_typeinf.get_idati()
         if result.set_named_type(library, self._name) < 0:
-            raise RuntimeError(f"Failed to save enum '{self._name}' to library")
+            raise DatabaseError(f"Failed to save enum '{self._name}' to library")
         return result
 
 
@@ -1343,7 +1312,7 @@ class FuncTypeBuilder:
             The constructed tinfo_t.
 
         Raises:
-            RuntimeError: If function type creation fails.
+            DatabaseError: If function type creation fails.
         """
         ftd = func_type_data_t()
 
@@ -1364,7 +1333,7 @@ class FuncTypeBuilder:
 
         result = tinfo_t()
         if not result.create_func(ftd):
-            raise RuntimeError('Failed to create function type')
+            raise DatabaseError('Failed to create function type')
 
         return result
 
@@ -1473,14 +1442,14 @@ class Types(DatabaseEntity):
             name: The name of the type.
 
         Raises:
-            RuntimeError: If the import operation failed.
+            DatabaseError: If the import operation failed.
 
         Returns:
             The ordinal number of the imported type.
         """
         result = ida_typeinf.copy_named_type(ida_typeinf.get_idati(), source, name)
         if result == 0:
-            raise RuntimeError(f'error importing type {name}')
+            raise DatabaseError(f'error importing type {name}')
         return result
 
     def export_type(self, destination: til_t, name: str) -> int:
@@ -1495,7 +1464,7 @@ class Types(DatabaseEntity):
             name: The name of the type.
 
         Raises:
-            RuntimeError: If the export operation failed.
+            DatabaseError: If the export operation failed.
 
         Returns:
             The ordinal number of the imported type.
@@ -1503,7 +1472,7 @@ class Types(DatabaseEntity):
         ida_typeinf.enable_numbered_types(destination, True)
         result = ida_typeinf.copy_named_type(destination, ida_typeinf.get_idati(), name)
         if result == 0:
-            raise RuntimeError(f'error exporting type {name}')
+            raise DatabaseError(f'error exporting type {name}')
         return result
 
     def copy_type(self, source: til_t, destination: til_t, name: str) -> int:
@@ -1516,14 +1485,14 @@ class Types(DatabaseEntity):
             name: The name of the type.
 
         Raises:
-            RuntimeError: If the copy operation failed.
+            DatabaseError: If the copy operation failed.
 
         Returns:
             The ordinal number of the copied type.
         """
         result = ida_typeinf.copy_named_type(source, destination, name)
         if result == 0:
-            raise RuntimeError(f'error exporting type {name}')
+            raise DatabaseError(f'error exporting type {name}')
         return result
 
     def parse_header_file(

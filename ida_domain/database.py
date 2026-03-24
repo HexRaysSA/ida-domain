@@ -16,7 +16,7 @@ import ida_typeinf
 from ida_idaapi import ea_t
 from typing_extensions import TYPE_CHECKING, List, Literal, Optional, Tuple, Type, Union
 
-from .base import check_db_open
+from .base import DatabaseError, check_db_open
 from .bytes import Bytes
 from .comments import Comments
 from .entries import Entries
@@ -25,6 +25,7 @@ from .heads import Heads
 from .hooks import HooksList  # type: ignore
 from .imports import Imports
 from .instructions import Instructions
+from .microcode import Microcode
 from .names import Names
 from .segments import Segments
 from .signature_files import SignatureFiles
@@ -370,11 +371,6 @@ class IdaCommandOptions:
         return value
 
 
-class DatabaseError(Exception):
-    """Exception for database operations."""
-
-    pass
-
 
 class Database:
     """
@@ -593,11 +589,11 @@ class Database:
             file_path: The script file path
 
         Raises:
-            RuntimeError: If script execution fails.
+            DatabaseError: If script execution fails.
         """
         compiler_error = ida_idaapi.IDAPython_ExecScript(file_path, globals())
         if compiler_error is not None:
-            raise RuntimeError(f'script execution {file_path} failed with error {compiler_error}')
+            raise DatabaseError(f'script execution {file_path} failed with error {compiler_error}')
 
     def is_valid_ea(self, ea: ea_t, strict_check: bool = True) -> bool:
         """
@@ -892,6 +888,11 @@ class Database:
     def signature_files(self) -> SignatureFiles:
         """Handler that provides access to signature file operations."""
         return SignatureFiles(self)
+
+    @property
+    def microcode(self) -> Microcode:
+        """Handler that provides access to microcode operations."""
+        return Microcode(self)
 
     @property
     def xrefs(self) -> Xrefs:

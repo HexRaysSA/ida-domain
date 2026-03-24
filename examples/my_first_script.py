@@ -8,7 +8,7 @@ def explore_database(db_path):
     # Create and open database
     with Database.open(path=db_path, save_on_close=False) as db:
         # Basic database info
-        print(f'✓ Opened: {db_path}')
+        print(f'[+] Opened: {db_path}')
         print(f'  Architecture: {db.architecture}')
         print(f'  Entry point: {hex(db.entries[0].address)}')
         print(f'  Address range: {hex(db.minimum_ea)} - {hex(db.maximum_ea)}')
@@ -20,7 +20,7 @@ def explore_database(db_path):
         # Count strings
         string_count = len(list(db.strings))
         print(f'  Strings: {string_count}')
-    print('✓ Database closed')
+    print('[+] Database closed')
 
 
 if __name__ == '__main__':

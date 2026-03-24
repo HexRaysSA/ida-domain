@@ -1,3 +1,15 @@
 [data-md-color-scheme="default"] .md-banner a {
     color: #5e8bde;
 }
+
+.ida-version-badge {
+    display: inline-block;
+    padding: 0.1em 0.4em;
+    font-size: 0.7em;
+    font-weight: 400;
+    color: #888;
+    border: 1px solid #ccc;
+    border-radius: 0.25em;
+    vertical-align: middle;
+    font-style: normal;
+}

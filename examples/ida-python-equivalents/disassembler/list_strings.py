@@ -1,6 +1,6 @@
 """
 This is equivalent of list_strings.py from IDAPython examples
-Original: https://github.com/idapython/src/blob/master/examples/disassembler/list_strings.py
+Original: https://github.com/HexRaysSA/ida-sdk/blob/main/src/plugins/idapython/examples/disassembler/list_strings.py
 """
 
 import ida_domain
