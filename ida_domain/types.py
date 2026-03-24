@@ -51,6 +51,7 @@ from .base import (
     DatabaseError,
     InvalidEAError,
     InvalidParameterError,
+    SerializationError,
     _CheckAttrSupport,
     _is_supported,
     _since_ida,
@@ -2384,7 +2385,7 @@ class Types(DatabaseEntity):
         Raises:
             InvalidEAError: If ea is invalid.
             InvalidParameterError: If type_info cannot be serialized.
-            RuntimeError: If unpacking fails.
+            DatabaseError: If unpacking fails.
 
         Example:
             >>> point_type = db.types.get_by_name("Point")
@@ -2401,7 +2402,7 @@ class Types(DatabaseEntity):
 
         if result is None or (isinstance(result, tuple) and result[0] == 0):
             error_info = result[1] if isinstance(result, tuple) else 'unknown error'
-            raise RuntimeError(f'Failed to unpack object from address 0x{ea:x}: {error_info}')
+            raise DatabaseError(f'Failed to unpack object from address 0x{ea:x}: {error_info}')
 
         # unpack_object_from_idb returns tuple(1, obj) on success
         if isinstance(result, tuple):
@@ -2432,7 +2433,7 @@ class Types(DatabaseEntity):
 
         Raises:
             InvalidParameterError: If type_info cannot be serialized or data is empty.
-            RuntimeError: If unpacking fails.
+            SerializationError: If unpacking fails.
 
         Example:
             >>> point_type = db.types.get_by_name("Point")
@@ -2450,7 +2451,7 @@ class Types(DatabaseEntity):
 
         if result is None or (isinstance(result, tuple) and result[0] == 0):
             error_info = result[1] if isinstance(result, tuple) else 'unknown error'
-            raise RuntimeError(f'Failed to unpack object from bytes: {error_info}')
+            raise SerializationError(f'Failed to unpack object from bytes: {error_info}')
 
         # unpack_object_from_bv returns tuple(1, obj) on success
         if isinstance(result, tuple):
@@ -2482,7 +2483,7 @@ class Types(DatabaseEntity):
         Raises:
             InvalidEAError: If ea is invalid.
             InvalidParameterError: If type_info cannot be serialized or obj is invalid.
-            RuntimeError: If packing fails.
+            DatabaseError: If packing fails.
 
         Example:
             >>> point_type = db.types.get_by_name("Point")
@@ -2501,7 +2502,7 @@ class Types(DatabaseEntity):
 
         # pack_object_to_idb returns error_t code (0 = success)
         if result != 0:
-            raise RuntimeError(f'Failed to pack object to address 0x{ea:x}: error code {result}')
+            raise DatabaseError(f'Failed to pack object to address 0x{ea:x}: error code {result}')
 
     def serialize_structure_to_bytes(
         self,
@@ -2532,7 +2533,7 @@ class Types(DatabaseEntity):
 
         Raises:
             InvalidParameterError: If type_info cannot be serialized or obj is invalid.
-            RuntimeError: If packing fails.
+            SerializationError: If packing fails.
 
         Example:
             >>> point_type = db.types.get_by_name("Point")
@@ -2551,7 +2552,7 @@ class Types(DatabaseEntity):
 
         if result is None or (isinstance(result, tuple) and result[0] == 0):
             error_info = result[1] if isinstance(result, tuple) else 'unknown error'
-            raise RuntimeError(f'Failed to pack object to bytes: {error_info}')
+            raise SerializationError(f'Failed to pack object to bytes: {error_info}')
 
         # pack_object_to_bv returns tuple(1, packed_buf) on success
         if isinstance(result, tuple):
