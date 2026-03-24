@@ -582,7 +582,7 @@ class ProcessorHooks(_BaseHooks, IDP_Hooks):
             int:
                 0: Not implemented.
                 1: Yes, is a far jump/call.
-               -1: No.
+                -1: No.
         """
         return IDP_Hooks.ev_is_far_jump(self, icode)
 
@@ -621,7 +621,7 @@ class ProcessorHooks(_BaseHooks, IDP_Hooks):
         Returns:
             int:
                 1: Yes, conditional instruction.
-               -1: No, not conditional.
+                -1: No, not conditional.
                 0: Not implemented or not an instruction.
         """
         return IDP_Hooks.ev_is_cond_insn(self, insn)
@@ -639,7 +639,7 @@ class ProcessorHooks(_BaseHooks, IDP_Hooks):
         Returns:
             int:
                 0: Unknown.
-               <0: No, not a call.
+                <0: No, not a call.
                 1: Yes, is a call.
         """
         return IDP_Hooks.ev_is_call_insn(self, insn)
@@ -659,7 +659,7 @@ class ProcessorHooks(_BaseHooks, IDP_Hooks):
         Returns:
             int:
                 0: Unknown.
-               <0: No, not a return.
+                <0: No, not a return.
                 1: Yes, is a return.
         """
         return IDP_Hooks.ev_is_ret_insn(self, insn, flags)
@@ -698,7 +698,7 @@ class ProcessorHooks(_BaseHooks, IDP_Hooks):
         Returns:
             int:
                 0: Unknown.
-               <0: No, not the end.
+                <0: No, not the end.
                 1: Yes, is the end.
         """
         return IDP_Hooks.ev_is_basic_block_end(self, insn, call_insn_stops_block)

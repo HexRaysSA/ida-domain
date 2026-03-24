@@ -143,7 +143,7 @@ class SignatureFiles(DatabaseEntity):
 
         Args:
             directories: Optional list of paths to directories containing FLIRT signature files.
-            If the parameter is missing, IDA signature folders will be used.
+                If the parameter is missing, IDA signature folders will be used.
 
         Returns:
             A list of available signature file paths.
