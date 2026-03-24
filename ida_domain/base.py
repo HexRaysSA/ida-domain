@@ -208,6 +208,14 @@ class DatabaseError(IdaDomainError):
     pass
 
 
+class SerializationError(IdaDomainError):
+    """
+    Raised when packing or unpacking a typed object fails.
+    """
+
+    pass
+
+
 class NoValueError(IdaDomainError, ValueError):
     """
     Raised when a read operation is attempted on an uninitialized address.
