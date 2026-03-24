@@ -3128,7 +3128,7 @@ def test_retrieve_object_invalid_ea(test_env):
         db.types.parse_structure_at(BADADDR, point_type)
 
 
-def test_store_object_invalid_parameter(test_env):
+def test_serialize_structure_to_bytes_invalid_parameter(test_env):
     """Test that serialize_structure_to_bytes raises InvalidParameterError for invalid input."""
     db = test_env
 
@@ -3582,14 +3582,16 @@ def test_pointer_lost_in_bytes_without_ignore_ptrs(test_env):
 
 
 def test_object_io_flags_values():
-    """Test that ObjectIOFlags have the expected values."""
+    """Test that ObjectIOFlags match the underlying IDA SDK constants."""
+    from ida_typeinf import PIO_IGNORE_PTRS, PIO_NOATTR_FAIL
+
     assert ObjectIOFlags.NONE == 0
-    assert ObjectIOFlags.NOATTR_FAIL == 4
-    assert ObjectIOFlags.IGNORE_PTRS == 8
+    assert ObjectIOFlags.NOATTR_FAIL == PIO_NOATTR_FAIL
+    assert ObjectIOFlags.IGNORE_PTRS == PIO_IGNORE_PTRS
 
     # Test flag combination
     combined = ObjectIOFlags.NOATTR_FAIL | ObjectIOFlags.IGNORE_PTRS
-    assert combined == 12
+    assert combined == PIO_NOATTR_FAIL | PIO_IGNORE_PTRS
 
 
 # ---------------------------------------------------------------------------
