@@ -3424,6 +3424,38 @@ def test_struct_with_union_member_round_trip(test_env):
     assert retrieved.data.as_short == -1  # low 2 bytes = 0xFFFF
 
 
+def test_create_primitive_signed_and_unsigned(test_env):
+    """Test that create_primitive produces correct signed/unsigned types for all sizes."""
+    db = test_env
+
+    for size in (1, 2, 4, 8):
+        signed_t = db.types.create_primitive(size, signed=True)
+        unsigned_t = db.types.create_primitive(size, signed=False)
+
+        assert signed_t.is_signed(), f"size={size} should be signed"
+        assert unsigned_t.is_unsigned(), f"size={size} should be unsigned"
+        assert signed_t.get_size() == size
+        assert unsigned_t.get_size() == size
+        assert signed_t != unsigned_t
+
+
+def test_create_primitive_default_is_signed(test_env):
+    """Test that create_primitive defaults to signed."""
+    db = test_env
+
+    default_t = db.types.create_primitive(4)
+    assert default_t.is_signed()
+
+
+def test_create_primitive_invalid_size(test_env):
+    """Test that create_primitive rejects invalid sizes."""
+    db = test_env
+
+    for size in (0, 3, 5, 7, 16):
+        with pytest.raises(InvalidParameterError):
+            db.types.create_primitive(size)
+
+
 def test_pointer_followed_at_idb(test_env):
     """Test that pointers are dereferenced when parsing from IDB (default behavior)."""
     db = test_env
