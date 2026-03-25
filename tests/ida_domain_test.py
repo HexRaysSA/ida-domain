@@ -7048,7 +7048,7 @@ def test_microcode_call_arg_make_number(test_env):
 
     op = arg.operand
     assert op.type == MicroOperandType.NUMBER
-    assert op.number_value == 42
+    assert op.value == 42
 
 
 def test_microcode_call_arg_set_reg_arg(test_env):
@@ -7129,19 +7129,21 @@ def test_microcode_call_info_add_and_clear_args(test_env):
     ci = MicroCallInfo.create()
     assert ci.arg_count == 0
 
-    # Add first arg
+    # Add and configure first arg before adding more (vector reallocation
+    # invalidates previously returned wrappers)
     arg1 = ci.add_arg()
     assert isinstance(arg1, MicroCallArg)
     assert ci.arg_count == 1
+    arg1.name = 'first'
 
-    # Add second arg
+    # Add and configure second arg
     arg2 = ci.add_arg()
     assert ci.arg_count == 2
-
-    # Configure and verify
-    arg1.name = 'first'
     arg2.name = 'second'
+
+    # Re-fetch and verify names persisted
     args = ci.args
+    assert len(args) == 2
     assert args[0].name == 'first'
     assert args[1].name == 'second'
 

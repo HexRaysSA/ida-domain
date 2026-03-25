@@ -853,8 +853,16 @@ class MicroCallInfo:
         The returned :class:`MicroCallArg` can be configured with
         :meth:`~MicroCallArg.make_string`, :meth:`~MicroCallArg.make_number`,
         property setters, etc.
+
+        .. warning::
+            Adding further arguments may reallocate the internal vector,
+            invalidating previously returned :class:`MicroCallArg` wrappers.
+            Configure each argument before adding the next one, or
+            re-fetch via :attr:`args` after all arguments have been added.
         """
-        raw_arg = self._raw.args.push_back()
+        args = self._raw.args
+        args.push_back(mcallarg_t())
+        raw_arg = args.at(args.size() - 1)
         return MicroCallArg(raw_arg, self)
 
     def clear_args(self) -> None:
