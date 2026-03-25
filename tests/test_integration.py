@@ -5,11 +5,11 @@ from pathlib import Path
 import pytest
 
 import ida_domain  # isort: skip
+import conftest
+
 from ida_domain.base import DatabaseError
 from ida_domain.database import IdaCommandOptions
 from ida_domain.instructions import Instructions
-
-import conftest
 
 
 def test_iterables(test_env):
@@ -96,7 +96,8 @@ def test_api_examples():
     ida_options = IdaCommandOptions(auto_analysis=True, new_database=True)
     for example in inside_ida_examples:
         script_path = Path(__file__).parent.parent / 'examples' / example
-        with ida_domain.Database.open(str(conftest.idb_path), ida_options, save_on_close=False) as db:
+        idb = str(conftest.idb_path)
+        with ida_domain.Database.open(idb, ida_options, save_on_close=False) as db:
             try:
                 db.execute_script(script_path)
             except DatabaseError as e:
@@ -164,7 +165,8 @@ def test_migrated_examples(global_setup):
         script_path = (
             Path(__file__).parent.parent / 'examples' / 'ida-python-equivalents' / example
         )
-        with ida_domain.Database.open(str(conftest.idb_path), ida_options, save_on_close=False) as db:
+        idb = str(conftest.idb_path)
+        with ida_domain.Database.open(idb, ida_options, save_on_close=False) as db:
             db.current_ea = ea
             db.start_ip = ea
             print(f'>>>========\nExecuting migrated IDA Python example {script_path.name}')

@@ -1,6 +1,5 @@
-import pytest
-
 import ida_nalt
+import pytest
 
 import ida_domain  # isort: skip
 from ida_domain.base import InvalidEAError, InvalidParameterError
@@ -9,7 +8,6 @@ from ida_domain.strings import StringType
 
 def test_strings(test_env):
     db = test_env
-    from ida_domain.base import InvalidEAError, InvalidParameterError
 
     assert len(db.strings) == 3
 
@@ -33,7 +31,6 @@ def test_strings(test_env):
             f'String mismatch at index {i}, {str(item)} != {expected_strings[i][1]}'
         )
 
-    from ida_domain.strings import StringType
 
     string_info = db.strings.get_at(0x3D4)
     assert string_info is not None
@@ -106,7 +103,6 @@ def test_strings(test_env):
         assert info.type == StringType.C
 
     # Modify string in place with some latin-1 encoded chars
-    import ida_nalt
 
     string_encoding = 'iso-8859-1'
     string_addr = 0x3A0

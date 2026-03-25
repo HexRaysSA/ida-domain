@@ -1,15 +1,14 @@
 import struct
 
+import ida_hexrays
+import ida_lines
 import pytest
 from packaging.version import Version
 
-import ida_hexrays
-import ida_lines
-
 import ida_domain  # isort: skip
-from ida_domain.base import DecompilerError, InvalidParameterError
-
 from conftest import min_ida_version
+
+from ida_domain.base import DecompilerError, InvalidParameterError
 
 
 def test_microcode_generate(test_env):
@@ -37,7 +36,6 @@ def test_microcode_generate(test_env):
     assert len(mf2) > 0
 
     # generation failure for bad address
-    import pytest
 
     from ida_domain.microcode import MicrocodeError, MicroError
     with pytest.raises(MicrocodeError) as exc_info:
@@ -101,7 +99,6 @@ def test_microcode_block_iteration(test_env):
     assert b0.index == 0
 
     # __getitem__ out of range
-    import pytest
     with pytest.raises(IndexError):
         mf[999]
     with pytest.raises(IndexError):
@@ -464,7 +461,6 @@ def test_microcode_text_output(test_env):
     assert str(mf) == '\n'.join(new_lines)
 
     # Tags should be stripped by default
-    import ida_lines
     for line in new_lines:
         assert line == ida_lines.tag_remove(line)
 
@@ -699,7 +695,6 @@ def test_microcode_get_text(test_env):
 
 def test_microcode_use_def_analysis(test_env):
     """Test use-def list building and MicroLocationSet operations."""
-    import ida_hexrays
 
     from ida_domain.microcode import MicroLocationSet, MicroMaturity
 
@@ -734,7 +729,6 @@ def test_microcode_use_def_analysis(test_env):
 
 def test_microcode_location_set_operations(test_env):
     """Test MicroLocationSet set protocol (__and__, __ior__, __isub__, etc.)."""
-    import ida_hexrays
     from ida_hexrays import mlist_t
 
     from ida_domain.microcode import MicroLocationSet, MicroMaturity
@@ -799,7 +793,6 @@ def test_microcode_location_set_operations(test_env):
 
 def test_microcode_graph(test_env):
     """Test MicroGraph wrapper: iteration, getitem, use-def chain access."""
-    import ida_hexrays
 
     from ida_domain.microcode import MicroBlock, MicroGraph, MicroMaturity
 
@@ -979,7 +972,6 @@ def test_microcode_repr(test_env):
 
 def test_microcode_raw_properties(test_env):
     """Test raw_* escape-hatch properties on all wrapper classes."""
-    import ida_hexrays
 
     from ida_domain.microcode import MicroMaturity
 
@@ -1410,7 +1402,6 @@ def test_microcode_has_over_chains(test_env):
 
 def test_microcode_find_first_use_and_redefinition(test_env):
     """Test find_first_use and find_redefinition on MicroBlock."""
-    import ida_hexrays
 
     from ida_domain.microcode import MicroMaturity
 
@@ -1440,7 +1431,6 @@ def test_microcode_find_first_use_and_redefinition(test_env):
 
 def test_microcode_location_set_contains(test_env):
     """Test __contains__ on MicroLocationSet."""
-    import ida_hexrays
 
     from ida_domain.microcode import MicroMaturity
 
@@ -1736,7 +1726,6 @@ def test_microcode_operand_number_factory(test_env):
 
 def test_microcode_operand_reg_factory(test_env):
     """Test MicroOperand.reg() static factory."""
-    import ida_hexrays
 
     from ida_domain.microcode import MicroOperand, MicroOperandType
 
@@ -1841,7 +1830,6 @@ def test_microcode_instruction_create_nop(test_env):
 
 def test_microcode_instruction_create_mov(test_env):
     """Test MicroInstruction.create() building a MOV with operands."""
-    import ida_hexrays
 
     from ida_domain.microcode import (
         MicroInstruction,
@@ -1888,7 +1876,6 @@ def test_microcode_instruction_create_goto(test_env):
 
 def test_microcode_instruction_create_add(test_env):
     """Test MicroInstruction.create() building an ADD with all three operands."""
-    import ida_hexrays
 
     from ida_domain.microcode import (
         MicroInstruction,
@@ -1912,7 +1899,6 @@ def test_microcode_instruction_create_add(test_env):
 
 def test_microcode_instruction_operand_setters(test_env):
     """Test assigning MicroOperand to instruction l/r/d and left/right/dest."""
-    import ida_hexrays
 
     from ida_domain.microcode import (
         MicroInstruction,
@@ -1977,7 +1963,6 @@ def test_microcode_instruction_create_and_insert(test_env):
 
 def test_microcode_instruction_create_nested(test_env):
     """Test creating nested sub-instruction operands."""
-    import ida_hexrays
 
     from ida_domain.microcode import (
         MicroInstruction,
@@ -2361,7 +2346,6 @@ def test_microcode_block_replace_instruction(test_env):
 
 def test_microcode_block_replace_instruction_wrong_block(test_env):
     """Test replace_instruction raises InvalidParameterError for wrong block."""
-    import pytest
 
     from ida_domain.microcode import MicroInstruction, MicroOpcode
 
@@ -2402,7 +2386,6 @@ def test_microcode_instruction_replace_with(test_env):
 
 def test_microcode_instruction_replace_with_no_parent(test_env):
     """Test replace_with raises DecompilerError when parent block is unknown."""
-    import pytest
 
     from ida_domain.microcode import MicroInstruction, MicroOpcode
 
@@ -2845,7 +2828,6 @@ def test_microcode_operand_constant_predicates(test_env):
 
 def test_microcode_operand_extended_type_checks(test_env):
     """Test is_kreg, is_cc, is_bit_register on operands."""
-    import ida_hexrays
 
     from ida_domain.microcode import MicroOperand
 
@@ -2930,7 +2912,6 @@ def test_microcode_operand_local_var_factory(test_env):
 
 def test_microcode_operand_fpnum_factory(test_env):
     """Test MicroOperand.fpnum() factory."""
-    import struct
 
     from ida_domain.microcode import MicroOperand, MicroOperandType
 
@@ -3101,7 +3082,6 @@ def test_microcode_mba_alloc_kreg(test_env):
     func = db.functions.get_at(0x2BC)
     mf = db.microcode.generate(func, maturity=MicroMaturity.PREOPTIMIZED)
 
-    import ida_hexrays
 
     kreg = mf.alloc_kernel_register(4)
     assert kreg != ida_hexrays.mr_none
@@ -3475,7 +3455,6 @@ def test_microcode_local_vars_wrapper(test_env):
     v0.set_user_name(original_name)
 
     # Index boundary
-    import pytest
 
     with pytest.raises(IndexError):
         lvars[9999]
@@ -3688,7 +3667,6 @@ def test_microcode_operand_scattered_and_is01(test_env):
 
 def test_microcode_instruction_equal_insns(test_env):
     """Test MicroInstruction.equals with flags."""
-    import ida_hexrays
 
     from ida_domain.microcode import MicroInstruction, MicroOpcode, MicroOperand
 
@@ -3879,7 +3857,6 @@ def test_microcode_operand_is_constant(test_env):
 
 def test_microcode_block_get_valranges(test_env):
     """Test MicroBlock.get_valranges for value range analysis."""
-    import ida_hexrays
 
     from ida_domain.microcode import MicroMaturity
 

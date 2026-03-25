@@ -224,7 +224,6 @@ def test_bytes(test_env):
     orig_bytes = db.bytes.get_original_bytes_at(test_patch_addr, len(test_bytes))
     assert isinstance(orig_bytes, bytes) and orig_bytes == b'\xef\xcd\xab\x90'
 
-    from ida_domain.bytes import ByteFlags
 
     code_addr = 0x0  # Known code address
     data_addr = 0x338  # Known data address
@@ -296,7 +295,6 @@ def test_bytes(test_env):
 
     # Test edge cases for string methods
     # max_length=0 should raise InvalidParameterError
-    from ida_domain.base import InvalidParameterError
 
     with pytest.raises(InvalidParameterError):
         db.bytes.get_string_at(0x400, max_length=0)
@@ -305,7 +303,6 @@ def test_bytes(test_env):
     short_cstring = db.bytes.get_cstring_at(0x3D4, max_length=2)
     assert len(short_cstring) == 2
 
-    from ida_domain.base import InvalidEAError
 
     with pytest.raises(InvalidEAError):
         db.bytes.get_byte_at(0xFFFFFFFF)
@@ -378,7 +375,6 @@ def test_bytes(test_env):
     with pytest.raises(InvalidEAError):
         db.bytes.find_binary_sequence(b'\x90', end_ea=0xFFFFFFFF)
 
-    from ida_domain.bytes import NoValueError
 
     # Delete a value to create an uninitialized location
     test_addr_uninit = 0x400

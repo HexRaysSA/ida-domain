@@ -161,7 +161,6 @@ def test_function(test_env):
     assert next_func.name == 'add_numbers'
     assert next_func.start_ea == 0x2A3
 
-    from ida_domain.base import InvalidEAError
 
     with pytest.raises(InvalidEAError):
         db.functions.get_next(0xFFFFFFFF)
@@ -208,7 +207,6 @@ def test_function(test_env):
     data_items = list(db.functions.get_data_items(func))
     assert len(data_items) == 0
 
-    from ida_domain.base import InvalidEAError, InvalidParameterError
 
     with pytest.raises(InvalidEAError):
         db.functions.get_at(0xFFFFFFFF)

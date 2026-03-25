@@ -3,18 +3,16 @@ import logging
 from packaging.version import Version
 
 import ida_domain  # isort: skip
-from ida_segment import segment_t
-from ida_domain import hooks
-
 import conftest
+from ida_segment import segment_t
+
+from ida_domain import hooks
 
 logger = logging.getLogger(__name__)
 
 
 def test_hooks():
-    from ida_segment import segment_t
 
-    from ida_domain import hooks
 
     class TestProcHooks(hooks.ProcessorHooks):
         def __init__(self):

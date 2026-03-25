@@ -85,7 +85,6 @@ def test_basic_block(test_env):
     assert flowchart[3].end_ea == 0x2A3
 
     # Test get_between error handling
-    from ida_domain.base import InvalidEAError, InvalidParameterError
 
     with pytest.raises(InvalidEAError):
         ida_domain.flowchart.FlowChart(db, None, (0xFFFFFFFF, 0xFFFFFFFF))
@@ -100,7 +99,6 @@ def test_basic_block(test_env):
     assert func_blocks[3].end_ea == blocks[3].end_ea
 
     # Test with flags parameter
-    from ida_domain.flowchart import FlowChartFlags
 
     func_blocks_with_flags = db.functions.get_flowchart(func, flags=FlowChartFlags.NONE)
     assert len(func_blocks_with_flags) == 4

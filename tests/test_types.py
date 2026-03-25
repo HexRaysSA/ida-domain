@@ -1,9 +1,8 @@
 import logging
 from pathlib import Path
 
-import pytest
-
 import ida_typeinf
+import pytest
 
 import ida_domain  # isort: skip
 from ida_domain.base import InvalidEAError, InvalidParameterError
@@ -42,7 +41,6 @@ def test_types(test_env):
     assert type_info
     assert type_info.get_tid() == tif.get_tid()
 
-    from ida_domain.types import TypeAttr, TypeDetailsVisitor, UdtAttr
 
     # Print details via visitor
     visitor = TypeDetailsVisitor(db)

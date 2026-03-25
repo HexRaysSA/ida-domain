@@ -36,7 +36,6 @@ def test_heads(test_env):
     assert db.heads.size(0x67) == 2
     assert db.heads.size(0x330) == 8
 
-    from ida_domain.base import InvalidEAError, InvalidParameterError
 
     with pytest.raises(InvalidParameterError):
         db.heads.size(0x68)  # Not a head

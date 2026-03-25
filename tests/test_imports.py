@@ -6,7 +6,6 @@ import ida_domain.imports
 
 def test_imports(test_env):
     db = test_env
-    import ida_domain.imports
 
     assert db.imports.get_module_count() == 0
     assert len(db.imports) == 0
@@ -88,7 +87,6 @@ def test_imports(test_env):
 def test_imports_populated(tiny_imports_env):
     """Test imports functionality with actual import data from a dynamically-linked binary."""
     db = tiny_imports_env
-    import ida_domain.imports
 
     # Expected counts for tiny_imports.bin (libc-linked ELF64)
     # Module: .dynsym (IDA's representation of ELF dynamic symbols)

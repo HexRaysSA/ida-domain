@@ -1,7 +1,7 @@
 import pytest
 
 from ida_domain.base import InvalidEAError
-from ida_domain.xrefs import CallerInfo, XrefType, XrefsFlags
+from ida_domain.xrefs import CallerInfo, XrefsFlags, XrefType
 
 
 def test_xrefs(test_env):
@@ -20,7 +20,6 @@ def test_xrefs(test_env):
         assert xref.to_ea == expected_xrefs[i]
         assert xref.type.name == expected_names[i]
 
-    from ida_domain.xrefs import XrefsFlags
 
     # Test to() with different XrefsFlags options
     all_xrefs = list(db.xrefs.to_ea(0x2A3))
@@ -45,7 +44,6 @@ def test_xrefs(test_env):
     from_data = list(db.xrefs.from_ea(0xFF, XrefsFlags.DATA))
     assert isinstance(from_data, list)
 
-    from ida_domain.xrefs import CallerInfo
 
     # Test call references
     calls_to = list(db.xrefs.calls_to_ea(0x2A3))  # add_numbers
@@ -92,7 +90,6 @@ def test_xrefs(test_env):
     data_refs_from = list(db.xrefs.data_refs_from_ea(0xFF))
     assert isinstance(data_refs_from, list)
 
-    from ida_domain.xrefs import XrefType
 
     # Test enhanced xref info
     xrefs_info = list(db.xrefs.to_ea(0x2A3))
@@ -120,7 +117,6 @@ def test_xrefs(test_env):
     assert callers[0].xref_type == XrefType.CALL_NEAR
     assert callers[0].function_ea is None
 
-    from ida_domain.base import InvalidEAError
 
     invalid_ea = 0xFFFFFFFF
 

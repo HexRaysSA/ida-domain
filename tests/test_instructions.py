@@ -82,7 +82,6 @@ def test_instruction(test_env):
     assert db.instructions.is_indirect_jump_or_call(jmp_insn) is True
     assert db.instructions.breaks_sequential_flow(jmp_insn) is True
 
-    from ida_domain.base import InvalidEAError, InvalidParameterError
 
     with pytest.raises(InvalidEAError):
         list(db.instructions.get_between(0xFFFFFFFF, 0xFFFFFFFF))
