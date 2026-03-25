@@ -1,6 +1,7 @@
 import struct
 
 import ida_hexrays
+import ida_idaapi
 import ida_lines
 import ida_typeinf
 import pytest
@@ -39,7 +40,6 @@ def test_microcode_generate(test_env):
     # generation failure for bad address
 
     from ida_domain.microcode import MicrocodeError, MicroError
-
     with pytest.raises(MicrocodeError) as exc_info:
         db.microcode.generate_for_range(0xFFFFFF, 0xFFFFFFF)
     err = exc_info.value
@@ -56,16 +56,10 @@ def test_microcode_maturity_levels(test_env):
     func = db.functions.get_at(0x2BC)  # print_number — has richer microcode
 
     # Generate at multiple maturities and verify each produces valid microcode
-    for mat in [
-        MicroMaturity.GENERATED,
-        MicroMaturity.PREOPTIMIZED,
-        MicroMaturity.LOCOPT,
-        MicroMaturity.CALLS,
-        MicroMaturity.GLBOPT1,
-        MicroMaturity.GLBOPT2,
-        MicroMaturity.GLBOPT3,
-        MicroMaturity.LVARS,
-    ]:
+    for mat in [MicroMaturity.GENERATED, MicroMaturity.PREOPTIMIZED,
+                MicroMaturity.LOCOPT, MicroMaturity.CALLS,
+                MicroMaturity.GLBOPT1, MicroMaturity.GLBOPT2,
+                MicroMaturity.GLBOPT3, MicroMaturity.LVARS]:
         mf = db.microcode.generate(func, maturity=mat, build_graph=False)
         assert mf.maturity == mat, f'Expected {mat.name}, got {mf.maturity.name}'
         assert len(mf) > 0
@@ -143,7 +137,7 @@ def test_microcode_instruction_iteration(test_env):
     assert skip_count <= total
 
 
-@min_ida_version('9.2')
+@min_ida_version("9.2")
 def test_microcode_operand_access(test_env):
     """Test operand type-specific accessors across all operand types."""
     from ida_domain.microcode import MicroOperandType
@@ -267,7 +261,6 @@ def test_microcode_operand_comparisons(test_env):
     from ida_hexrays import mop_t
 
     from ida_domain.microcode import MicroOperand
-
     empty_op = MicroOperand(mop_t())
     assert not empty_op  # __bool__ is False for mop_z
     assert empty_op.is_empty
@@ -294,9 +287,8 @@ def test_microcode_operand_sub_instruction(test_env):
                 # is_sub_instruction with opcode filter
                 assert op.is_sub_instruction(sub.opcode)
                 # Wrong opcode should return False
-                wrong_opcode = (
-                    MicroOpcode.NOP if sub.opcode != MicroOpcode.NOP else MicroOpcode.MOV
-                )
+                wrong_opcode = (MicroOpcode.NOP if sub.opcode != MicroOpcode.NOP
+                                else MicroOpcode.MOV)
                 assert not op.is_sub_instruction(wrong_opcode)
                 break
         if found:
@@ -349,9 +341,8 @@ def test_microcode_find_instructions(test_env):
     assert len(with_regs) > 0
 
     # Find with both filters
-    mov_with_regs = list(
-        mf.find_instructions(opcode=MicroOpcode.MOV, operand_type=MicroOperandType.REGISTER)
-    )
+    mov_with_regs = list(mf.find_instructions(
+        opcode=MicroOpcode.MOV, operand_type=MicroOperandType.REGISTER))
     assert len(mov_with_regs) > 0
     assert len(mov_with_regs) <= len(movs)
 
@@ -684,6 +675,7 @@ def test_microcode_function_final_type(test_env):
     assert ft is not None  # decompiled function should have a return type
 
 
+
 def test_microcode_generate_for_range(test_env):
     """Test microcode generation for an address range."""
     db = test_env
@@ -841,18 +833,24 @@ def test_microcode_graph(test_env):
 
             locs = block.build_use_list(insn)
             if locs:
-                r1 = graph.is_redefined_globally(locs, block.index, block.index, insn, insn)
+                r1 = graph.is_redefined_globally(
+                    locs, block.index, block.index, insn, insn
+                )
                 assert isinstance(r1, bool)
-                r2 = graph.is_used_globally(locs, block.index, block.index, insn, insn)
+                r2 = graph.is_used_globally(
+                    locs, block.index, block.index, insn, insn
+                )
                 assert isinstance(r2, bool)
                 break
 
     # __getitem__ boundary
+    import pytest
+
     with pytest.raises(IndexError):
         graph[9999]
 
 
-@min_ida_version('9.2')
+@min_ida_version("9.2")
 def test_microcode_global_address_operands(test_env):
     """Test GLOBAL_ADDR operand type (mop_v) via level1_func which has CALL targets."""
     from ida_domain.microcode import MicroOperandType
@@ -1045,7 +1043,7 @@ def test_microcode_operand_none_fallbacks(test_env):
     assert False, 'No number operand found'
 
 
-@min_ida_version('9.2')
+@min_ida_version("9.2")
 def test_microcode_operand_type_check_shortcuts(test_env):
     """Test is_stack_variable, is_string, is_pair type-check shortcuts."""
     from ida_domain.microcode import MicroMaturity, MicroOperandType
@@ -1102,7 +1100,7 @@ def test_microcode_operand_comparisons_extended(test_env):
     assert isinstance(result, bool)
 
     # __lt__ with non-MicroOperand returns NotImplemented
-    assert a.__lt__('not an operand') is NotImplemented
+    assert a.__lt__("not an operand") is NotImplemented
 
     # __repr__
     r = repr(a)
@@ -1318,7 +1316,7 @@ def test_microcode_instruction_category_methods(test_env):
         assert insn.is_floating_point() == opc.is_floating_point
         assert insn.is_commutative() == opc.is_commutative
 
-    assert found_any, 'Expected at least one instruction'
+    assert found_any, "Expected at least one instruction"
 
 
 def test_microcode_instruction_comparisons(test_env):
@@ -1348,9 +1346,9 @@ def test_microcode_instruction_comparisons(test_env):
     assert isinstance(result, bool)
 
     # NotImplemented for incompatible types
-    assert a.__eq__('not an insn') is NotImplemented
-    assert a.__ne__('not an insn') is NotImplemented
-    assert a.__lt__('not an insn') is NotImplemented
+    assert a.__eq__("not an insn") is NotImplemented
+    assert a.__ne__("not an insn") is NotImplemented
+    assert a.__lt__("not an insn") is NotImplemented
 
     # __repr__
     r = repr(a)
@@ -1665,7 +1663,8 @@ def test_microcode_find_call_nested_is_not_top_level(test_env):
                 assert not fc.is_top_level
                 found_nested = True
 
-    assert found_nested, 'Expected to find at least one nested sub-instruction via find_call'
+    assert found_nested, \
+        'Expected to find at least one nested sub-instruction via find_call'
 
 
 def test_microcode_visitor_top_level_flag(test_env):
@@ -1744,9 +1743,9 @@ def test_microcode_operand_helper_factory(test_env):
     """Test MicroOperand.helper() static factory."""
     from ida_domain.microcode import MicroOperand, MicroOperandType
 
-    op = MicroOperand.helper('memcpy')
+    op = MicroOperand.helper("memcpy")
     assert op.type == MicroOperandType.HELPER
-    assert op.helper_name == 'memcpy'
+    assert op.helper_name == "memcpy"
     assert op.is_helper is True
 
 
@@ -1760,7 +1759,7 @@ def test_microcode_operand_block_ref_factory(test_env):
     assert bool(op) is True
 
 
-@min_ida_version('9.2')
+@min_ida_version("9.2")
 def test_microcode_operand_global_addr_factory(test_env):
     """Test MicroOperand.global_addr() static factory."""
     from ida_domain.microcode import MicroOperand, MicroOperandType
@@ -1805,7 +1804,7 @@ def test_microcode_operand_from_insn_factory(test_env):
     assert sub.opcode == MicroOpcode.ADD
 
 
-@min_ida_version('9.2')
+@min_ida_version("9.2")
 def test_microcode_operand_stack_var_factory(test_env):
     """Test MicroOperand.stack_var() creates a stack variable operand."""
     from ida_domain.microcode import MicroOperand, MicroOperandType
@@ -2016,7 +2015,7 @@ def test_microcode_block_build_operand_locations(test_env):
         for op in insn:
             if op.is_register:
                 locations = block.build_operand_locations(op)
-                assert bool(locations), f'Expected non-empty locations for {op}'
+                assert bool(locations), f"Expected non-empty locations for {op}"
                 found_register = True
                 break
         if found_register:
@@ -2063,7 +2062,7 @@ def test_microcode_find_def_backward_in_block(test_env):
         if insn.opcode == MicroOpcode.ADD:
             add_insn = insn
             break
-    assert add_insn is not None, 'Expected an ADD instruction in add_numbers'
+    assert add_insn is not None, "Expected an ADD instruction in add_numbers"
 
     # The right operand of ADD (rax.8) should be defined by an earlier MOV
     rax_operand = add_insn.r
@@ -2157,7 +2156,7 @@ def test_microcode_trace_def_backward_single_block(test_env):
         if has_udiv:
             block2 = block
             break
-    assert block2 is not None, 'Expected a block with UDIV in print_number'
+    assert block2 is not None, "Expected a block with UDIV in print_number"
 
     # Find a SETZ instruction in that block (uses rax.8)
     setz_insn = None
@@ -2165,12 +2164,12 @@ def test_microcode_trace_def_backward_single_block(test_env):
         if insn.opcode == MicroOpcode.SETZ and insn.l.is_register:
             setz_insn = insn
             break
-    assert setz_insn is not None, 'Expected SETZ in the loop block'
+    assert setz_insn is not None, "Expected SETZ in the loop block"
 
     rax_op = setz_insn.l
     chain = block2.trace_def_backward(rax_op, start=setz_insn)
 
-    assert len(chain) >= 2, f'Expected chain of 2+, got {len(chain)}'
+    assert len(chain) >= 2, f"Expected chain of 2+, got {len(chain)}"
     # First link: the mov that defines rax
     assert chain[0].opcode == MicroOpcode.MOV
     # Last link: should be udiv (non-mov, stops chain)
@@ -2207,12 +2206,12 @@ def test_microcode_trace_def_backward_cross_block(test_env):
         if insn.opcode == MicroOpcode.SUB and insn.r.is_register:
             sub_insn = insn
             break
-    assert sub_insn is not None, 'Expected SUB in the call block'
+    assert sub_insn is not None, "Expected SUB in the call block"
 
     rsi_op = sub_insn.r
     chain = call_block.trace_def_backward(rsi_op, start=sub_insn)
 
-    assert len(chain) >= 1, 'Expected cross-block chain'
+    assert len(chain) >= 1, "Expected cross-block chain"
     # The defining instruction should be in a different block
     assert chain[0].block is not None
     assert chain[0].block.serial != call_block.serial
@@ -2256,7 +2255,7 @@ def test_microcode_trace_def_backward_stops_at_multi_pred(test_env):
         if block.predecessor_count > 1:
             loop_block = block
             break
-    assert loop_block is not None, 'Expected a block with multiple predecessors'
+    assert loop_block is not None, "Expected a block with multiple predecessors"
 
     # Find a MOV at the top of the loop that uses a register
     first_reg_use = None
@@ -2273,8 +2272,8 @@ def test_microcode_trace_def_backward_stops_at_multi_pred(test_env):
     for c in chain:
         if c.block is not None:
             assert c.block.serial == loop_block.serial, (
-                f'Expected chain to stay within block {loop_block.serial}, '
-                f'but found entry in block {c.block.serial}'
+                f"Expected chain to stay within block {loop_block.serial}, "
+                f"but found entry in block {c.block.serial}"
             )
 
 
@@ -2364,7 +2363,7 @@ def test_microcode_block_replace_instruction_wrong_block(test_env):
     assert insn_in_b1 is not None
 
     nop = MicroInstruction.create(insn_in_b1.ea, MicroOpcode.NOP)
-    with pytest.raises(InvalidParameterError, match='is not in this block'):
+    with pytest.raises(InvalidParameterError, match="is not in this block"):
         block0.replace_instruction(insn_in_b1, nop)
 
 
@@ -2396,7 +2395,7 @@ def test_microcode_instruction_replace_with_no_parent(test_env):
     insn = MicroInstruction.create(0x1000, MicroOpcode.NOP)
     replacement = MicroInstruction.create(0x1000, MicroOpcode.NOP)
 
-    with pytest.raises(DecompilerError, match='parent block unknown'):
+    with pytest.raises(DecompilerError, match="parent block unknown"):
         insn.replace_with(replacement)
 
 
@@ -2462,7 +2461,7 @@ def test_microcode_block_edge_manipulation(test_env):
         if block.block_type == MicroBlockType.TWO_WAY:
             branch_block = block
             break
-    assert branch_block is not None, 'Need a TWO_WAY block for this test'
+    assert branch_block is not None, "Need a TWO_WAY block for this test"
 
     orig_succs = branch_block.successor_serials[:]
     assert len(orig_succs) == 2
@@ -2557,12 +2556,12 @@ def test_microcode_block_jump_target_and_fall_through(test_env):
                     # Both targets must be in the successor set
                     succs = block.successor_serials
                     assert jt in succs, (
-                        f'jump_target {jt} not in succs {succs} '
-                        f'(block {block.serial}, func 0x{addr:x}, {mat.name})'
+                        f"jump_target {jt} not in succs {succs} "
+                        f"(block {block.serial}, func 0x{addr:x}, {mat.name})"
                     )
                     assert ft in succs, (
-                        f'fall_through {ft} not in succs {succs} '
-                        f'(block {block.serial}, func 0x{addr:x}, {mat.name})'
+                        f"fall_through {ft} not in succs {succs} "
+                        f"(block {block.serial}, func 0x{addr:x}, {mat.name})"
                     )
 
                 elif bt == MicroBlockType.ONE_WAY:
@@ -2585,8 +2584,8 @@ def test_microcode_block_jump_target_and_fall_through(test_env):
                     assert block.fall_through is None
 
     # Ensure we actually tested the interesting cases
-    assert two_way_count > 0, 'No TWO_WAY blocks found'
-    assert one_way_goto_count > 0, 'No ONE_WAY+goto blocks found'
+    assert two_way_count > 0, "No TWO_WAY blocks found"
+    assert one_way_goto_count > 0, "No ONE_WAY+goto blocks found"
 
 
 def test_microcode_block_is_simple_goto(test_env):
@@ -2738,7 +2737,7 @@ def test_microcode_mba_serialize_roundtrip(test_env):
     assert data == data2
 
 
-@min_ida_version('9.4')
+@min_ida_version("9.4")
 def test_microcode_instruction_serialize_roundtrip(test_env):
     """Test that MicroInstruction serialize → deserialize round-trips."""
     from ida_domain.microcode import MicroInstruction, MicroMaturity
@@ -2756,7 +2755,7 @@ def test_microcode_instruction_serialize_roundtrip(test_env):
                 break
         if len(insns) == 2:
             break
-    assert len(insns) == 2, 'expected at least two instructions'
+    assert len(insns) == 2, "expected at least two instructions"
     first, second = insns
 
     # Serialize both
@@ -2766,7 +2765,7 @@ def test_microcode_instruction_serialize_roundtrip(test_env):
     assert isinstance(data2, bytes) and len(data2) > 0
 
     # Different instructions must produce different serialized bytes
-    assert data1 != data2, 'two distinct instructions should serialize differently'
+    assert data1 != data2, "two distinct instructions should serialize differently"
 
     # Deserialize both and verify round-trip
     restored1 = MicroInstruction.deserialize(data1, fmt_ver1)
@@ -2938,7 +2937,7 @@ def test_microcode_instruction_is_helper(test_env):
 
     for insn in mf.instructions():
         # is_helper should not crash, and should return bool
-        result = insn.is_helper('memcpy')
+        result = insn.is_helper("memcpy")
         assert isinstance(result, bool)
 
 
@@ -3001,7 +3000,7 @@ def test_microcode_instruction_find_num_op(test_env):
             assert num_op.is_number
             found_num = True
             break
-    assert found_num, 'Expected at least one instruction with a numeric operand'
+    assert found_num, "Expected at least one instruction with a numeric operand"
 
 
 def test_microcode_instruction_find_ins_op(test_env):
@@ -3063,8 +3062,7 @@ def test_microcode_instruction_make_nop(test_env):
     from ida_domain.microcode import MicroInstruction, MicroOpcode, MicroOperand
 
     insn = MicroInstruction.create(
-        ea=0x1000,
-        opcode=MicroOpcode.MOV,
+        ea=0x1000, opcode=MicroOpcode.MOV,
         left=MicroOperand.number(42, 4),
         dest=MicroOperand.reg(0, 4),
     )
@@ -3454,8 +3452,8 @@ def test_microcode_local_vars_wrapper(test_env):
 
     # Mutation: set_user_name
     original_name = v0.name
-    v0.set_user_name('test_renamed_var')
-    assert v0.name == 'test_renamed_var'
+    v0.set_user_name("test_renamed_var")
+    assert v0.name == "test_renamed_var"
     v0.set_user_name(original_name)
 
     # Index boundary
@@ -3651,7 +3649,7 @@ def test_microcode_mba_dump(test_env):
     # (dump() only writes when IDA_DUMPDIR is set and debugger is active,
     #  so it's effectively a no-op here, but validates the binding works)
     mf.dump()
-    mf.dump_with_title('test dump', verify=False)
+    mf.dump_with_title("test dump", verify=False)
 
 
 def test_microcode_operand_scattered_and_is01(test_env):
@@ -3846,7 +3844,7 @@ def test_microcode_operand_is_constant(test_env):
     reg = MicroOperand.reg(0, 4)
     assert reg.is_constant() is None
 
-    helper = MicroOperand.helper('memcpy')
+    helper = MicroOperand.helper("memcpy")
     assert helper.is_constant() is None
 
     empty = MicroOperand.empty()
@@ -3893,7 +3891,7 @@ def test_microcode_block_get_valranges(test_env):
                 return
 
     # If we got here, we didn't find a suitable register operand
-    assert False, 'No register operand found; test not fully exercised'
+    assert False, "No register operand found; test not fully exercised"
 
 
 def test_microcode_call_arg_property_setters(test_env):
@@ -4004,7 +4002,7 @@ def test_microcode_call_info_create(test_env):
 
     # Default parameters
     ci = MicroCallInfo.create()
-    assert ci.callee == BADADDR
+    assert ci.callee == ida_idaapi.BADADDR
     assert ci.fixed_arg_count == 0
     assert ci.arg_count == 0
     assert ci.raw_call_info is not None
