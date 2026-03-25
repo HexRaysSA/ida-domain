@@ -98,5 +98,5 @@ def test_hooks():
             with ida_domain.Database.open(path='invalid', hooks=all_hooks) as _:
                 assert False
         except Exception as _:
-            for h in db.hooks:
+            for h in all_hooks:
                 assert not h.is_hooked

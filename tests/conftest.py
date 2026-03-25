@@ -24,12 +24,12 @@ def min_ida_version(v: str) -> pytest.MarkDecorator:
 # Global setup (runs ONCE)
 @pytest.fixture(scope='session', autouse=True)
 def global_setup():
+    """Runs once per session: Creates temp directory and writes test binary."""
     print(f'\nAPI Version: {ida_domain.__version__}')
     print(f'\nKernel Version: {ida_domain.__ida_version__}')
 
     os.environ['IDA_NO_HISTORY'] = '1'
 
-    """ Runs once per session: Creates temp directory and writes test binary. """
     global idb_path
     # Create a temporary folder and use it as tests working directory
     idb_path = os.path.join(tempfile.gettempdir(), 'api_tests_work_dir')

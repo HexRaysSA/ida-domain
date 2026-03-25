@@ -1,4 +1,9 @@
-from ida_domain.segments import *
+from ida_domain.segments import (
+    AddressingMode,
+    AddSegmentFlags,
+    PredefinedClass,
+    SegmentPermissions,
+)
 
 
 def test_segment(test_env):
