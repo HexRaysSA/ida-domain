@@ -27,6 +27,7 @@ from .imports import Imports
 from .instructions import Instructions
 from .microcode import Microcode
 from .names import Names
+from .pseudocode import Pseudocode
 from .segments import Segments
 from .signature_files import SignatureFiles
 from .strings import Strings
@@ -894,6 +895,11 @@ class Database:
     def microcode(self) -> Microcode:
         """Handler that provides access to microcode operations."""
         return Microcode(self)
+
+    @property
+    def pseudocode(self) -> Pseudocode:
+        """Handler that provides access to pseudocode/decompiler operations."""
+        return Pseudocode(self)
 
     @property
     def xrefs(self) -> Xrefs:
