@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from contextlib import contextmanager
 from enum import IntEnum, IntFlag
 
 import ida_hexrays
@@ -8,7 +9,7 @@ import ida_idaapi
 import ida_lines
 import ida_name
 from ida_funcs import func_t
-from typing_extensions import TYPE_CHECKING, Any, Iterator, List, Optional, Union
+from typing_extensions import TYPE_CHECKING, Any, Generator, Iterator, List, Optional, Union
 
 from .base import (
     DatabaseEntity,
@@ -24,13 +25,31 @@ from .microcode import (
 )
 
 if TYPE_CHECKING:
-    from ida_hexrays import fnumber_t, var_ref_t
+    from ida_hexrays import (
+        boundaries_t,
+        cfuncptr_t,
+        eamap_t,
+        fnumber_t,
+        number_format_t,
+        var_ref_t,
+    )
     from ida_idaapi import ea_t
     from ida_typeinf import tinfo_t
 
     from .database import Database
+    from .microcode import MicroBlockArray
 
 logger = logging.getLogger(__name__)
+
+
+@contextmanager
+def _ida_resource(resource: Optional[Any], free_fn: Any) -> Generator:
+    """Context manager that ensures an IDA-allocated resource is freed."""
+    try:
+        yield resource
+    finally:
+        if resource is not None:
+            free_fn(resource)
 
 
 # ---------------------------------------------------------------------------
@@ -280,11 +299,13 @@ class PseudocodeNumber:
     """Wrapper around an IDA ``cnumber_t`` numeric constant.
 
     Supports the full numeric protocol, so instances can be compared
-    and used in arithmetic directly::
+    and used in arithmetic directly:
 
-        if expr.number == 0: ...
-        if expr.number > 10: ...
-        x = expr.number + 1
+    ```python
+    if expr.number == 0: ...
+    if expr.number > 10: ...
+    x = expr.number + 1
+    ```
     """
 
     def __init__(
@@ -305,11 +326,11 @@ class PseudocodeNumber:
         return self._raw._value
 
     def typed_value(self, type_info: tinfo_t) -> int:
-        """Value with sign extension based on *type_info*."""
+        """Value with sign extension based on `type_info`."""
         return self._raw.value(type_info)
 
     @property
-    def number_format(self) -> Any:
+    def number_format(self) -> number_format_t:
         """Number format (``number_format_t``) for display customization."""
         return self._raw.nf
 
@@ -429,12 +450,12 @@ class PseudocodeCallArg:
 
     @property
     def expression(self) -> PseudocodeExpression:
-        """The argument value as a :class:`PseudocodeExpression`.
+        """The argument value as a ``PseudocodeExpression``.
 
         ``carg_t`` inherits from ``cexpr_t``, so the argument itself
         is an expression.
         """
-        return PseudocodeExpression(self._raw)
+        return PseudocodeExpression(self._raw, self)
 
     def __str__(self) -> str:
         return self.expression.to_text()
@@ -449,8 +470,12 @@ class PseudocodeCallArgList:
     Supports iteration, indexing, and ``len()``.
     """
 
-    def __init__(self, raw: ida_hexrays.carglist_t):
+    def __init__(
+        self, raw: ida_hexrays.carglist_t,
+        _parent_expr: Optional[PseudocodeExpression] = None,
+    ):
         self._raw = raw
+        self._parent_expr = _parent_expr
 
     @property
     def raw_arglist(self) -> ida_hexrays.carglist_t:
@@ -633,7 +658,7 @@ class PseudocodeExpression:
     def call_args(self) -> Optional[PseudocodeCallArgList]:
         """For ``cot_call``: the argument list. ``None`` otherwise."""
         if self._raw.op == self._Op.CALL:
-            return PseudocodeCallArgList(self._raw.a)
+            return PseudocodeCallArgList(self._raw.a, self)
         return None
 
     @property
@@ -685,7 +710,7 @@ class PseudocodeExpression:
     # -- query methods -----------------------------------------------------
 
     def contains_operator(self, op: PseudocodeExpressionOp, times: int = 1) -> bool:
-        """Check if this expression contains the given operator at least *times* times."""
+        """Check if this expression contains the given operator at least `times` times."""
         return self._raw.contains_operator(int(op), times)
 
     def contains_comma(self, times: int = 1) -> bool:
@@ -697,8 +722,213 @@ class PseudocodeExpression:
         return self._raw.is_nice_cond()
 
     def equal_effect(self, other: PseudocodeExpression) -> bool:
-        """Check if this expression has the same effect as *other*."""
+        """Check if this expression has the same effect as `other`."""
         return self._raw.equal_effect(other._raw)
+
+    def negate(self) -> None:
+        """Logically negate this expression in place.
+
+        Uses ``ida_hexrays.lnot()`` to produce the logical negation and
+        swaps the result into this expression node.
+        """
+        cond_copy = ida_hexrays.cexpr_t(self._raw)
+        negated = ida_hexrays.lnot(cond_copy)
+        self._raw.swap(negated)
+
+    def replace_with(self, new_expr: PseudocodeExpression) -> None:
+        """Replace this expression in-place with `new_expr`.
+
+        After calling, ``self`` contains the new content and `new_expr`
+        holds the old content (which is freed when `new_expr` is
+        garbage-collected).
+
+        Warning:
+            Call ``PseudocodeFunction.refresh`` after all mutations
+            are complete to regenerate the pseudocode text.
+        """
+        self._raw.swap(new_expr._raw)
+
+    def set_type(self, type_info: tinfo_t) -> PseudocodeExpression:
+        """Set the expression type.  Returns ``self`` for chaining.
+
+        Args:
+            type_info: Type information (``tinfo_t``) to assign.
+        """
+        self._raw.type = type_info
+        return self
+
+    # -- factories ---------------------------------------------------------
+
+    @staticmethod
+    def from_number(
+        value: int,
+        ea: int = ida_idaapi.BADADDR,
+    ) -> PseudocodeExpression:
+        """Create a detached numeric constant expression.
+
+        Args:
+            value: The integer value.
+            ea: Address to associate with the expression.
+
+        Note:
+            The expression type is not set.  Call ``set_type`` if the
+            result will be used in a context that requires type info.
+        """
+        raw = PseudocodeExpression._make_expr(ida_hexrays.cot_num, ea)
+        raw.n = ida_hexrays.cnumber_t()
+        raw.n._value = value
+        return PseudocodeExpression(raw)
+
+    @staticmethod
+    def _make_expr(op: int, ea: int = ida_idaapi.BADADDR) -> ida_hexrays.cexpr_t:
+        """Create a properly initialized ``cexpr_t`` with given op.
+
+        Uses ``_set_op()`` to bypass the SWIG property guard on ``.op``,
+        which rejects assignment on uninitialised proxy objects.
+        Requires a loaded IDA database.
+        """
+        raw = ida_hexrays.cexpr_t()
+        raw._set_op(op)
+        raw.ea = ea
+        return raw
+
+    @staticmethod
+    def from_string(
+        text: str,
+        ea: int = ida_idaapi.BADADDR,
+    ) -> PseudocodeExpression:
+        """Create a detached string literal expression.
+
+        Args:
+            text: The string content.
+            ea: Address to associate with the expression.
+
+        Note:
+            The expression type is not set.  Call ``set_type`` if needed.
+        """
+        raw = PseudocodeExpression._make_expr(ida_hexrays.cot_str, ea)
+        raw._set_string(text)
+        return PseudocodeExpression(raw)
+
+    @staticmethod
+    def from_object(obj_ea: int) -> PseudocodeExpression:
+        """Create a detached object-reference expression.
+
+        Args:
+            obj_ea: Address of the referenced object (global, function, …).
+
+        Note:
+            The expression type is not set.  Call ``set_type`` if needed.
+        """
+        raw = PseudocodeExpression._make_expr(ida_hexrays.cot_obj, obj_ea)
+        raw.obj_ea = obj_ea
+        return PseudocodeExpression(raw)
+
+    @staticmethod
+    def from_variable(idx: int, mba: MicroBlockArray) -> PseudocodeExpression:
+        """Create a detached local-variable expression.
+
+        Args:
+            idx: Variable index in the ``lvars`` array.
+            mba: ``MicroBlockArray`` that owns the variable.
+
+        Note:
+            Unlike other factories, the expression type is set
+            automatically from the variable's declared type.
+        """
+        raw = PseudocodeExpression._make_expr(ida_hexrays.cot_var)
+        vref = ida_hexrays.var_ref_t()
+        vref.idx = idx
+        vref.mba = mba._raw
+        raw.v = vref
+        raw.type = mba._raw.vars[idx].type()
+        return PseudocodeExpression(raw)
+
+    @staticmethod
+    def from_helper(name: str) -> PseudocodeExpression:
+        """Create a detached helper/intrinsic name expression.
+
+        Args:
+            name: Helper function name (e.g. ``"LOWORD"``).
+        """
+        raw = PseudocodeExpression._make_expr(ida_hexrays.cot_helper)
+        raw.helper = name
+        return PseudocodeExpression(raw)
+
+    @staticmethod
+    def from_binary(
+        op: PseudocodeExpressionOp,
+        x: PseudocodeExpression,
+        y: PseudocodeExpression,
+    ) -> PseudocodeExpression:
+        """Create a detached binary expression (``x op y``).
+
+        Works for any binary operator: arithmetic (``ADD``, ``SUB``,
+        ``MUL``, …), assignment (``ASG``, ``ASG_ADD``, …), comparison
+        (``EQ``, ``NE``, ``SLT``, …), bitwise (``BAND``, ``BOR``, …),
+        and access (``IDX``, ``MEMPTR``, ``MEMREF``).
+
+        Also works for unary operators (``NEG``, ``LNOT``, ``BNOT``,
+        ``CAST``, ``PTR``, ``REF``, …) — pass `y` as any throwaway
+        expression; only `x` is used for unary ops.
+
+        The caller should set ``.type`` on the result via
+        ``set_type`` if IDA needs to know the result type.
+
+        Args:
+            op: The operator (a ``PseudocodeExpressionOp`` value).
+            x: Left (or sole) operand.
+            y: Right operand.
+
+        Example:
+            ```python
+            # Build "a1 + a2"
+            add = PseudocodeExpression.from_binary(
+                PseudocodeExpressionOp.ADD, expr_a1, expr_a2,
+            )
+            ```
+        """
+        raw = PseudocodeExpression._make_expr(int(op))
+        raw._set_x(x._raw)
+        raw._set_y(y._raw)
+        x._raw.thisown = False
+        y._raw.thisown = False
+        return PseudocodeExpression(raw)
+
+    @staticmethod
+    def from_call(
+        callee: PseudocodeExpression,
+        args: Optional[List[PseudocodeExpression]] = None,
+    ) -> PseudocodeExpression:
+        """Create a detached call expression (``callee(args…)``).
+
+        Warning:
+            All arguments are consumed (moved, not copied).
+            Do not reuse `callee` or `args` items after this call.
+
+        Args:
+            callee: The function being called (typically built via
+                ``from_object`` or ``from_helper``).
+            args: Optional list of argument expressions.
+
+        Example:
+            ```python
+            # Build "strlen(msg)"
+            callee = PseudocodeExpression.from_object(strlen_ea)
+            arg = PseudocodeExpression.from_object(msg_ea)
+            call = PseudocodeExpression.from_call(callee, [arg])
+            ```
+        """
+        raw = PseudocodeExpression._make_expr(ida_hexrays.cot_call)
+        raw._set_x(callee._raw)
+        callee._raw.thisown = False
+        raw.a = ida_hexrays.carglist_t()
+        if args:
+            for arg_expr in args:
+                carg = ida_hexrays.carg_t()
+                carg.swap(arg_expr._raw)
+                raw.a.push_back(carg)
+        return PseudocodeExpression(raw)
 
     # -- text / display ----------------------------------------------------
 
@@ -742,6 +972,124 @@ class PseudocodeInstruction:
     def raw_insn(self) -> ida_hexrays.cinsn_t:
         """Get the underlying ``cinsn_t`` object."""
         return self._raw
+
+    # -- factories ---------------------------------------------------------
+
+    @staticmethod
+    def _make_insn(op: int, ea: int) -> ida_hexrays.cinsn_t:
+        """Create a properly initialized ``cinsn_t`` with given op.
+
+        Uses ``_set_op()`` to bypass the SWIG property guard.
+        Sets ``thisown = False`` so the instruction can be inserted into
+        blocks without SWIG freeing it.  Requires a loaded IDA database.
+        """
+        raw = ida_hexrays.cinsn_t()
+        raw._set_op(op)
+        raw.ea = ea
+        raw.thisown = False
+        return raw
+
+    @staticmethod
+    def make_expr(ea: int, expr: PseudocodeExpression) -> PseudocodeInstruction:
+        """Create a detached expression-statement instruction.
+
+        Args:
+            ea: Address to associate with the instruction.
+            expr: The expression to wrap as a statement.
+
+        Warning:
+            `expr` is consumed and must not be reused after this call.
+        """
+        raw = PseudocodeInstruction._make_insn(ida_hexrays.cit_expr, ea)
+        raw.cexpr = expr._raw
+        return PseudocodeInstruction(raw)
+
+    @staticmethod
+    def make_nop(ea: int) -> PseudocodeInstruction:
+        """Create a detached empty (NOP) instruction.
+
+        Args:
+            ea: Address to associate with the instruction.
+        """
+        return PseudocodeInstruction(
+            PseudocodeInstruction._make_insn(ida_hexrays.cit_empty, ea)
+        )
+
+    @staticmethod
+    def new_block(ea: int = ida_idaapi.BADADDR) -> PseudocodeInstruction:
+        """Create a detached block instruction containing an empty block.
+
+        Useful as a container body for ``make_if`` branches.
+
+        Args:
+            ea: Address to associate with the block.
+        """
+        raw = PseudocodeInstruction._make_insn(ida_hexrays.cit_block, ea)
+        raw.cblock = ida_hexrays.cblock_t()
+        return PseudocodeInstruction(raw)
+
+    @staticmethod
+    def make_goto(ea: int, label_num: int) -> PseudocodeInstruction:
+        """Create a detached goto instruction.
+
+        Args:
+            ea: Address to associate with the instruction.
+            label_num: Target label number.
+        """
+        raw = PseudocodeInstruction._make_insn(ida_hexrays.cit_goto, ea)
+        raw.cgoto = ida_hexrays.cgoto_t()
+        raw.cgoto.label_num = label_num
+        return PseudocodeInstruction(raw)
+
+    @staticmethod
+    def make_return(
+        ea: int,
+        expr: Optional[PseudocodeExpression] = None,
+    ) -> PseudocodeInstruction:
+        """Create a detached return instruction.
+
+        Args:
+            ea: Address to associate with the instruction.
+            expr: Optional return-value expression.
+
+        Warning:
+            If provided, `expr` is consumed and must not be reused.
+        """
+        raw = PseudocodeInstruction._make_insn(ida_hexrays.cit_return, ea)
+        raw.creturn = ida_hexrays.creturn_t()
+        if expr is not None:
+            raw.creturn.expr.swap(expr._raw)
+        return PseudocodeInstruction(raw)
+
+    @staticmethod
+    def make_if(
+        ea: int,
+        condition: PseudocodeExpression,
+        then_branch: PseudocodeInstruction,
+        else_branch: Optional[PseudocodeInstruction] = None,
+    ) -> PseudocodeInstruction:
+        """Create a detached if/else instruction.
+
+        Args:
+            ea: Address to associate with the instruction.
+            condition: The condition expression.
+            then_branch: The then-branch instruction (often a block).
+            else_branch: Optional else-branch instruction.
+
+        Warning:
+            All arguments are consumed (moved, not copied).
+            Do not reuse `condition`, `then_branch`, or `else_branch`
+            after this call.
+        """
+        raw = PseudocodeInstruction._make_insn(ida_hexrays.cit_if, ea)
+        raw.cif = ida_hexrays.cif_t()
+        raw.cif.expr.swap(condition._raw)
+        raw.cif.ithen = then_branch._raw
+        then_branch._raw.thisown = False
+        if else_branch is not None:
+            raw.cif.ielse = else_branch._raw
+            else_branch._raw.thisown = False
+        return PseudocodeInstruction(raw)
 
     # -- basic properties (from citem_t) -----------------------------------
 
@@ -893,9 +1241,13 @@ class PseudocodeInstruction:
     def walk_expressions(self) -> Iterator[PseudocodeExpression]:
         """Iterate over all expressions in the subtree rooted at this instruction.
 
-        Collects all items first, so it is safe to inspect during iteration
-        but do not modify the tree without refreshing afterward.
+        Collects all items first, so it is safe to inspect during iteration.
+
+        Warning:
+            Do not modify the tree during iteration.  Call
+            ``PseudocodeFunction.refresh`` after any mutations.
         """
+        owner = self
 
         class _Collector(ida_hexrays.ctree_visitor_t):
             def __init__(self) -> None:
@@ -903,7 +1255,7 @@ class PseudocodeInstruction:
                 self.items: List[PseudocodeExpression] = []
 
             def visit_expr(self, expr: Any) -> int:
-                self.items.append(PseudocodeExpression(expr))
+                self.items.append(PseudocodeExpression(expr, owner))
                 return 0
 
         collector = _Collector()
@@ -912,6 +1264,7 @@ class PseudocodeInstruction:
 
     def walk_instructions(self) -> Iterator[PseudocodeInstruction]:
         """Iterate over all instructions in the subtree rooted at this instruction."""
+        owner = self
 
         class _Collector(ida_hexrays.ctree_visitor_t):
             def __init__(self) -> None:
@@ -919,7 +1272,7 @@ class PseudocodeInstruction:
                 self.items: List[PseudocodeInstruction] = []
 
             def visit_insn(self, insn: Any) -> int:
-                self.items.append(PseudocodeInstruction(insn))
+                self.items.append(PseudocodeInstruction(insn, owner))
                 return 0
 
         collector = _Collector()
@@ -929,6 +1282,7 @@ class PseudocodeInstruction:
     def walk_all(self) -> Iterator[Union[PseudocodeExpression, PseudocodeInstruction]]:
         """Iterate over all ctree items (expressions and instructions)
         in the subtree rooted at this instruction."""
+        owner = self
 
         class _Collector(ida_hexrays.ctree_visitor_t):
             def __init__(self) -> None:
@@ -936,11 +1290,11 @@ class PseudocodeInstruction:
                 self.items: List[Union[PseudocodeExpression, PseudocodeInstruction]] = []
 
             def visit_expr(self, expr: Any) -> int:
-                self.items.append(PseudocodeExpression(expr))
+                self.items.append(PseudocodeExpression(expr, owner))
                 return 0
 
             def visit_insn(self, insn: Any) -> int:
-                self.items.append(PseudocodeInstruction(insn))
+                self.items.append(PseudocodeInstruction(insn, owner))
                 return 0
 
         collector = _Collector()
@@ -988,17 +1342,17 @@ class PseudocodeBlock:
         return self._raw
 
     def __len__(self) -> int:
-        return sum(1 for _ in self._raw)
+        return self._raw.size()
 
     def __getitem__(self, i: int) -> PseudocodeInstruction:
-        items = list(self._raw)
+        size = self._raw.size()
         if i < 0:
-            i += len(items)
-        if i < 0 or i >= len(items):
+            i += size
+        if i < 0 or i >= size:
             raise IndexError(
-                f'Block index out of range (0..{len(items) - 1})'
+                f'Block index out of range (0..{size - 1})'
             )
-        return PseudocodeInstruction(items[i], self)
+        return PseudocodeInstruction(self._raw.at(i), self)
 
     def __iter__(self) -> Iterator[PseudocodeInstruction]:
         for insn in self._raw:
@@ -1006,9 +1360,54 @@ class PseudocodeBlock:
 
     def __bool__(self) -> bool:
         """True if block is non-empty."""
-        for _ in self._raw:
-            return True
-        return False
+        return not self._raw.empty()
+
+    @property
+    def is_empty(self) -> bool:
+        """True if the block contains no instructions."""
+        return self._raw.empty()
+
+    @property
+    def first(self) -> Optional[PseudocodeInstruction]:
+        """First instruction in the block, or ``None`` if empty."""
+        if self._raw.empty():
+            return None
+        return PseudocodeInstruction(self._raw.front(), self)
+
+    @property
+    def last(self) -> Optional[PseudocodeInstruction]:
+        """Last instruction in the block, or ``None`` if empty."""
+        if self._raw.empty():
+            return None
+        return PseudocodeInstruction(self._raw.back(), self)
+
+    # -- mutation -----------------------------------------------------------
+
+    def push_back(self, insn: PseudocodeInstruction) -> PseudocodeInstruction:
+        """Append an instruction to the end of this block.
+
+        The block receives a copy.  The original `insn` is no longer
+        managed by SWIG after this call, so prefer the returned
+        reference for further operations.
+
+        Args:
+            insn: The instruction to append.
+
+        Returns:
+            A wrapper pointing to the copy now inside the block.
+        """
+        insn._raw.thisown = False
+        self._raw.push_back(insn._raw)
+        return PseudocodeInstruction(self._raw.back(), self)
+
+    def remove(self, insn: PseudocodeInstruction) -> None:
+        """Remove an instruction from this block.
+
+        Args:
+            insn: The instruction to remove.  Must be an instruction
+                currently in this block.
+        """
+        self._raw.remove(insn._raw)
 
     def __repr__(self) -> str:
         return f'PseudocodeBlock(count={len(self)})'
@@ -1037,18 +1436,18 @@ class PseudocodeIf:
     @property
     def condition(self) -> PseudocodeExpression:
         """The if-condition expression."""
-        return PseudocodeExpression(self._raw.expr)
+        return PseudocodeExpression(self._raw.expr, self)
 
     @property
     def then_branch(self) -> PseudocodeInstruction:
         """The then-branch instruction."""
-        return PseudocodeInstruction(self._raw.ithen)
+        return PseudocodeInstruction(self._raw.ithen, self)
 
     @property
     def else_branch(self) -> Optional[PseudocodeInstruction]:
         """The else-branch instruction, or ``None`` if no else clause."""
         if self._raw.ielse and self._raw.ielse.op != PseudocodeInstructionOp.EMPTY:
-            return PseudocodeInstruction(self._raw.ielse)
+            return PseudocodeInstruction(self._raw.ielse, self)
         return None
 
     @property
@@ -1058,6 +1457,20 @@ class PseudocodeIf:
             self._raw.ielse is not None
             and self._raw.ielse.op != PseudocodeInstructionOp.EMPTY
         )
+
+    def swap_branches(self) -> bool:
+        """Swap the then/else branches and negate the condition.
+
+        Requires both then and else branches to be present.
+
+        Returns:
+            ``True`` if the branches were swapped, ``False`` if no else branch.
+        """
+        if not self.has_else:
+            return False
+        ida_hexrays.qswap(self._raw.ithen, self._raw.ielse)
+        self.condition.negate()
+        return True
 
     def __repr__(self) -> str:
         return f'PseudocodeIf(has_else={self.has_else})'
@@ -1081,22 +1494,22 @@ class PseudocodeFor:
     @property
     def init(self) -> PseudocodeExpression:
         """Initialization expression."""
-        return PseudocodeExpression(self._raw.init)
+        return PseudocodeExpression(self._raw.init, self)
 
     @property
     def condition(self) -> PseudocodeExpression:
         """Loop condition expression."""
-        return PseudocodeExpression(self._raw.expr)
+        return PseudocodeExpression(self._raw.expr, self)
 
     @property
     def step(self) -> PseudocodeExpression:
         """Step/increment expression."""
-        return PseudocodeExpression(self._raw.step)
+        return PseudocodeExpression(self._raw.step, self)
 
     @property
     def body(self) -> PseudocodeInstruction:
         """Loop body instruction."""
-        return PseudocodeInstruction(self._raw.body)
+        return PseudocodeInstruction(self._raw.body, self)
 
     def __repr__(self) -> str:
         return f'PseudocodeFor(ea=0x{self._raw.expr.ea:x})'
@@ -1120,12 +1533,12 @@ class PseudocodeWhile:
     @property
     def condition(self) -> PseudocodeExpression:
         """Loop condition expression."""
-        return PseudocodeExpression(self._raw.expr)
+        return PseudocodeExpression(self._raw.expr, self)
 
     @property
     def body(self) -> PseudocodeInstruction:
         """Loop body instruction."""
-        return PseudocodeInstruction(self._raw.body)
+        return PseudocodeInstruction(self._raw.body, self)
 
     def __repr__(self) -> str:
         return f'PseudocodeWhile(ea=0x{self._raw.expr.ea:x})'
@@ -1149,12 +1562,12 @@ class PseudocodeDo:
     @property
     def body(self) -> PseudocodeInstruction:
         """Loop body instruction."""
-        return PseudocodeInstruction(self._raw.body)
+        return PseudocodeInstruction(self._raw.body, self)
 
     @property
     def condition(self) -> PseudocodeExpression:
         """Loop condition expression."""
-        return PseudocodeExpression(self._raw.expr)
+        return PseudocodeExpression(self._raw.expr, self)
 
     def __repr__(self) -> str:
         return f'PseudocodeDo(ea=0x{self._raw.expr.ea:x})'
@@ -1191,7 +1604,7 @@ class PseudocodeCase:
 
         ``ccase_t`` extends ``cinsn_t``, so the case itself is the body.
         """
-        return PseudocodeInstruction(self._raw)
+        return PseudocodeInstruction(self._raw, self)
 
     def __repr__(self) -> str:
         if self.is_default:
@@ -1220,7 +1633,7 @@ class PseudocodeSwitch:
     @property
     def expression(self) -> PseudocodeExpression:
         """The switch expression being tested."""
-        return PseudocodeExpression(self._raw.expr)
+        return PseudocodeExpression(self._raw.expr, self)
 
     @property
     def cases(self) -> List[PseudocodeCase]:
@@ -1256,7 +1669,7 @@ class PseudocodeReturn:
     @property
     def expression(self) -> PseudocodeExpression:
         """The returned expression."""
-        return PseudocodeExpression(self._raw.expr)
+        return PseudocodeExpression(self._raw.expr, self)
 
     def __repr__(self) -> str:
         return f'PseudocodeReturn(ea=0x{self._raw.expr.ea:x})'
@@ -1304,7 +1717,7 @@ class PseudocodeTry:
     @property
     def body(self) -> PseudocodeBlock:
         """The try body block (``ctry_t`` extends ``cblock_t``)."""
-        return PseudocodeBlock(self._raw)
+        return PseudocodeBlock(self._raw, self)
 
     @property
     def catches(self) -> List[Any]:
@@ -1333,7 +1746,7 @@ class PseudocodeThrow:
     @property
     def expression(self) -> PseudocodeExpression:
         """The thrown expression."""
-        return PseudocodeExpression(self._raw.expr)
+        return PseudocodeExpression(self._raw.expr, self)
 
     def __repr__(self) -> str:
         return 'PseudocodeThrow()'
@@ -1351,19 +1764,29 @@ class PseudocodeFunction:
 
     - The function body as a ctree (instruction/expression tree)
     - Pseudocode text lines
-    - Local variables (reuses :class:`~ida_domain.microcode.MicroLocalVars`)
+    - Local variables (reuses ``MicroLocalVars``)
     - User annotations (comments, labels, flags)
     - Address-to-instruction mappings
 
     Obtained via ``db.pseudocode.decompile(ea)``.
+
+    Tip:
+        Common workflow — decompile, analyze, mutate, refresh:
+        ```python
+        func = db.pseudocode.decompile(ea)
+        for expr in func.walk_expressions():
+            if expr.is_number and expr.number == 0xDEAD:
+                expr.replace_with(PseudocodeExpression.from_number(0))
+        func.refresh()
+        ```
     """
 
-    def __init__(self, raw: Any):
-        self._raw = raw  # cfuncptr_t (reference-counted)
+    def __init__(self, raw: cfuncptr_t):
+        self._raw = raw
 
     @property
-    def raw_cfunc(self) -> Any:
-        """Get the underlying ``cfunc_t`` object."""
+    def raw_cfunc(self) -> cfuncptr_t:
+        """Get the underlying ``cfuncptr_t`` object."""
         return self._raw
 
     # -- basic properties --------------------------------------------------
@@ -1380,30 +1803,25 @@ class PseudocodeFunction:
 
     @property
     def body(self) -> PseudocodeInstruction:
-        """Function body as a :class:`PseudocodeInstruction` (always a block)."""
-        return PseudocodeInstruction(self._raw.body)
+        """Function body as a ``PseudocodeInstruction`` (always a block)."""
+        return PseudocodeInstruction(self._raw.body, self)
 
     @property
     def mba(self) -> MicroBlockArray:
-        """Underlying :class:`~ida_domain.microcode.MicroBlockArray`."""
+        """Underlying ``MicroBlockArray``."""
         return MicroBlockArray(self._raw.mba, _owner=self._raw)
 
     # -- local variables ---------------------------------------------------
 
     @property
     def local_variables(self) -> MicroLocalVars:
-        """Local variables list as :class:`~ida_domain.microcode.MicroLocalVars`."""
+        """Local variables list as ``MicroLocalVars``."""
         return MicroLocalVars(self._raw.get_lvars(), self.mba)
 
     @property
     def arguments(self) -> List[MicroLocalVar]:
         """Function arguments (filtered from local variables)."""
-        lvars = self._raw.get_lvars()
-        return [
-            MicroLocalVar(lvars.at(i))
-            for i in range(lvars.size())
-            if lvars.at(i).is_arg_var
-        ]
+        return self.local_variables.arguments
 
     def get_local_variable(self, name: str) -> Optional[MicroLocalVar]:
         """Find a local variable by name.
@@ -1412,14 +1830,56 @@ class PseudocodeFunction:
             name: Variable name to search for.
 
         Returns:
-            The :class:`~ida_domain.microcode.MicroLocalVar`, or ``None`` if not found.
+            The ``MicroLocalVar``, or ``None`` if not found.
         """
-        lvars = self._raw.get_lvars()
-        for i in range(lvars.size()):
-            v = lvars.at(i)
-            if v.name == name:
-                return MicroLocalVar(v)
-        return None
+        return self.local_variables.find_by_name(name)
+
+    def save_local_variable_info(
+        self,
+        variable: MicroLocalVar,
+        *,
+        save_name: bool = False,
+        save_type: bool = False,
+        save_comment: bool = False,
+    ) -> bool:
+        """Persist local variable modifications to the database.
+
+        After modifying a ``MicroLocalVar``
+        (via ``set_user_name``,
+        ``set_user_comment``, or
+        ``set_type``), call this method to write the
+        changes to the IDA database so they survive reanalysis.
+
+        Wraps ``ida_hexrays.modify_user_lvar_info`` internally.
+
+        Args:
+            variable: The local variable whose info should be saved.
+            save_name: Persist the variable's name.
+            save_type: Persist the variable's type.
+            save_comment: Persist the variable's comment.
+
+        Returns:
+            ``True`` if the information was saved successfully.
+        """
+        raw = variable.raw_var
+        info = ida_hexrays.lvar_saved_info_t()
+        info.ll = raw
+        info.name = raw.name
+        info.type = raw.tif
+        info.cmt = raw.cmt
+        info.size = raw.width
+
+        flags = 0
+        if save_name:
+            flags |= ida_hexrays.MLI_NAME
+        if save_type:
+            flags |= ida_hexrays.MLI_TYPE
+        if save_comment:
+            flags |= ida_hexrays.MLI_CMT
+        if flags == 0:
+            return True
+
+        return ida_hexrays.modify_user_lvar_info(self.entry_ea, flags, info)
 
     # -- pseudocode text ---------------------------------------------------
 
@@ -1457,7 +1917,7 @@ class PseudocodeFunction:
     # -- address mappings --------------------------------------------------
 
     @property
-    def eamap(self) -> Any:
+    def eamap(self) -> eamap_t:
         """Address-to-ctree-items map (``eamap_t``).
 
         Maps binary addresses to the ctree items generated from them.
@@ -1465,11 +1925,70 @@ class PseudocodeFunction:
         return self._raw.get_eamap()
 
     @property
-    def boundaries(self) -> Any:
+    def boundaries(self) -> boundaries_t:
         """Instruction boundaries map (``boundaries_t``)."""
         return self._raw.get_boundaries()
 
     # -- user annotations --------------------------------------------------
+
+    def add_comment(
+        self,
+        ea: int,
+        text: str,
+        placement: int = ida_hexrays.ITP_SEMI,
+    ) -> None:
+        """Add or replace a user comment at the given address.
+
+        The comment is persisted to the database immediately.
+
+        Args:
+            ea: Address to place the comment at (use the ``.ea`` property
+                of an expression or instruction).
+            text: Comment text.  Pass an empty string to remove.
+            placement: Item tree position constant (``ITP_SEMI``,
+                ``ITP_BLOCK1``, ``ITP_CURLY1``, etc.).
+                Defaults to ``ITP_SEMI`` which places the comment after
+                the statement's semicolon.
+        """
+        tl = ida_hexrays.treeloc_t()
+        tl.ea = ea
+        tl.itp = placement
+        self._raw.set_user_cmt(tl, text)
+        self._raw.save_user_cmts()
+
+    def get_comment(
+        self,
+        ea: int,
+        placement: int = ida_hexrays.ITP_SEMI,
+    ) -> Optional[str]:
+        """Get a user comment at the given address.
+
+        Args:
+            ea: Address to look up.
+            placement: Item tree position constant (default ``ITP_SEMI``).
+
+        Returns:
+            The comment text, or ``None`` if no comment exists.
+        """
+        tl = ida_hexrays.treeloc_t()
+        tl.ea = ea
+        tl.itp = placement
+        result = self._raw.get_user_cmt(tl, ida_hexrays.RETRIEVE_ALWAYS)
+        return result if result else None
+
+    def remove_comment(
+        self,
+        ea: int,
+        placement: int = ida_hexrays.ITP_SEMI,
+    ) -> None:
+        """Remove a user comment at the given address.
+
+        Args:
+            ea: Address of the comment to remove.
+            placement: Item tree position constant (default ``ITP_SEMI``).
+        """
+        self.add_comment(ea, '', placement)
+        self._raw.del_orphan_cmts()
 
     def save_user_comments(self) -> None:
         """Save user comments to the database."""
@@ -1490,6 +2009,122 @@ class PseudocodeFunction:
     def save_user_unions(self) -> None:
         """Save user union field selections to the database."""
         self._raw.save_user_unions()
+
+    # -- user annotation read-back -----------------------------------------
+
+    @contextmanager
+    def user_labels(self) -> Generator:
+        """Context manager for user-defined labels from the database.
+
+        Yields the raw IDA ``user_labels_t`` mapping (label number to name),
+        or ``None`` if no user-defined labels exist.  The resource is freed
+        automatically when the ``with`` block exits.
+
+        Example:
+            ```python
+            with func.user_labels() as labels:
+                if labels is not None:
+                    for org_label, name in labels.items():
+                        print(org_label, name)
+            ```
+        """
+        with _ida_resource(
+            ida_hexrays.restore_user_labels(self.entry_ea),
+            ida_hexrays.user_labels_free,
+        ) as labels:
+            yield labels
+
+    @contextmanager
+    def user_comments(self) -> Generator:
+        """Context manager for user-defined comments from the database.
+
+        Yields the raw IDA ``user_cmts_t`` mapping (``treeloc_t`` to comment),
+        or ``None`` if no user-defined comments exist.  The resource is freed
+        automatically when the ``with`` block exits.
+
+        Example:
+            ```python
+            with func.user_comments() as cmts:
+                if cmts is not None:
+                    for treeloc, cmt in cmts.items():
+                        print(treeloc.ea, cmt)
+            ```
+        """
+        with _ida_resource(
+            ida_hexrays.restore_user_cmts(self.entry_ea),
+            ida_hexrays.user_cmts_free,
+        ) as cmts:
+            yield cmts
+
+    @contextmanager
+    def user_iflags(self) -> Generator:
+        """Context manager for user-defined ctree item flags from the database.
+
+        Yields the raw IDA ``user_iflags_t`` mapping (``citem_locator_t``
+        to flags), or ``None`` if no user-defined flags exist.  The resource
+        is freed automatically when the ``with`` block exits.
+
+        Example:
+            ```python
+            with func.user_iflags() as iflags:
+                if iflags is not None:
+                    for cl, f in iflags.items():
+                        print(cl.ea, cl.op, f)
+            ```
+        """
+        with _ida_resource(
+            ida_hexrays.restore_user_iflags(self.entry_ea),
+            ida_hexrays.user_iflags_free,
+        ) as iflags:
+            yield iflags
+
+    @contextmanager
+    def user_numforms(self) -> Generator:
+        """Context manager for user-defined number formats from the database.
+
+        Yields the raw IDA ``user_numforms_t`` mapping (``operand_locator_t``
+        to ``number_format_t``), or ``None`` if no user-defined number
+        formats exist.  The resource is freed automatically when the
+        ``with`` block exits.
+
+        Example:
+            ```python
+            with func.user_numforms() as numforms:
+                if numforms is not None:
+                    for ol, nf in numforms.items():
+                        print(ol.ea, ol.opnum, nf.flags)
+            ```
+        """
+        with _ida_resource(
+            ida_hexrays.restore_user_numforms(self.entry_ea),
+            ida_hexrays.user_numforms_free,
+        ) as numforms:
+            yield numforms
+
+    @contextmanager
+    def user_lvar_settings(self) -> Generator:
+        """Context manager for user-defined local variable settings.
+
+        Yields a raw IDA ``lvar_uservec_t`` object, or ``None`` if no
+        user-defined settings exist.  Access the ``lvvec`` attribute to
+        iterate individual ``lvar_saved_info_t`` entries (each has
+        ``name``, ``type``, ``cmt``, ``size``, and ``ll.defea``).
+
+        The object is valid only within the ``with`` block.
+
+        Example:
+            ```python
+            with func.user_lvar_settings() as lvinf:
+                if lvinf is not None:
+                    for lv in lvinf.lvvec:
+                        print(lv.name, lv.type, lv.cmt)
+            ```
+        """
+        lvinf = ida_hexrays.lvar_uservec_t()
+        if ida_hexrays.restore_user_lvar_settings(lvinf, self.entry_ea):
+            yield lvinf
+        else:
+            yield None
 
     # -- ctree verification and refresh ------------------------------------
 
@@ -1518,8 +2153,11 @@ class PseudocodeFunction:
     def walk_expressions(self) -> Iterator[PseudocodeExpression]:
         """Iterate over all expressions in the function body.
 
-        Collects all items first, so it is safe to inspect during iteration
-        but do not modify the tree without calling :meth:`refresh` afterward.
+        Collects all items first, so it is safe to inspect during iteration.
+
+        Warning:
+            Do not modify the tree during iteration.  Call
+            ``refresh`` after any mutations.
         """
         return self.body.walk_expressions()
 
@@ -1530,6 +2168,29 @@ class PseudocodeFunction:
     def walk_all(self) -> Iterator[Union[PseudocodeExpression, PseudocodeInstruction]]:
         """Iterate over all ctree items (expressions and instructions)."""
         return self.body.walk_all()
+
+    # -- tree navigation ----------------------------------------------------
+
+    def find_parent_of(
+        self,
+        item: Union[PseudocodeExpression, PseudocodeInstruction],
+    ) -> Optional[Union[PseudocodeExpression, PseudocodeInstruction]]:
+        """Find the parent ctree item of the given expression or instruction.
+
+        Args:
+            item: A ``PseudocodeExpression`` or
+                ``PseudocodeInstruction`` whose parent to find.
+
+        Returns:
+            The parent item wrapped as the appropriate type, or ``None``
+            if not found.
+        """
+        raw = self._raw.body.find_parent_of(item._raw)
+        if raw is None:
+            return None
+        if raw.is_expr():
+            return PseudocodeExpression(raw.cexpr, self)
+        return PseudocodeInstruction(raw.cinsn, self)
 
     # -- convenience finders -----------------------------------------------
 
@@ -1545,7 +2206,7 @@ class PseudocodeFunction:
             target_ea: If provided, only return calls to this address.
 
         Returns:
-            List of call :class:`PseudocodeExpression` nodes.
+            List of call ``PseudocodeExpression`` nodes.
         """
         results = []
         for expr in self.walk_expressions():
@@ -1576,7 +2237,7 @@ class PseudocodeFunction:
         """Find all string constant expressions.
 
         Returns:
-            List of :class:`PseudocodeExpression` nodes where ``is_string`` is True.
+            List of ``PseudocodeExpression`` nodes where ``is_string`` is True.
         """
         return [
             expr for expr in self.walk_expressions()
@@ -1595,10 +2256,10 @@ class PseudocodeFunction:
             var_name: If provided, only return references to this variable name.
 
         Returns:
-            List of :class:`PseudocodeExpression` nodes where ``is_variable`` is True.
+            List of ``PseudocodeExpression`` nodes where ``is_variable`` is True.
         """
         results = []
-        lvars = self._raw.get_lvars() if var_name is not None else None
+        lvars = self.local_variables if var_name is not None else None
         for expr in self.walk_expressions():
             if not expr.is_variable:
                 continue
@@ -1606,7 +2267,7 @@ class PseudocodeFunction:
             if var_index is not None and idx != var_index:
                 continue
             if var_name is not None and lvars is not None:
-                if lvars.at(idx).name != var_name:
+                if lvars[idx].name != var_name:
                     continue
             results.append(expr)
         return results
@@ -1618,7 +2279,7 @@ class PseudocodeFunction:
             obj_ea: If provided, only return references to this address.
 
         Returns:
-            List of :class:`PseudocodeExpression` nodes where ``is_object`` is True.
+            List of ``PseudocodeExpression`` nodes where ``is_object`` is True.
         """
         return [
             expr for expr in self.walk_expressions()
@@ -1629,7 +2290,7 @@ class PseudocodeFunction:
         """Find all assignment expressions.
 
         Returns:
-            List of :class:`PseudocodeExpression` nodes where ``is_assignment`` is True.
+            List of ``PseudocodeExpression`` nodes where ``is_assignment`` is True.
         """
         return [
             expr for expr in self.walk_expressions()
@@ -1640,7 +2301,7 @@ class PseudocodeFunction:
         """Find all if-instructions.
 
         Returns:
-            List of :class:`PseudocodeInstruction` nodes where ``is_if`` is True.
+            List of ``PseudocodeInstruction`` nodes where ``is_if`` is True.
         """
         return [
             insn for insn in self.walk_instructions()
@@ -1651,7 +2312,7 @@ class PseudocodeFunction:
         """Find all loop instructions (``for``, ``while``, ``do``).
 
         Returns:
-            List of loop :class:`PseudocodeInstruction` nodes.
+            List of loop ``PseudocodeInstruction`` nodes.
         """
         return [
             insn for insn in self.walk_instructions()
@@ -1662,7 +2323,7 @@ class PseudocodeFunction:
         """Find all return instructions.
 
         Returns:
-            List of :class:`PseudocodeInstruction` nodes where ``is_return`` is True.
+            List of ``PseudocodeInstruction`` nodes where ``is_return`` is True.
         """
         return [
             insn for insn in self.walk_instructions()
@@ -1688,13 +2349,13 @@ class PseudocodeFunction:
 
 
 class PseudocodeExpressionVisitor(ida_hexrays.ctree_visitor_t):
-    """Visitor for ctree expressions. Override :meth:`visit_expression`.
+    """Visitor for ctree expressions. Override ``visit_expression``.
 
-    Wraps raw ``cexpr_t`` into :class:`PseudocodeExpression` before
+    Wraps raw ``cexpr_t`` into ``PseudocodeExpression`` before
     calling the user callback.
 
-    Example::
-
+    Example:
+        ```python
         class FindCalls(PseudocodeExpressionVisitor):
             def __init__(self):
                 super().__init__()
@@ -1707,35 +2368,38 @@ class PseudocodeExpressionVisitor(ida_hexrays.ctree_visitor_t):
 
         visitor = FindCalls()
         visitor.apply_to(decomp.body)
+        ```
     """
 
     def __init__(self, flags: int = ida_hexrays.CV_FAST):
         super().__init__(flags)
+        self._body_ref: Optional[PseudocodeInstruction] = None
 
     def visit_expr(self, raw_expr: Any) -> int:
-        return self.visit_expression(PseudocodeExpression(raw_expr))
+        return self.visit_expression(PseudocodeExpression(raw_expr, self._body_ref))
 
     def visit_expression(self, expr: PseudocodeExpression) -> int:
         """Override this. Return 0 to continue, non-zero to stop."""
         return 0
 
     def apply_to(self, body: PseudocodeInstruction, parent: Optional[Any] = None) -> int:
-        """Apply the visitor to a ctree starting at *body*.
+        """Apply the visitor to a ctree starting at `body`.
 
         Args:
             body: The root instruction to start traversal from.
             parent: Optional parent item (usually ``None``).
         """
+        self._body_ref = body
         return super().apply_to(body._raw, parent)
 
 
 class PseudocodeInstructionVisitor(ida_hexrays.ctree_visitor_t):
-    """Visitor for ctree instructions. Override :meth:`visit_instruction`.
+    """Visitor for ctree instructions. Override ``visit_instruction``.
 
     Only visits instruction nodes (``CV_INSNS`` flag is set automatically).
 
-    Example::
-
+    Example:
+        ```python
         class FindReturns(PseudocodeInstructionVisitor):
             def __init__(self):
                 super().__init__()
@@ -1748,30 +2412,33 @@ class PseudocodeInstructionVisitor(ida_hexrays.ctree_visitor_t):
 
         visitor = FindReturns()
         visitor.apply_to(decomp.body)
+        ```
     """
 
     def __init__(self, flags: int = ida_hexrays.CV_FAST | ida_hexrays.CV_INSNS):
         super().__init__(flags)
+        self._body_ref: Optional[PseudocodeInstruction] = None
 
     def visit_insn(self, raw_insn: Any) -> int:
-        return self.visit_instruction(PseudocodeInstruction(raw_insn))
+        return self.visit_instruction(PseudocodeInstruction(raw_insn, self._body_ref))
 
     def visit_instruction(self, insn: PseudocodeInstruction) -> int:
         """Override this. Return 0 to continue, non-zero to stop."""
         return 0
 
     def apply_to(self, body: PseudocodeInstruction, parent: Optional[Any] = None) -> int:
-        """Apply the visitor to a ctree starting at *body*."""
+        """Apply the visitor to a ctree starting at `body`."""
+        self._body_ref = body
         return super().apply_to(body._raw, parent)
 
 
 class PseudocodeVisitor(ida_hexrays.ctree_visitor_t):
     """Visitor for both expressions and instructions.
 
-    Override :meth:`visit_expression` and/or :meth:`visit_instruction`.
+    Override ``visit_expression`` and/or ``visit_instruction``.
 
-    Example::
-
+    Example:
+        ```python
         class CollectAll(PseudocodeVisitor):
             def __init__(self):
                 super().__init__()
@@ -1784,16 +2451,18 @@ class PseudocodeVisitor(ida_hexrays.ctree_visitor_t):
             def visit_instruction(self, insn):
                 self.items.append(insn)
                 return 0
+        ```
     """
 
     def __init__(self, flags: int = ida_hexrays.CV_FAST):
         super().__init__(flags)
+        self._body_ref: Optional[PseudocodeInstruction] = None
 
     def visit_expr(self, raw_expr: Any) -> int:
-        return self.visit_expression(PseudocodeExpression(raw_expr))
+        return self.visit_expression(PseudocodeExpression(raw_expr, self._body_ref))
 
     def visit_insn(self, raw_insn: Any) -> int:
-        return self.visit_instruction(PseudocodeInstruction(raw_insn))
+        return self.visit_instruction(PseudocodeInstruction(raw_insn, self._body_ref))
 
     def visit_expression(self, expr: PseudocodeExpression) -> int:
         """Override this. Return 0 to continue, non-zero to stop."""
@@ -1804,18 +2473,19 @@ class PseudocodeVisitor(ida_hexrays.ctree_visitor_t):
         return 0
 
     def apply_to(self, body: PseudocodeInstruction, parent: Optional[Any] = None) -> int:
-        """Apply the visitor to a ctree starting at *body*."""
+        """Apply the visitor to a ctree starting at `body`."""
+        self._body_ref = body
         return super().apply_to(body._raw, parent)
 
 
 class PseudocodeParentVisitor(ida_hexrays.ctree_parentee_t):
     """Visitor with parent tracking.
 
-    Extends :class:`PseudocodeVisitor` with methods to access the parent
+    Extends ``PseudocodeVisitor`` with methods to access the parent
     expression or instruction at any point during traversal.
 
-    Example::
-
+    Example:
+        ```python
         class FindAssignedVars(PseudocodeParentVisitor):
             def visit_expression(self, expr):
                 if expr.is_variable:
@@ -1823,16 +2493,18 @@ class PseudocodeParentVisitor(ida_hexrays.ctree_parentee_t):
                     if parent and parent.is_assignment:
                         ...
                 return 0
+        ```
     """
 
     def __init__(self, post: bool = False):
         super().__init__(post)
+        self._body_ref: Optional[PseudocodeInstruction] = None
 
     def visit_expr(self, raw_expr: Any) -> int:
-        return self.visit_expression(PseudocodeExpression(raw_expr))
+        return self.visit_expression(PseudocodeExpression(raw_expr, self._body_ref))
 
     def visit_insn(self, raw_insn: Any) -> int:
-        return self.visit_instruction(PseudocodeInstruction(raw_insn))
+        return self.visit_instruction(PseudocodeInstruction(raw_insn, self._body_ref))
 
     def visit_expression(self, expr: PseudocodeExpression) -> int:
         """Override this. Return 0 to continue, non-zero to stop."""
@@ -1843,17 +2515,18 @@ class PseudocodeParentVisitor(ida_hexrays.ctree_parentee_t):
         return 0
 
     def parent_expression(self) -> Optional[PseudocodeExpression]:
-        """Get the parent as a :class:`PseudocodeExpression`, or ``None``."""
+        """Get the parent as a ``PseudocodeExpression``, or ``None``."""
         raw = self.parent_expr()
-        return PseudocodeExpression(raw) if raw else None
+        return PseudocodeExpression(raw, self._body_ref) if raw else None
 
     def parent_instruction(self) -> Optional[PseudocodeInstruction]:
-        """Get the parent as a :class:`PseudocodeInstruction`, or ``None``."""
+        """Get the parent as a ``PseudocodeInstruction``, or ``None``."""
         raw = self.parent_insn()
-        return PseudocodeInstruction(raw) if raw else None
+        return PseudocodeInstruction(raw, self._body_ref) if raw else None
 
     def apply_to(self, body: PseudocodeInstruction, parent: Optional[Any] = None) -> int:
-        """Apply the visitor to a ctree starting at *body*."""
+        """Apply the visitor to a ctree starting at `body`."""
+        self._body_ref = body
         return super().apply_to(body._raw, parent)
 
 
@@ -1887,7 +2560,7 @@ class Pseudocode(DatabaseEntity):
             flags: Decompilation flags (``DecompilationFlags``).
 
         Returns:
-            A :class:`PseudocodeFunction` wrapping the ``cfunc_t`` result.
+            A ``PseudocodeFunction`` wrapping the ``cfunc_t`` result.
 
         Raises:
             PseudocodeError: If decompilation fails.
@@ -1910,10 +2583,12 @@ class Pseudocode(DatabaseEntity):
     ) -> List[str]:
         """Decompile and return pseudocode text lines.
 
-        Convenience method equivalent to::
+        Convenience method equivalent to:
 
-            decomp = db.pseudocode.decompile(ea_or_func)
-            return decomp.to_text(remove_tags)
+        ```python
+        decomp = db.pseudocode.decompile(ea_or_func)
+        return decomp.to_text(remove_tags)
+        ```
 
         Args:
             ea_or_func: Function entry address or ``func_t`` object.
@@ -1935,7 +2610,7 @@ class Pseudocode(DatabaseEntity):
             functions: List of function addresses or ``func_t`` objects.
 
         Returns:
-            List of :class:`PseudocodeFunction` results.
+            List of ``PseudocodeFunction`` results.
 
         Raises:
             PseudocodeError: If any decompilation fails.

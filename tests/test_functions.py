@@ -35,7 +35,8 @@ def test_function(test_env):
     disassembly_lines = db.functions.get_disassembly(func)
     assert len(disassembly_lines) == 6
 
-    pseudocode_lines = db.functions.get_pseudocode(func)
+    pseudocode = db.functions.get_pseudocode(func)
+    pseudocode_lines = pseudocode.to_text()
     assert len(pseudocode_lines) == 4
 
     mf = db.functions.get_microcode(func)
