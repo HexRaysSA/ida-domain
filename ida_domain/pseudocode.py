@@ -2354,6 +2354,12 @@ class PseudocodeExpressionVisitor(ida_hexrays.ctree_visitor_t):
     Wraps raw ``cexpr_t`` into ``PseudocodeExpression`` before
     calling the user callback.
 
+    Tip:
+        For most use cases, ``PseudocodeFunction.walk_expressions``
+        and the ``find_*`` convenience methods are simpler.  Use
+        this visitor when you need early termination (return non-zero
+        to stop) or stateful traversal across visits.
+
     Example:
         ```python
         class FindCalls(PseudocodeExpressionVisitor):
@@ -2398,6 +2404,12 @@ class PseudocodeInstructionVisitor(ida_hexrays.ctree_visitor_t):
 
     Only visits instruction nodes (``CV_INSNS`` flag is set automatically).
 
+    Tip:
+        For most use cases, ``PseudocodeFunction.walk_instructions``
+        and ``find_if_instructions``, ``find_loops``, ``find_return_instructions``
+        are simpler.  Use this visitor when you need early termination
+        or stateful traversal.
+
     Example:
         ```python
         class FindReturns(PseudocodeInstructionVisitor):
@@ -2436,6 +2448,11 @@ class PseudocodeVisitor(ida_hexrays.ctree_visitor_t):
     """Visitor for both expressions and instructions.
 
     Override ``visit_expression`` and/or ``visit_instruction``.
+
+    Tip:
+        For most use cases, ``PseudocodeFunction.walk_all`` is simpler.
+        Use this visitor when you need early termination or stateful
+        traversal across both expressions and instructions.
 
     Example:
         ```python
@@ -2483,6 +2500,11 @@ class PseudocodeParentVisitor(ida_hexrays.ctree_parentee_t):
 
     Extends ``PseudocodeVisitor`` with methods to access the parent
     expression or instruction at any point during traversal.
+
+    Tip:
+        For one-off parent lookups, ``PseudocodeFunction.find_parent_of``
+        is simpler.  Use this visitor when you need parent context for
+        every node during a full traversal.
 
     Example:
         ```python
