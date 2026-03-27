@@ -111,6 +111,7 @@ Complete documentation is available at: [https://ida-domain.docs.hex-rays.com/](
 - **[API Reference](https://ida-domain.docs.hex-rays.com/ref/database/)**: Documentation of available classes and methods
 - **[Getting Started](https://ida-domain.docs.hex-rays.com/getting_started/)**: Complete setup guide including installation and first steps
 - **[Examples](https://ida-domain.docs.hex-rays.com/examples/)**: Usage examples for common tasks
+- **[Migration Guide](https://ida-domain.docs.hex-rays.com/migration-guide/)**: Migrate from IDA Python SDK to Domain API
 
 
 ## 🛠️ Development
