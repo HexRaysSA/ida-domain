@@ -1718,6 +1718,109 @@ def test_add_comment_replaces_existing(test_env):
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# find_expression / find_instruction
+# ---------------------------------------------------------------------------
+
+
+def test_find_expression_match(test_env):
+    """find_expression returns the first matching expression."""
+    db = test_env
+    func = db.pseudocode.decompile(0x2BC)  # print_number — has number 10
+
+    expr = func.find_expression(lambda e: e.is_number and e.number == 10)
+    assert expr is not None
+    assert expr.is_number
+    assert expr.number.value == 10
+
+
+def test_find_expression_no_match(test_env):
+    """find_expression returns None when nothing matches."""
+    db = test_env
+    func = db.pseudocode.decompile(0x2A3)
+
+    expr = func.find_expression(lambda e: e.is_string)
+    assert expr is None
+
+
+def test_find_expression_variable(test_env):
+    """find_expression can find a variable by name."""
+    db = test_env
+    func = db.pseudocode.decompile(0x2A3)
+    lvars = func.local_variables
+
+    expr = func.find_expression(
+        lambda e: e.is_variable and lvars[e.variable_index].name == 'a1'
+    )
+    assert expr is not None
+    assert expr.is_variable
+
+
+def test_find_instruction_match(test_env):
+    """find_instruction returns the first matching instruction."""
+    db = test_env
+    func = db.pseudocode.decompile(0x2BC)  # print_number — has a do-while loop
+
+    loop = func.find_instruction(lambda i: i.is_loop)
+    assert loop is not None
+    assert loop.op == PseudocodeInstructionOp.DO
+
+
+def test_find_instruction_no_match(test_env):
+    """find_instruction returns None when nothing matches."""
+    db = test_env
+    func = db.pseudocode.decompile(0x2A3)  # add_numbers — no loops
+
+    loop = func.find_instruction(lambda i: i.is_loop)
+    assert loop is None
+
+
+def test_find_instruction_return(tiny_pseudocode_env):
+    """find_instruction finds the first return in nested_if."""
+    db = tiny_pseudocode_env
+    func = db.pseudocode.decompile(0x26)  # nested_if — 3 returns
+
+    ret = func.find_instruction(lambda i: i.is_return)
+    assert ret is not None
+    assert ret.is_return
+    assert ret.return_details is not None
+
+
+def test_find_expression_stops_early(test_env):
+    """find_expression returns only the first match, not all."""
+    db = test_env
+    func = db.pseudocode.decompile(0x2BC)  # print_number has multiple NUMs
+
+    all_nums = [e for e in func.walk_expressions() if e.is_number]
+    assert len(all_nums) > 1  # there are many numbers
+
+    first = func.find_expression(lambda e: e.is_number)
+    assert first is not None
+    assert first.is_number
+    assert first._parent is not None
+    # Should match the first one from walk order
+    assert first.ea == all_nums[0].ea
+
+
+def test_find_instruction_for_loop(tiny_pseudocode_env):
+    """find_instruction finds a FOR loop with accessible details."""
+    db = tiny_pseudocode_env
+    func = db.pseudocode.decompile(0xBB)  # use_for
+
+    insn = func.find_instruction(lambda i: i.op == PseudocodeInstructionOp.FOR)
+    assert insn is not None
+    assert insn.op == PseudocodeInstructionOp.FOR
+    assert insn.is_loop
+    assert insn.for_details is not None
+    assert insn.for_details.body is not None
+    assert insn._parent is not None
+
+
+# ---------------------------------------------------------------------------
+# Expression builders: from_binary, from_call
+# ---------------------------------------------------------------------------
+
+
 def test_from_binary_add(test_env):
     """from_binary creates an ADD expression with two operands."""
     left = PseudocodeExpression.from_number(10)

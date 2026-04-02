@@ -9,7 +9,16 @@ import ida_idaapi
 import ida_lines
 import ida_name
 from ida_funcs import func_t
-from typing_extensions import TYPE_CHECKING, Any, Generator, Iterator, List, Optional, Union
+from typing_extensions import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Generator,
+    Iterator,
+    List,
+    Optional,
+    Union,
+)
 
 from .base import (
     DatabaseEntity,
@@ -2194,6 +2203,86 @@ class PseudocodeFunction:
 
     # -- convenience finders -----------------------------------------------
 
+    def find_expression(
+        self,
+        predicate: Callable[[PseudocodeExpression], bool],
+    ) -> Optional[PseudocodeExpression]:
+        """Find the first expression matching `predicate`.
+
+        Uses early termination — stops traversal as soon as a match is
+        found, without collecting the full tree.
+
+        Args:
+            predicate: A callable that takes a ``PseudocodeExpression``
+                and returns ``True`` for a match.
+
+        Returns:
+            The first matching expression, or ``None``.
+
+        Example:
+            ```python
+            expr = func.find_expression(
+                lambda e: e.is_number and e.number == 0xDEAD
+            )
+            ```
+        """
+        result: List[PseudocodeExpression] = []
+
+        class _Finder(ida_hexrays.ctree_visitor_t):
+            def __init__(self, owner: PseudocodeInstruction) -> None:
+                super().__init__(ida_hexrays.CV_FAST)
+                self._owner = owner
+
+            def visit_expr(self, raw_expr: ida_hexrays.cexpr_t) -> int:
+                expr = PseudocodeExpression(raw_expr, self._owner)
+                if predicate(expr):
+                    result.append(expr)
+                    return 1  # stop traversal
+                return 0
+
+        finder = _Finder(self.body)
+        finder.apply_to(self._raw.body, None)
+        return result[0] if result else None
+
+    def find_instruction(
+        self,
+        predicate: Callable[[PseudocodeInstruction], bool],
+    ) -> Optional[PseudocodeInstruction]:
+        """Find the first instruction matching `predicate`.
+
+        Uses early termination — stops traversal as soon as a match is
+        found, without collecting the full tree.
+
+        Args:
+            predicate: A callable that takes a ``PseudocodeInstruction``
+                and returns ``True`` for a match.
+
+        Returns:
+            The first matching instruction, or ``None``.
+
+        Example:
+            ```python
+            ret = func.find_instruction(lambda i: i.is_return)
+            ```
+        """
+        result: List[PseudocodeInstruction] = []
+
+        class _Finder(ida_hexrays.ctree_visitor_t):
+            def __init__(self, owner: PseudocodeInstruction) -> None:
+                super().__init__(ida_hexrays.CV_FAST | ida_hexrays.CV_INSNS)
+                self._owner = owner
+
+            def visit_insn(self, raw_insn: ida_hexrays.cinsn_t) -> int:
+                insn = PseudocodeInstruction(raw_insn, self._owner)
+                if predicate(insn):
+                    result.append(insn)
+                    return 1  # stop traversal
+                return 0
+
+        finder = _Finder(self.body)
+        finder.apply_to(self._raw.body, None)
+        return result[0] if result else None
+
     def find_calls(
         self,
         target_name: Optional[str] = None,
@@ -2264,6 +2353,8 @@ class PseudocodeFunction:
             if not expr.is_variable:
                 continue
             idx = expr.variable_index
+            if idx is None:
+                continue
             if var_index is not None and idx != var_index:
                 continue
             if var_name is not None and lvars is not None:
@@ -2355,10 +2446,10 @@ class PseudocodeExpressionVisitor(ida_hexrays.ctree_visitor_t):
     calling the user callback.
 
     Tip:
-        For most use cases, ``PseudocodeFunction.walk_expressions``
-        and the ``find_*`` convenience methods are simpler.  Use
-        this visitor when you need early termination (return non-zero
-        to stop) or stateful traversal across visits.
+        For most use cases, ``PseudocodeFunction.walk_expressions``,
+        ``find_expression``, and the ``find_*`` convenience methods
+        are simpler.  Use this visitor when you need stateful
+        traversal across multiple visits.
 
     Example:
         ```python
@@ -2405,10 +2496,10 @@ class PseudocodeInstructionVisitor(ida_hexrays.ctree_visitor_t):
     Only visits instruction nodes (``CV_INSNS`` flag is set automatically).
 
     Tip:
-        For most use cases, ``PseudocodeFunction.walk_instructions``
-        and ``find_if_instructions``, ``find_loops``, ``find_return_instructions``
-        are simpler.  Use this visitor when you need early termination
-        or stateful traversal.
+        For most use cases, ``PseudocodeFunction.walk_instructions``,
+        ``find_instruction``, and the ``find_*`` convenience methods
+        are simpler.  Use this visitor when you need stateful
+        traversal across multiple visits.
 
     Example:
         ```python
@@ -2450,9 +2541,10 @@ class PseudocodeVisitor(ida_hexrays.ctree_visitor_t):
     Override ``visit_expression`` and/or ``visit_instruction``.
 
     Tip:
-        For most use cases, ``PseudocodeFunction.walk_all`` is simpler.
-        Use this visitor when you need early termination or stateful
-        traversal across both expressions and instructions.
+        For most use cases, ``PseudocodeFunction.walk_all``,
+        ``find_expression``, and ``find_instruction`` are simpler.
+        Use this visitor when you need stateful traversal across
+        both expressions and instructions simultaneously.
 
     Example:
         ```python
