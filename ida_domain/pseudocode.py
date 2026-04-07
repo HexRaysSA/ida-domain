@@ -185,8 +185,13 @@ class PseudocodeExpressionOp(IntEnum):
 
     @property
     def is_leaf(self) -> bool:
-        """True for leaf nodes (``num``, ``fnum``, ``str``, ``obj``, ``var``, ``helper``, ``type``)."""
-        return self.value >= ida_hexrays.cot_num and self.value <= ida_hexrays.cot_type
+        """True for leaf nodes with no children (``num``, ``fnum``, ``str``, ``obj``, ``var``, ``helper``, ``type``)."""
+        return (
+            self.value >= ida_hexrays.cot_num
+            and self.value <= ida_hexrays.cot_type
+            and self.value != ida_hexrays.cot_insn
+            and self.value != ida_hexrays.cot_sizeof
+        )
 
     @property
     def is_call(self) -> bool:
