@@ -36,7 +36,7 @@ def main():
                             pseudocode = db.functions.get_pseudocode(func)
                             if pseudocode:
                                 outfile.write(f'\n// Function at 0x{func.start_ea:X}\n')
-                                outfile.write('\n'.join(pseudocode) + '\n')
+                                outfile.write('\n'.join(pseudocode.to_text()) + '\n')
                                 print(f'OK')
                             else:
                                 outfile.write(
