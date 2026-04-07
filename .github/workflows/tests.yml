@@ -110,8 +110,20 @@ jobs:
       - name: Install idapro
         run: uv pip install idapro
 
+      - name: Verify IDA Python can import
+        timeout-minutes: 2
+        run: |
+          uv run python -c "import idapro; print('idapro OK')"
+          uv run python -c "import idapro; import ida_hexrays; print('ida_hexrays OK')"
+          uv run python -c "import ida_domain; print('ida_domain OK')"
+        env:
+          IDADIR: /opt/ida/
+
       - name: Run tests and generate coverage
-        run: uv run coverage run --source=ida_domain -m pytest -v --junitxml=test-results.xml
+        timeout-minutes: 15
+        run: |
+          set -o pipefail
+          uv run coverage run --source=ida_domain -m pytest -v -s --tb=long --junitxml=test-results.xml 2>&1 | tee test-output.log
         env:
           IDADIR: /opt/ida/
 
@@ -131,6 +143,7 @@ jobs:
           name: test-results-and-coverage-ida-${{ matrix.ida_version.version }}
           path: |
             test-results.xml
+            test-output.log
             coverage.xml
             htmlcov/
           retention-days: 30

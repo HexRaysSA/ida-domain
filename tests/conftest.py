@@ -5,7 +5,9 @@ import tempfile
 import pytest
 from packaging.version import Version
 
+print('[conftest] importing ida_domain...', flush=True)
 import ida_domain  # isort: skip
+print('[conftest] ida_domain imported OK', flush=True)
 
 from ida_domain.database import IdaCommandOptions
 
@@ -47,11 +49,14 @@ def global_setup():
 @pytest.fixture(scope='function')
 def test_env():
     """Runs for each test: Opens and closes the database."""
+    print(f'\n[test_env] Opening database: {idb_path}', flush=True)
     ida_options = IdaCommandOptions(new_database=True)
     db = ida_domain.Database.open(path=idb_path, args=ida_options, save_on_close=False)
+    print('[test_env] Database opened', flush=True)
     yield db
     if db.is_open():
         db.close(False)
+    print('[test_env] Database closed', flush=True)
 
 
 @pytest.fixture(scope='session')
