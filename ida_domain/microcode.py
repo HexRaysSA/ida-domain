@@ -665,47 +665,6 @@ class MicroCallArg:
         """
         self._raw.set_regarg(mreg, arg_size, type_info)
 
-    # -- mutation ----------------------------------------------------------
-
-    def make_string(self, value: str, type_info: Optional[tinfo_t] = None) -> None:
-        """Set this argument to a string constant.
-
-        Sets the operand type to ``mop_str``, assigns the string value,
-        and configures type and size.  By default the type is set to
-        ``const char *`` (``STI_PCCHAR``); pass *type_info* to override.
-
-        Args:
-            value: The string value.
-            type_info: Optional type override.  Defaults to ``const char *``.
-        """
-        import ida_typeinf
-
-        self._raw.t = ida_hexrays.mop_str
-        self._raw.cstr = value
-        if type_info is None:
-            type_info = ida_typeinf.tinfo_t.get_stock(ida_typeinf.STI_PCCHAR)
-        self._raw.type = type_info
-        self._raw.size = type_info.get_size()
-
-    def make_number(self, value: int, nbytes: int) -> None:
-        """Set this argument to a numeric constant.
-
-        Args:
-            value: The numeric value.
-            nbytes: Size of the number in bytes.
-        """
-        self._raw.make_number(value, nbytes)
-
-    def set_reg_arg(self, mreg: int, arg_size: int, type_info: tinfo_t) -> None:
-        """Configure this argument as a register argument.
-
-        Args:
-            mreg: Micro-register number.
-            arg_size: Size in bytes.
-            type_info: Argument type.
-        """
-        self._raw.set_regarg(mreg, arg_size, type_info)
-
     def to_text(self) -> str:
         """Get text representation of this argument."""
         return self._raw.dstr()
@@ -1254,7 +1213,7 @@ class MicroOperand:
 
     _T = MicroOperandType  # shorthand for type checks
 
-    def __init__(self, raw: mop_t, _parent_insn: Optional[MicroInstruction] = None):
+    def __init__(self, raw: mop_t, _parent_insn: Optional[Any] = None):
         self._raw = raw
         self._parent_insn = _parent_insn
 
