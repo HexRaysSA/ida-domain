@@ -309,15 +309,10 @@ def test_user_numforms_empty(test_env):
 
 
 def test_user_comments_roundtrip(test_env):
-    """Save a user comment, then read it back via the context manager."""
+    """Save a user comment via add_comment, then read it back via the context manager."""
     db = test_env
     func = db.pseudocode.decompile(0x2A3)
-
-    treeloc = ida_hexrays.treeloc_t()
-    treeloc.ea = func.entry_ea
-    treeloc.itp = ida_hexrays.ITP_SEMI
-    func.raw_cfunc.set_user_cmt(treeloc, "test cmt")
-    func.save_user_comments()
+    func.add_comment(func.entry_ea, "test cmt")
 
     func2 = db.pseudocode.decompile(0x2A3)
     with func2.user_comments() as cmts:
@@ -326,8 +321,7 @@ def test_user_comments_roundtrip(test_env):
         assert found, "Saved comment not found in user_comments()"
 
     # Cleanup
-    func2.raw_cfunc.set_user_cmt(treeloc, "")
-    func2.save_user_comments()
+    func2.remove_comment(func2.entry_ea)
 
 
 # ---------------------------------------------------------------------------

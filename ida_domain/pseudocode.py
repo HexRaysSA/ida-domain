@@ -770,6 +770,8 @@ class PseudocodeExpression:
         """Check if this expression has the same effect as `other`."""
         return self._raw.equal_effect(other._raw)
 
+    # -- mutation ----------------------------------------------------------
+
     def negate(self) -> None:
         """Logically negate this expression in place.
 
@@ -2073,26 +2075,6 @@ class PseudocodeFunction:
         """
         self.add_comment(ea, '', placement)
         self._raw.del_orphan_cmts()
-
-    def save_user_comments(self) -> None:
-        """Save user comments to the database."""
-        self._raw.save_user_cmts()
-
-    def save_user_labels(self) -> None:
-        """Save user labels to the database."""
-        self._raw.save_user_labels()
-
-    def save_user_numforms(self) -> None:
-        """Save user number formats to the database."""
-        self._raw.save_user_numforms()
-
-    def save_user_iflags(self) -> None:
-        """Save user item flags to the database."""
-        self._raw.save_user_iflags()
-
-    def save_user_unions(self) -> None:
-        """Save user union field selections to the database."""
-        self._raw.save_user_unions()
 
     # -- user annotation read-back -----------------------------------------
 
