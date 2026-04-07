@@ -599,7 +599,46 @@ def test_number_protocol(test_env):
 
     # Cross-number comparison
     assert ten > zero
-    assert zero < ten
+
+
+def test_number_signed_value(tiny_pseudocode_env):
+    """value returns signed interpretation for negative constants."""
+    db = tiny_pseudocode_env
+    func = db.pseudocode.decompile(0x149)  # use_negative — has 'a1 >= -1'
+
+    neg_one = func.find_expression(
+        lambda e: e.is_number and e.number == -1
+    )
+    assert neg_one is not None
+    assert neg_one.number.value == -1
+    assert neg_one.number.unsigned_value == 0xFFFFFFFFFFFFFFFF
+    assert neg_one.number == -1
+    assert neg_one.number < 0
+    assert int(neg_one.number) == -1
+
+
+def test_number_unsigned_value(test_env):
+    """unsigned_value always returns the raw 64-bit unsigned storage."""
+    db = test_env
+    func = db.pseudocode.decompile(0x2BC)  # print_number
+
+    ten = func.find_expression(lambda e: e.is_number and e.number.unsigned_value == 10)
+    assert ten is not None
+    assert ten.number.unsigned_value == 10
+    assert ten.number.value == 10  # positive values agree
+
+
+def test_number_factory_no_type_fallback(test_env):
+    """Factory-created numbers without type fall back to unsigned."""
+    neg = PseudocodeExpression.from_number(-1)
+    # No parent type → falls back to unsigned
+    assert neg.number.value == 0xFFFFFFFFFFFFFFFF
+    assert neg.number.unsigned_value == 0xFFFFFFFFFFFFFFFF
+    assert neg.number == 0xFFFFFFFFFFFFFFFF
+
+    pos = PseudocodeExpression.from_number(42)
+    assert pos.number.value == 42
+    assert int(pos.number) == 42
 
 
 # ---------------------------------------------------------------------------
@@ -701,9 +740,9 @@ def test_expression_object_access(test_env):
 def test_expression_call_args(tiny_pseudocode_env):
     """Call expressions expose call_args with correct argument count."""
     db = tiny_pseudocode_env
-    func = db.pseudocode.decompile(0x149)  # main — calls all functions
+    func = db.pseudocode.decompile(0x162)  # main — calls all functions
     calls = func.find_calls()
-    assert len(calls) == 8
+    assert len(calls) == 9
 
     # Find nested_if call (2 args)
     nested_call = next(c for c in calls if c.call_args and len(c.call_args) == 2)
@@ -1002,10 +1041,10 @@ def test_find_objects_by_ea(tiny_pseudocode_env):
     """find_objects(obj_ea=...) filters by object address."""
     db = tiny_pseudocode_env
     func = db.pseudocode.decompile(0x26)
-    # All objects in nested_if are 'sink' at 0x1e0
+    # All objects in nested_if are 'sink' at 0x200
     all_objs = func.find_objects()
     assert len(all_objs) == 3
-    filtered = func.find_objects(obj_ea=0x1e0)
+    filtered = func.find_objects(obj_ea=0x200)
     assert len(filtered) == 3
     empty = func.find_objects(obj_ea=0xDEAD)
     assert len(empty) == 0

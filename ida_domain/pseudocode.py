@@ -331,12 +331,44 @@ class PseudocodeNumber:
 
     @property
     def value(self) -> int:
-        """Raw 64-bit unsigned value."""
+        """Numeric value, sign-extended based on the expression type.
+
+        Returns the signed interpretation when the parent expression
+        has a signed type (e.g. ``-1`` for ``int``), and the unsigned
+        value otherwise.  Falls back to raw unsigned if no parent
+        type is available.
+        """
+        if (
+            self._parent_expr is not None
+            and self._parent_expr._raw.type
+            and not self._parent_expr._raw.type.empty()
+        ):
+            return self._signext(self._parent_expr._raw.type)
+        return self._raw._value
+
+    @property
+    def unsigned_value(self) -> int:
+        """Raw 64-bit unsigned value, ignoring sign."""
         return self._raw._value
 
     def typed_value(self, type_info: tinfo_t) -> int:
-        """Value with sign extension based on `type_info`."""
-        return self._raw.value(type_info)
+        """Value with sign extension based on an explicit `type_info`."""
+        return self._signext(type_info)
+
+    def _signext(self, tif: Any) -> int:
+        """Sign-extend the raw value based on `tif`.
+
+        IDA's SWIG bridge returns unsigned Python ints even for signed
+        C types.  Uses the bit-twiddling pattern from IDA SDK
+        (ebc.py ``SIGNEXT``).
+        """
+        if tif.is_signed():
+            bits = tif.get_size() * 8
+            if bits > 0:
+                m = 1 << (bits - 1)
+                val = self._raw._value & ((1 << bits) - 1)
+                return (val ^ m) - m
+        return self._raw._value
 
     @property
     def number_format(self) -> number_format_t:
@@ -346,82 +378,82 @@ class PseudocodeNumber:
     # -- numeric protocol --------------------------------------------------
 
     def __int__(self) -> int:
-        return self._raw._value
+        return self.value
 
     def __float__(self) -> float:
-        return float(self._raw._value)
+        return float(self.value)
 
     def __index__(self) -> int:
-        return self._raw._value
+        return self.value
 
     def __bool__(self) -> bool:
         return self._raw._value != 0
 
     def __hash__(self) -> int:
-        return hash(self._raw._value)
+        return hash(self.value)
 
     def __eq__(self, other: object) -> bool:
         if isinstance(other, PseudocodeNumber):
-            return self._raw._value == other._raw._value
+            return self.value == other.value
         if isinstance(other, (int, float)):
-            return self._raw._value == other
+            return self.value == other
         return NotImplemented
 
     def __lt__(self, other: object) -> bool:
         if isinstance(other, PseudocodeNumber):
-            return self._raw._value < other._raw._value
+            return self.value < other.value
         if isinstance(other, (int, float)):
-            return self._raw._value < other
+            return self.value < other
         return NotImplemented
 
     def __le__(self, other: object) -> bool:
         if isinstance(other, PseudocodeNumber):
-            return self._raw._value <= other._raw._value
+            return self.value <= other.value
         if isinstance(other, (int, float)):
-            return self._raw._value <= other
+            return self.value <= other
         return NotImplemented
 
     def __gt__(self, other: object) -> bool:
         if isinstance(other, PseudocodeNumber):
-            return self._raw._value > other._raw._value
+            return self.value > other.value
         if isinstance(other, (int, float)):
-            return self._raw._value > other
+            return self.value > other
         return NotImplemented
 
     def __ge__(self, other: object) -> bool:
         if isinstance(other, PseudocodeNumber):
-            return self._raw._value >= other._raw._value
+            return self.value >= other.value
         if isinstance(other, (int, float)):
-            return self._raw._value >= other
+            return self.value >= other
         return NotImplemented
 
     def __add__(self, other: object) -> int:
         if isinstance(other, (int, PseudocodeNumber)):
-            return self._raw._value + int(other)
+            return self.value + int(other)
         return NotImplemented
 
     def __radd__(self, other: object) -> int:
         if isinstance(other, int):
-            return other + self._raw._value
+            return other + self.value
         return NotImplemented
 
     def __sub__(self, other: object) -> int:
         if isinstance(other, (int, PseudocodeNumber)):
-            return self._raw._value - int(other)
+            return self.value - int(other)
         return NotImplemented
 
     def __rsub__(self, other: object) -> int:
         if isinstance(other, int):
-            return other - self._raw._value
+            return other - self.value
         return NotImplemented
 
     # -- display -----------------------------------------------------------
 
     def __str__(self) -> str:
-        return str(self._raw._value)
+        return str(self.value)
 
     def __repr__(self) -> str:
-        return f'PseudocodeNumber(value={self._raw._value})'
+        return f'PseudocodeNumber(value={self.value})'
 
 
 # ---------------------------------------------------------------------------

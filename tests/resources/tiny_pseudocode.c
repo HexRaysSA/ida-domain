@@ -16,7 +16,8 @@
  *   - use_while    : WHILE loop with POSTDEC, SGT comparison
  *   - use_string   : CALL to strlen
  *   - use_struct   : PTR + IDX (IDA sees _DWORD*, not struct Point)
- *   - main         : 8 CALL expressions with various argument counts
+ *   - use_negative : signed constants (-1, -100)
+ *   - main         : 9 CALL expressions with various argument counts
  */
 
 #include <string.h>
@@ -73,6 +74,12 @@ void use_struct(struct Point *p) {
     sink = p->x + p->y;
 }
 
+int use_negative(int x) {
+    if (x < -1)
+        return -100;
+    return x;
+}
+
 int main(int argc, char **argv) {
     struct Point pt = {1, 2};
     classify(argc);
@@ -82,5 +89,6 @@ int main(int argc, char **argv) {
     use_while(argc);
     sink = use_string();
     use_struct(&pt);
+    sink = use_negative(argc);
     return 0;
 }
