@@ -51,7 +51,30 @@ def test_env():
     """Runs for each test: Opens and closes the database."""
     print(f'\n[test_env] Opening database: {idb_path}', flush=True)
     ida_options = IdaCommandOptions(new_database=True)
-    db = ida_domain.Database.open(path=idb_path, args=ida_options, save_on_close=False)
+    import signal, sys, traceback
+
+    def _timeout_handler(signum, frame):
+        print('[test_env] TIMEOUT — Database.open hung. Traceback:', flush=True)
+        traceback.print_stack(frame, file=sys.stdout)
+        sys.stdout.flush()
+        sys.exit(1)
+
+    old_handler = None
+    if hasattr(signal, 'SIGALRM'):
+        old_handler = signal.signal(signal.SIGALRM, _timeout_handler)
+        signal.alarm(60)
+
+    try:
+        db = ida_domain.Database.open(path=idb_path, args=ida_options, save_on_close=False)
+    except Exception as e:
+        print(f'[test_env] Database.open FAILED: {e}', flush=True)
+        raise
+    finally:
+        if hasattr(signal, 'SIGALRM'):
+            signal.alarm(0)
+            if old_handler is not None:
+                signal.signal(signal.SIGALRM, old_handler)
+
     print('[test_env] Database opened', flush=True)
     yield db
     if db.is_open():
