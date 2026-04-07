@@ -176,10 +176,7 @@ class PseudocodeExpressionOp(IntEnum):
     @property
     def is_unary(self) -> bool:
         """True for unary operators (``-x``, ``!x``, ``~x``, ``*x``, ``&x``, casts, etc.)."""
-        return (
-            ida_hexrays.op_uses_x(self.value)
-            and not ida_hexrays.op_uses_y(self.value)
-        )
+        return ida_hexrays.is_unary(self.value)
 
     @property
     def is_binary(self) -> bool:
