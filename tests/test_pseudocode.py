@@ -1928,3 +1928,31 @@ def test_from_binary_nested(test_env):
     assert mul.x.op == PseudocodeExpressionOp.ADD
 
 
+def test_from_unary_rejects_binary_op(test_env):
+    """from_unary raises InvalidParameterError for binary operators."""
+    from ida_domain.base import InvalidParameterError
+
+    a = PseudocodeExpression.from_number(1)
+    with pytest.raises(InvalidParameterError, match="not a unary"):
+        PseudocodeExpression.from_unary(PseudocodeExpressionOp.ADD, a)
+
+
+def test_from_unary_rejects_leaf_op(test_env):
+    """from_unary raises InvalidParameterError for leaf operators."""
+    from ida_domain.base import InvalidParameterError
+
+    a = PseudocodeExpression.from_number(1)
+    with pytest.raises(InvalidParameterError, match="not a unary"):
+        PseudocodeExpression.from_unary(PseudocodeExpressionOp.NUM, a)
+
+
+def test_from_binary_rejects_unary_op(test_env):
+    """from_binary raises InvalidParameterError for unary operators."""
+    from ida_domain.base import InvalidParameterError
+
+    a = PseudocodeExpression.from_number(1)
+    b = PseudocodeExpression.from_number(2)
+    with pytest.raises(InvalidParameterError, match="not a binary"):
+        PseudocodeExpression.from_binary(PseudocodeExpressionOp.NEG, a, b)
+
+

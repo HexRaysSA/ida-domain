@@ -23,6 +23,7 @@ from typing_extensions import (
 from .base import (
     DatabaseEntity,
     DecompilerError,
+    InvalidParameterError,
     check_db_open,
     decorate_all_methods,
 )
@@ -906,9 +907,9 @@ class PseudocodeExpression:
     ) -> PseudocodeExpression:
         """Create a detached unary expression (``op x``).
 
-        Works for ``NEG``, ``LNOT``, ``BNOT``, ``CAST``, ``PTR``,
-        ``REF``, ``POSTINC``, ``POSTDEC``, ``PREINC``, ``PREDEC``,
-        ``FNEG``, ``SIZEOF``.
+        Accepts any unary operator: ``NEG``, ``LNOT``, ``BNOT``,
+        ``CAST``, ``PTR``, ``REF``, ``FNEG``, and pre/post
+        increment/decrement.
 
         Note:
             The expression type is not set.  Call ``set_type`` if IDA
@@ -924,7 +925,11 @@ class PseudocodeExpression:
                 PseudocodeExpressionOp.NEG, expr_a1,
             )
             ```
+        Raises:
+            InvalidParameterError: If `op` is not a unary operator.
         """
+        if not ida_hexrays.is_unary(int(op)):
+            raise InvalidParameterError('op', op.name, 'not a unary operator')
         raw = PseudocodeExpression._make_expr(int(op))
         raw._set_x(x._raw)
         x._raw.thisown = False
@@ -938,10 +943,8 @@ class PseudocodeExpression:
     ) -> PseudocodeExpression:
         """Create a detached binary expression (``x op y``).
 
-        Works for arithmetic (``ADD``, ``SUB``, ``MUL``, …),
-        assignment (``ASG``, ``ASG_ADD``, …), comparison (``EQ``,
-        ``NE``, ``SLT``, …), bitwise (``BAND``, ``BOR``, …),
-        and access (``IDX``, ``MEMPTR``, ``MEMREF``) operators.
+        Works for any operator that uses two operands: arithmetic,
+        assignment, comparison, bitwise, shift, and access operators.
 
         Note:
             The expression type is not set.  Call ``set_type`` if IDA
@@ -952,6 +955,9 @@ class PseudocodeExpression:
             x: Left operand.
             y: Right operand.
 
+        Raises:
+            InvalidParameterError: If `op` does not use both operands.
+
         Example:
             ```python
             add = PseudocodeExpression.from_binary(
@@ -959,6 +965,8 @@ class PseudocodeExpression:
             )
             ```
         """
+        if not ida_hexrays.is_binary(int(op)):
+            raise InvalidParameterError('op', op.name, 'not a binary operator')
         raw = PseudocodeExpression._make_expr(int(op))
         raw._set_x(x._raw)
         x._raw.thisown = False
