@@ -1,6 +1,9 @@
 import os
 import shutil
+import signal
+import sys
 import tempfile
+import traceback
 
 import pytest
 from packaging.version import Version
@@ -51,8 +54,6 @@ def test_env():
     """Runs for each test: Opens and closes the database."""
     print(f'\n[test_env] Opening database: {idb_path}', flush=True)
     ida_options = IdaCommandOptions(new_database=True)
-    import signal, sys, traceback
-
     def _timeout_handler(signum, frame):
         print('[test_env] TIMEOUT — Database.open hung. Traceback:', flush=True)
         traceback.print_stack(frame, file=sys.stdout)
