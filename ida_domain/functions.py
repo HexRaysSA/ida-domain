@@ -701,12 +701,13 @@ class Functions(DatabaseEntity):
         Delegates to ``db.pseudocode.decompile()``.
 
         The returned object provides full ctree access.  To get the
-        pseudocode as plain text, call :meth:`str` or
-        :meth:`~ida_domain.pseudocode.PseudocodeFunction.get_pseudocode`::
+        pseudocode as plain text, call ``str()`` or ``to_text()``:
 
-            pseudo = db.functions.get_pseudocode(func)
-            print(str(pseudo))           # full text
-            print(pseudo.to_text())      # list of lines
+        ```python
+        pseudo = db.functions.get_pseudocode(func)
+        print(str(pseudo))           # full text
+        print(pseudo.to_text())      # list of lines
+        ```
 
         Args:
             func: The function instance.

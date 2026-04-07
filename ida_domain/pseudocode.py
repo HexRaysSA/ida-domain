@@ -716,6 +716,11 @@ class PseudocodeExpression:
         """True if this is an object address reference."""
         return self._raw.op == self._Op.OBJ
 
+    @property
+    def is_nice_cond(self) -> bool:
+        """True if this expression is a \"nice\" condition (no side effects)."""
+        return self._raw.is_nice_cond()
+
     # -- query methods -----------------------------------------------------
 
     def contains_operator(self, op: PseudocodeExpressionOp, times: int = 1) -> bool:
@@ -725,10 +730,6 @@ class PseudocodeExpression:
     def contains_comma(self, times: int = 1) -> bool:
         """Check if this expression contains comma operators."""
         return self._raw.contains_comma(times)
-
-    def is_nice_cond(self) -> bool:
-        """Check if this expression is a \"nice\" condition (no side effects)."""
-        return self._raw.is_nice_cond()
 
     def equal_effect(self, other: PseudocodeExpression) -> bool:
         """Check if this expression has the same effect as `other`."""
@@ -865,6 +866,37 @@ class PseudocodeExpression:
         return PseudocodeExpression(raw)
 
     @staticmethod
+    def from_unary(
+        op: PseudocodeExpressionOp,
+        x: PseudocodeExpression,
+    ) -> PseudocodeExpression:
+        """Create a detached unary expression (``op x``).
+
+        Works for ``NEG``, ``LNOT``, ``BNOT``, ``CAST``, ``PTR``,
+        ``REF``, ``POSTINC``, ``POSTDEC``, ``PREINC``, ``PREDEC``,
+        ``FNEG``, ``SIZEOF``.
+
+        Note:
+            The expression type is not set.  Call ``set_type`` if IDA
+            needs to know the result type.
+
+        Args:
+            op: A unary operator (a ``PseudocodeExpressionOp`` value).
+            x: The operand.
+
+        Example:
+            ```python
+            neg = PseudocodeExpression.from_unary(
+                PseudocodeExpressionOp.NEG, expr_a1,
+            )
+            ```
+        """
+        raw = PseudocodeExpression._make_expr(int(op))
+        raw._set_x(x._raw)
+        x._raw.thisown = False
+        return PseudocodeExpression(raw)
+
+    @staticmethod
     def from_binary(
         op: PseudocodeExpressionOp,
         x: PseudocodeExpression,
@@ -872,26 +904,22 @@ class PseudocodeExpression:
     ) -> PseudocodeExpression:
         """Create a detached binary expression (``x op y``).
 
-        Works for any binary operator: arithmetic (``ADD``, ``SUB``,
-        ``MUL``, …), assignment (``ASG``, ``ASG_ADD``, …), comparison
-        (``EQ``, ``NE``, ``SLT``, …), bitwise (``BAND``, ``BOR``, …),
-        and access (``IDX``, ``MEMPTR``, ``MEMREF``).
+        Works for arithmetic (``ADD``, ``SUB``, ``MUL``, …),
+        assignment (``ASG``, ``ASG_ADD``, …), comparison (``EQ``,
+        ``NE``, ``SLT``, …), bitwise (``BAND``, ``BOR``, …),
+        and access (``IDX``, ``MEMPTR``, ``MEMREF``) operators.
 
-        Also works for unary operators (``NEG``, ``LNOT``, ``BNOT``,
-        ``CAST``, ``PTR``, ``REF``, …) — pass `y` as any throwaway
-        expression; only `x` is used for unary ops.
-
-        The caller should set ``.type`` on the result via
-        ``set_type`` if IDA needs to know the result type.
+        Note:
+            The expression type is not set.  Call ``set_type`` if IDA
+            needs to know the result type.
 
         Args:
-            op: The operator (a ``PseudocodeExpressionOp`` value).
-            x: Left (or sole) operand.
+            op: A binary operator (a ``PseudocodeExpressionOp`` value).
+            x: Left operand.
             y: Right operand.
 
         Example:
             ```python
-            # Build "a1 + a2"
             add = PseudocodeExpression.from_binary(
                 PseudocodeExpressionOp.ADD, expr_a1, expr_a2,
             )
@@ -899,8 +927,8 @@ class PseudocodeExpression:
         """
         raw = PseudocodeExpression._make_expr(int(op))
         raw._set_x(x._raw)
-        raw._set_y(y._raw)
         x._raw.thisown = False
+        raw._set_y(y._raw)
         y._raw.thisown = False
         return PseudocodeExpression(raw)
 
@@ -989,13 +1017,16 @@ class PseudocodeInstruction:
         """Create a properly initialized ``cinsn_t`` with given op.
 
         Uses ``_set_op()`` to bypass the SWIG property guard.
-        Sets ``thisown = False`` so the instruction can be inserted into
-        blocks without SWIG freeing it.  Requires a loaded IDA database.
+        Requires a loaded IDA database.
+
+        Note:
+            SWIG ownership is left enabled.  Callers that insert
+            the instruction into a block or ctree must transfer
+            ownership (e.g. via ``append``).
         """
         raw = ida_hexrays.cinsn_t()
         raw._set_op(op)
         raw.ea = ea
-        raw.thisown = False
         return raw
 
     @staticmethod
@@ -1007,10 +1038,12 @@ class PseudocodeInstruction:
             expr: The expression to wrap as a statement.
 
         Warning:
-            `expr` is consumed and must not be reused after this call.
+            Ownership of `expr` is transferred to the instruction.
+            Prefer not reusing it afterward.
         """
         raw = PseudocodeInstruction._make_insn(ida_hexrays.cit_expr, ea)
         raw.cexpr = expr._raw
+        expr._raw.thisown = False
         return PseudocodeInstruction(raw)
 
     @staticmethod
@@ -1025,7 +1058,7 @@ class PseudocodeInstruction:
         )
 
     @staticmethod
-    def new_block(ea: int = ida_idaapi.BADADDR) -> PseudocodeInstruction:
+    def make_block(ea: int = ida_idaapi.BADADDR) -> PseudocodeInstruction:
         """Create a detached block instruction containing an empty block.
 
         Useful as a container body for ``make_if`` branches.
@@ -1392,7 +1425,7 @@ class PseudocodeBlock:
 
     # -- mutation -----------------------------------------------------------
 
-    def push_back(self, insn: PseudocodeInstruction) -> PseudocodeInstruction:
+    def append(self, insn: PseudocodeInstruction) -> PseudocodeInstruction:
         """Append an instruction to the end of this block.
 
         The block receives a copy.  The original `insn` is no longer
@@ -1832,7 +1865,7 @@ class PseudocodeFunction:
         """Function arguments (filtered from local variables)."""
         return self.local_variables.arguments
 
-    def get_local_variable(self, name: str) -> Optional[MicroLocalVar]:
+    def find_local_variable(self, name: str) -> Optional[MicroLocalVar]:
         """Find a local variable by name.
 
         Args:

@@ -435,17 +435,17 @@ def test_add_numbers_has_add_expression(test_env):
     assert add_expr.y is not None
 
 
-def test_add_numbers_get_local_variable(test_env):
-    """get_local_variable finds arguments by name, returns None for unknown."""
+def test_add_numbers_find_local_variable(test_env):
+    """find_local_variable finds arguments by name, returns None for unknown."""
     db = test_env
     func = db.pseudocode.decompile(0x2A3)
     first_arg_name = func.arguments[0].name
 
-    found = func.get_local_variable(first_arg_name)
+    found = func.find_local_variable(first_arg_name)
     assert found is not None
     assert found.name == first_arg_name
 
-    assert func.get_local_variable("__nonexistent__") is None
+    assert func.find_local_variable("__nonexistent__") is None
 
 
 def test_level1_func_has_two_calls(test_env):
@@ -1538,9 +1538,9 @@ def test_instruction_make_goto(test_env):
     assert insn.goto_details.label_num == 5
 
 
-def test_instruction_new_block(test_env):
-    """new_block creates a BLOCK instruction with an empty block."""
-    insn = PseudocodeInstruction.new_block(0x1000)
+def test_instruction_make_block(test_env):
+    """make_block creates a BLOCK instruction with an empty block."""
+    insn = PseudocodeInstruction.make_block(0x1000)
     assert insn.op == PseudocodeInstructionOp.BLOCK
     assert insn.block is not None
     assert insn.block.is_empty
@@ -1571,8 +1571,8 @@ def test_instruction_make_if(test_env):
     db = test_env
     func = db.pseudocode.decompile(0x2A3)
     cond = PseudocodeExpression.from_number(1)
-    then_block = PseudocodeInstruction.new_block()
-    else_block = PseudocodeInstruction.new_block()
+    then_block = PseudocodeInstruction.make_block()
+    else_block = PseudocodeInstruction.make_block()
 
     insn = PseudocodeInstruction.make_if(0x2A3, cond, then_block, else_block)
     assert insn.op == PseudocodeInstructionOp.IF
@@ -1585,7 +1585,7 @@ def test_instruction_make_if_no_else(test_env):
     db = test_env
     func = db.pseudocode.decompile(0x2A3)
     cond = PseudocodeExpression.from_number(1)
-    then_block = PseudocodeInstruction.new_block()
+    then_block = PseudocodeInstruction.make_block()
 
     insn = PseudocodeInstruction.make_if(0x2A3, cond, then_block)
     assert insn.op == PseudocodeInstructionOp.IF
@@ -1598,30 +1598,30 @@ def test_instruction_make_if_no_else(test_env):
 # ---------------------------------------------------------------------------
 
 
-def test_block_push_back(test_env):
-    """push_back appends an instruction and returns a valid reference."""
+def test_block_append(test_env):
+    """append appends an instruction and returns a valid reference."""
     db = test_env
     func = db.pseudocode.decompile(0x2A3)
     block = func.body.block
     original_len = len(block)
 
     nop = PseudocodeInstruction.make_nop(0x2A3)
-    new_ref = block.push_back(nop)
+    new_ref = block.append(nop)
     assert len(block) == original_len + 1
     assert new_ref is not None
     assert new_ref.op == PseudocodeInstructionOp.EMPTY
     assert new_ref.ea == 0x2A3
 
 
-def test_block_push_back_then_remove(test_env):
-    """push_back followed by remove restores original length."""
+def test_block_append_then_remove(test_env):
+    """append followed by remove restores original length."""
     db = test_env
     func = db.pseudocode.decompile(0x2A3)
     block = func.body.block
     original_len = len(block)
 
     nop = PseudocodeInstruction.make_nop(0x2A3)
-    new_ref = block.push_back(nop)
+    new_ref = block.append(nop)
     assert len(block) == original_len + 1
 
     block.remove(new_ref)

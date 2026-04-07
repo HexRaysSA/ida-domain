@@ -8,14 +8,14 @@
  * Compilation (MinGW, produces COFF object):
  *   gcc -O0 -c -o tiny_pseudocode.bin tiny_pseudocode.c
  *
- * Expected functions and ctree features:
- *   - classify     : ternary (optimized from if/else)
+ * Expected decompiler output (ctree features produced by IDA at -O0):
+ *   - classify     : ternary (IDA optimises the if/else away)
  *   - nested_if    : nested if/else, SLE comparisons, NEG, SUB, ADD, 3 returns
- *   - use_switch   : if-chain + GOTO (compiler converts switch to if-chain at -O0)
- *   - use_for      : FOR loop with PREINC step, BREAK, SGE comparison
+ *   - use_switch   : if-chain + GOTO (compiler converts switch to if-chain)
+ *   - use_for      : FOR loop with PREINC step, BREAK (IDA restructures the loop)
  *   - use_while    : WHILE loop with POSTDEC, SGT comparison
  *   - use_string   : CALL to strlen
- *   - use_struct   : PTR dereference, IDX (array index) for struct field access
+ *   - use_struct   : PTR + IDX (IDA sees _DWORD*, not struct Point)
  *   - main         : 8 CALL expressions with various argument counts
  */
 
