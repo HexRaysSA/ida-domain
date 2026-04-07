@@ -49,7 +49,7 @@ def main():
                         outfile.write(f'\n// Function: {func_name} @ 0x{func.start_ea:X}\n')
                         if signature:
                             outfile.write(f'// Signature: {signature}\n')
-                        outfile.write('\n'.join(pseudocode))
+                        outfile.write('\n'.join(pseudocode.to_text()))
                         outfile.write('\n\n')
                         decompiled_count += 1
                         print(' OK')
