@@ -551,9 +551,7 @@ class MicroCallArg:
     micro-operand).
     """
 
-    def __init__(
-        self, raw: mcallarg_t, _parent_call: Optional[MicroCallInfo] = None
-    ):
+    def __init__(self, raw: mcallarg_t, _parent_call: Optional[MicroCallInfo] = None):
         self._raw = raw
         self._parent_call = _parent_call
 
@@ -567,6 +565,11 @@ class MicroCallArg:
         """Argument type."""
         return self._raw.type
 
+    @type.setter
+    def type(self, value: tinfo_t) -> None:
+        """Set the argument type."""
+        self._raw.type = value
+
     @property
     def argloc(self) -> argloc_t:
         """Argument location."""
@@ -577,20 +580,40 @@ class MicroCallArg:
         """Argument name (may be empty)."""
         return self._raw.name
 
+    @name.setter
+    def name(self, value: str) -> None:
+        """Set the argument name."""
+        self._raw.name = value
+
     @property
     def flags(self) -> int:
         """Argument flags."""
         return self._raw.flags
+
+    @flags.setter
+    def flags(self, value: int) -> None:
+        """Set the argument flags."""
+        self._raw.flags = value
 
     @property
     def size(self) -> int:
         """Argument size in bytes."""
         return self._raw.size
 
+    @size.setter
+    def size(self, value: int) -> None:
+        """Set the argument size in bytes."""
+        self._raw.size = value
+
     @property
     def ea(self) -> ea_t:
         """Source address of the argument."""
         return self._raw.ea
+
+    @ea.setter
+    def ea(self, value: ea_t) -> None:
+        """Set the source address of the argument."""
+        self._raw.ea = value
 
     @property
     def operand(self) -> MicroOperand:
@@ -600,6 +623,88 @@ class MicroCallArg:
         itself is a micro-operand.
         """
         return MicroOperand(self._raw, _parent_insn=self)
+
+    # -- mutation ----------------------------------------------------------
+
+    def make_string(self, value: str, type_info: Optional[tinfo_t] = None) -> None:
+        """Set this argument to a string constant.
+
+        Sets the operand type to ``mop_str``, assigns the string value,
+        and configures type and size.  By default the type is set to
+        ``const char *`` (``STI_PCCHAR``); pass *type_info* to override.
+
+        Args:
+            value: The string value.
+            type_info: Optional type override.  Defaults to ``const char *``.
+        """
+        import ida_typeinf
+
+        self._raw.t = ida_hexrays.mop_str
+        self._raw.cstr = value
+        if type_info is None:
+            type_info = ida_typeinf.tinfo_t.get_stock(ida_typeinf.STI_PCCHAR)
+        self._raw.type = type_info
+        self._raw.size = type_info.get_size()
+
+    def make_number(self, value: int, nbytes: int) -> None:
+        """Set this argument to a numeric constant.
+
+        Args:
+            value: The numeric value.
+            nbytes: Size of the number in bytes.
+        """
+        self._raw.make_number(value, nbytes)
+
+    def set_reg_arg(self, mreg: int, arg_size: int, type_info: tinfo_t) -> None:
+        """Configure this argument as a register argument.
+
+        Args:
+            mreg: Micro-register number.
+            arg_size: Size in bytes.
+            type_info: Argument type.
+        """
+        self._raw.set_regarg(mreg, arg_size, type_info)
+
+    # -- mutation ----------------------------------------------------------
+
+    def make_string(self, value: str, type_info: Optional[tinfo_t] = None) -> None:
+        """Set this argument to a string constant.
+
+        Sets the operand type to ``mop_str``, assigns the string value,
+        and configures type and size.  By default the type is set to
+        ``const char *`` (``STI_PCCHAR``); pass *type_info* to override.
+
+        Args:
+            value: The string value.
+            type_info: Optional type override.  Defaults to ``const char *``.
+        """
+        import ida_typeinf
+
+        self._raw.t = ida_hexrays.mop_str
+        self._raw.cstr = value
+        if type_info is None:
+            type_info = ida_typeinf.tinfo_t.get_stock(ida_typeinf.STI_PCCHAR)
+        self._raw.type = type_info
+        self._raw.size = type_info.get_size()
+
+    def make_number(self, value: int, nbytes: int) -> None:
+        """Set this argument to a numeric constant.
+
+        Args:
+            value: The numeric value.
+            nbytes: Size of the number in bytes.
+        """
+        self._raw.make_number(value, nbytes)
+
+    def set_reg_arg(self, mreg: int, arg_size: int, type_info: tinfo_t) -> None:
+        """Configure this argument as a register argument.
+
+        Args:
+            mreg: Micro-register number.
+            arg_size: Size in bytes.
+            type_info: Argument type.
+        """
+        self._raw.set_regarg(mreg, arg_size, type_info)
 
     def to_text(self) -> str:
         """Get text representation of this argument."""
@@ -618,13 +723,27 @@ class MicroCallInfo:
 
     Provides access to the callee, arguments, calling convention,
     return type, and spoiled/dead registers.
+
+    Use :meth:`create` to construct a new call info from scratch, or
+    obtain one from :attr:`MicroOperand.call_info`.
     """
 
-    def __init__(
-        self, raw: mcallinfo_t, _parent_op: Optional[MicroOperand] = None
-    ):
+    def __init__(self, raw: mcallinfo_t, _parent_op: Optional[MicroOperand] = None):
         self._raw = raw
         self._parent_op = _parent_op
+
+    @staticmethod
+    def create(
+        callee: ea_t = ida_idaapi.BADADDR,
+        solid_args: int = 0,
+    ) -> MicroCallInfo:
+        """Create a new, empty :class:`MicroCallInfo`.
+
+        Args:
+            callee: Address of the called function (``BADADDR`` if unknown).
+            solid_args: Number of solid (non-variadic) arguments.
+        """
+        return MicroCallInfo(mcallinfo_t(callee, solid_args))
 
     @property
     def raw_call_info(self) -> mcallinfo_t:
@@ -636,20 +755,40 @@ class MicroCallInfo:
         """Callee address (``BADADDR`` if indirect/unknown)."""
         return self._raw.callee
 
+    @callee.setter
+    def callee(self, value: ea_t) -> None:
+        """Set callee address."""
+        self._raw.callee = value
+
     @property
     def fixed_arg_count(self) -> int:
         """Number of solid (non-variadic) arguments."""
         return self._raw.solid_args
+
+    @fixed_arg_count.setter
+    def fixed_arg_count(self, value: int) -> None:
+        """Set number of solid arguments."""
+        self._raw.solid_args = value
 
     @property
     def calling_convention(self) -> int:
         """Calling convention (``CM_CC_*`` constant)."""
         return self._raw.cc
 
+    @calling_convention.setter
+    def calling_convention(self, value: int) -> None:
+        """Set calling convention."""
+        self._raw.cc = value
+
     @property
     def return_type(self) -> tinfo_t:
         """Return type."""
         return self._raw.return_type
+
+    @return_type.setter
+    def return_type(self, value: tinfo_t) -> None:
+        """Set the return type."""
+        self._raw.return_type = value
 
     @property
     def return_argloc(self) -> argloc_t:
@@ -661,10 +800,20 @@ class MicroCallInfo:
         """Call flags as a :class:`CallInfoFlags` bit-field."""
         return CallInfoFlags(self._raw.flags)
 
+    @flags.setter
+    def flags(self, value: int) -> None:
+        """Set call flags (raw integer, ``FCI_*`` combination)."""
+        self._raw.flags = value
+
     @property
     def role(self) -> FunctionRole:
         """Function role as a :class:`FunctionRole` enum."""
         return FunctionRole(self._raw.role)
+
+    @role.setter
+    def role(self, value: FunctionRole) -> None:
+        """Set function role."""
+        self._raw.role = int(value)
 
     @property
     def is_vararg(self) -> bool:
@@ -711,10 +860,20 @@ class MicroCallInfo:
         """Stack pointer delta at the call point."""
         return self._raw.call_spd
 
+    @call_stack_pointer_delta.setter
+    def call_stack_pointer_delta(self, value: int) -> None:
+        """Set stack pointer delta."""
+        self._raw.call_spd = value
+
     @property
     def stack_args_top(self) -> int:
         """Top of stack arguments area."""
         return self._raw.stkargs_top
+
+    @stack_args_top.setter
+    def stack_args_top(self, value: int) -> None:
+        """Set top of stack arguments area."""
+        self._raw.stkargs_top = value
 
     @property
     def args(self) -> List[MicroCallArg]:
@@ -726,6 +885,37 @@ class MicroCallInfo:
     def arg_count(self) -> int:
         """Number of arguments."""
         return self._raw.args.size()
+
+    # -- argument mutation -------------------------------------------------
+
+    def add_arg(self) -> MicroCallArg:
+        """Append a new empty argument and return it for configuration.
+
+        The returned :class:`MicroCallArg` can be configured with
+        :meth:`~MicroCallArg.make_string`, :meth:`~MicroCallArg.make_number`,
+        property setters, etc.
+
+        .. warning::
+            Adding further arguments may reallocate the internal vector,
+            invalidating previously returned :class:`MicroCallArg` wrappers.
+            Configure each argument before adding the next one, or
+            re-fetch via :attr:`args` after all arguments have been added.
+        """
+        args = self._raw.args
+        args.push_back(mcallarg_t())
+        raw_arg = args.at(args.size() - 1)
+        return MicroCallArg(raw_arg, self)
+
+    def clear_args(self) -> None:
+        """Remove all arguments."""
+        self._raw.args.clear()
+
+    def set_type(self, type_info: tinfo_t) -> bool:
+        """Set the full function type from a ``tinfo_t``.
+
+        Returns ``True`` on success.
+        """
+        return self._raw.set_type(type_info)
 
     def get_type(self) -> tinfo_t:
         """Get the full function type."""
@@ -739,10 +929,7 @@ class MicroCallInfo:
         return self.to_text()
 
     def __repr__(self) -> str:
-        return (
-            f'MicroCallInfo(callee=0x{self._raw.callee:x}, '
-            f'args={self._raw.args.size()})'
-        )
+        return f'MicroCallInfo(callee=0x{self._raw.callee:x}, args={self._raw.args.size()})'
 
 
 # ---------------------------------------------------------------------------
@@ -756,9 +943,7 @@ class MicroLocalVar:
     Provides access to the variable's name, type, location, and flags.
     """
 
-    def __init__(
-        self, raw: lvar_t, _parent_vars: Optional[MicroLocalVars] = None
-    ):
+    def __init__(self, raw: lvar_t, _parent_vars: Optional[MicroLocalVars] = None):
         self._raw = raw
         self._parent_vars = _parent_vars
 
@@ -955,10 +1140,7 @@ class MicroLocalVar:
         return f'{tif_str} {self._raw.name}'
 
     def __repr__(self) -> str:
-        return (
-            f'MicroLocalVar(name={self._raw.name!r}, '
-            f'width={self._raw.width})'
-        )
+        return f'MicroLocalVar(name={self._raw.name!r}, width={self._raw.width})'
 
 
 class MicroLocalVars:
@@ -983,9 +1165,7 @@ class MicroLocalVars:
         if i < 0:
             i += self._raw.size()
         if i < 0 or i >= self._raw.size():
-            raise IndexError(
-                f'Variable index out of range (0..{self._raw.size() - 1})'
-            )
+            raise IndexError(f'Variable index out of range (0..{self._raw.size() - 1})')
         return MicroLocalVar(self._raw.at(i), self)
 
     def __iter__(self) -> Iterator[MicroLocalVar]:
@@ -1043,9 +1223,11 @@ class MicroLocalVars:
     @property
     def arguments(self) -> List[MicroLocalVar]:
         """List of variables that are function arguments."""
-        return [MicroLocalVar(self._raw.at(i), self)
-                for i in range(self._raw.size())
-                if self._raw.at(i).is_arg_var]
+        return [
+            MicroLocalVar(self._raw.at(i), self)
+            for i in range(self._raw.size())
+            if self._raw.at(i).is_arg_var
+        ]
 
     def __repr__(self) -> str:
         return f'MicroLocalVars(count={self._raw.size()})'
@@ -1072,9 +1254,7 @@ class MicroOperand:
 
     _T = MicroOperandType  # shorthand for type checks
 
-    def __init__(
-        self, raw: mop_t, _parent_insn: Optional[Any] = None
-    ):
+    def __init__(self, raw: mop_t, _parent_insn: Optional[MicroInstruction] = None):
         self._raw = raw
         self._parent_insn = _parent_insn
 
@@ -1305,9 +1485,7 @@ class MicroOperand:
         """Nested :class:`MicroInstruction` for ``mop_d`` operands, or *None*."""
         if self._raw.t == self._T.SUB_INSN:
             parent_block = (
-                self._parent_insn._parent_block
-                if self._parent_insn is not None
-                else None
+                self._parent_insn._parent_block if self._parent_insn is not None else None
             )
             return MicroInstruction(self._raw.d, parent_block)
         return None
@@ -1368,12 +1546,12 @@ class MicroOperand:
         return self._raw.t == self._T.NUMBER
 
     @property
-    @requires_ida("9.2")
+    @requires_ida('9.2')
     def is_stack_variable(self) -> bool:
         return self._raw.is_stkvar()
 
     @property
-    @requires_ida("9.2")
+    @requires_ida('9.2')
     def is_global_address(self) -> bool:
         return self._raw.is_glbvar()
 
@@ -1488,9 +1666,7 @@ class MicroOperand:
             return self._raw.is_insn(int(opcode))
         return self._raw.is_insn()
 
-    def has_side_effects(
-        self, include_ldx_and_divs: bool = False
-    ) -> bool:
+    def has_side_effects(self, include_ldx_and_divs: bool = False) -> bool:
         """True if evaluating this operand may cause side effects.
 
         Args:
@@ -1864,9 +2040,7 @@ class MicroInstruction:
         """True if this instruction's opcode is commutative."""
         return self.opcode.is_commutative
 
-    def has_side_effects(
-        self, include_ldx_and_divs: bool = False
-    ) -> bool:
+    def has_side_effects(self, include_ldx_and_divs: bool = False) -> bool:
         """True if this instruction (or any nested sub-instruction) may cause side effects.
 
         Args:
@@ -2248,9 +2422,9 @@ class MicroInstruction:
         """
         if self._parent_block is None:
             raise DecompilerError(
-                "Cannot mark lists dirty: parent block unknown. "
-                "Use block.replace_instruction() or ensure the instruction "
-                "was obtained from a block."
+                'Cannot mark lists dirty: parent block unknown. '
+                'Use block.replace_instruction() or ensure the instruction '
+                'was obtained from a block.'
             )
         self.swap(new_insn)
         self.optimize_solo()
@@ -2286,7 +2460,7 @@ class MicroInstruction:
 
     # -- serialization -----------------------------------------------------
 
-    @requires_ida("9.4")
+    @requires_ida('9.4')
     def serialize(self) -> Tuple[int, bytes]:
         """Serialize this instruction to bytes.
 
@@ -2309,7 +2483,7 @@ class MicroInstruction:
         """
         raw = minsn_t(0)
         if not raw.deserialize(data, format_version):
-            raise MicrocodeError("failed to deserialize instruction")
+            raise MicrocodeError('failed to deserialize instruction')
         return MicroInstruction(raw)
 
     # -- dunder protocols --------------------------------------------------
@@ -3019,9 +3193,7 @@ class MicroBlock:
         """
         return self._raw.optimize_useless_jump()
 
-    def replace_instruction(
-        self, old_insn: MicroInstruction, new_insn: MicroInstruction
-    ) -> None:
+    def replace_instruction(self, old_insn: MicroInstruction, new_insn: MicroInstruction) -> None:
         """Replace *old_insn* with *new_insn*, performing cleanup.
 
         Equivalent to the common deobfuscation idiom::
@@ -3038,7 +3210,7 @@ class MicroBlock:
             InvalidParameterError: If *old_insn* is not found in this block.
         """
         if not self.contains_instruction(old_insn):
-            raise InvalidParameterError("old_insn", old_insn, "is not in this block")
+            raise InvalidParameterError('old_insn', old_insn, 'is not in this block')
         old_insn.swap(new_insn)
         old_insn.optimize_solo()
         self.mark_lists_dirty()
@@ -3341,9 +3513,7 @@ class MicroBlockArray:
         """
         return self._raw.remove_blocks(start, end)
 
-    def split_block(
-        self, block: MicroBlock, start_insn: MicroInstruction
-    ) -> MicroBlock:
+    def split_block(self, block: MicroBlock, start_insn: MicroInstruction) -> MicroBlock:
         """Split a block at the given instruction.
 
         A new block is inserted after *block*, and all instructions from

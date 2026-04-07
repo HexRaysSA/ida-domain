@@ -1,7 +1,9 @@
 import struct
 
 import ida_hexrays
+import ida_idaapi
 import ida_lines
+import ida_typeinf
 import pytest
 from packaging.version import Version
 
@@ -3891,3 +3893,207 @@ def test_microcode_block_get_valranges(test_env):
     # If we got here, we didn't find a suitable register operand
     assert False, "No register operand found; test not fully exercised"
 
+
+def test_microcode_call_arg_property_setters(test_env):
+    """Test MicroCallArg property setters (type, name, flags, size, ea)."""
+    from ida_domain.microcode import MicroCallInfo, MicroMaturity
+
+    db = test_env
+    func = db.functions.get_at(0x2BC)
+    mf = db.microcode.generate(func, maturity=MicroMaturity.CALLS)
+
+    # Find a call with arguments
+    call_info = None
+    for insn in mf.instructions(skip_sentinels=True):
+        if insn.is_call():
+            ci = insn.d.call_info
+            if ci is not None and ci.arg_count > 0:
+                call_info = ci
+                break
+    assert call_info is not None, 'Expected a call with arguments'
+
+    arg = call_info.args[0]
+
+    # name setter
+    original_name = arg.name
+    arg.name = 'test_arg_name'
+    assert arg.name == 'test_arg_name'
+    arg.name = original_name
+
+    # flags setter
+    original_flags = arg.flags
+    arg.flags = 0x42
+    assert arg.flags == 0x42
+    arg.flags = original_flags
+
+    # size setter
+    original_size = arg.size
+    arg.size = 16
+    assert arg.size == 16
+    arg.size = original_size
+
+    # ea setter
+    original_ea = arg.ea
+    arg.ea = 0xDEAD
+    assert arg.ea == 0xDEAD
+    arg.ea = original_ea
+
+    # type setter
+    original_type = arg.type
+    new_type = ida_typeinf.tinfo_t(ida_typeinf.BT_INT32)
+    arg.type = new_type
+    assert arg.type is not None
+    arg.type = original_type
+
+
+def test_microcode_call_arg_make_string(test_env):
+    """Test MicroCallArg.make_string() with default and custom type."""
+    from ida_domain.microcode import MicroCallInfo, MicroOperandType
+
+    # Create a fresh call info and add an argument
+    ci = MicroCallInfo.create()
+    arg = ci.add_arg()
+
+    # make_string with default type (const char *)
+    arg.make_string('hello world')
+    assert arg.type is not None
+    assert arg.size > 0
+
+    # make_string with custom type override
+    custom_type = ida_typeinf.tinfo_t(ida_typeinf.BT_INT8 | ida_typeinf.BTMT_CHAR)
+    ptr_type = ida_typeinf.tinfo_t()
+    ptr_type.create_ptr(custom_type)
+
+    arg2 = ci.add_arg()
+    arg2.make_string('custom', type_info=ptr_type)
+    assert arg2.size == ptr_type.get_size()
+
+
+def test_microcode_call_arg_make_number(test_env):
+    """Test MicroCallArg.make_number()."""
+    from ida_domain.microcode import MicroCallInfo, MicroOperandType
+
+    ci = MicroCallInfo.create()
+    arg = ci.add_arg()
+    arg.make_number(42, 4)
+
+    op = arg.operand
+    assert op.type == MicroOperandType.NUMBER
+    assert op.value == 42
+
+
+def test_microcode_call_arg_set_reg_arg(test_env):
+    """Test MicroCallArg.set_reg_arg()."""
+    from ida_domain.microcode import MicroCallInfo
+
+    ci = MicroCallInfo.create()
+    arg = ci.add_arg()
+
+    reg_type = ida_typeinf.tinfo_t(ida_typeinf.BT_INT32)
+    arg.set_reg_arg(0, 4, reg_type)
+
+    assert arg.size == 4
+    assert arg.type is not None
+
+
+def test_microcode_call_info_create(test_env):
+    """Test MicroCallInfo.create() static factory."""
+    from ida_domain.microcode import MicroCallInfo
+
+    # Default parameters
+    ci = MicroCallInfo.create()
+    assert ci.callee == ida_idaapi.BADADDR
+    assert ci.fixed_arg_count == 0
+    assert ci.arg_count == 0
+    assert ci.raw_call_info is not None
+
+    # Custom parameters
+    ci2 = MicroCallInfo.create(callee=0x1234, solid_args=3)
+    assert ci2.callee == 0x1234
+    assert ci2.fixed_arg_count == 3
+
+
+def test_microcode_call_info_property_setters(test_env):
+    """Test MicroCallInfo property setters."""
+    from ida_domain.microcode import FunctionRole, MicroCallInfo
+
+    ci = MicroCallInfo.create()
+
+    # callee
+    ci.callee = 0xABCD
+    assert ci.callee == 0xABCD
+
+    # fixed_arg_count
+    ci.fixed_arg_count = 5
+    assert ci.fixed_arg_count == 5
+
+    # calling_convention
+    ci.calling_convention = ida_typeinf.CM_CC_CDECL
+    assert ci.calling_convention == ida_typeinf.CM_CC_CDECL
+
+    # return_type
+    ret_type = ida_typeinf.tinfo_t(ida_typeinf.BT_INT32)
+    ci.return_type = ret_type
+    assert ci.return_type is not None
+
+    # flags
+    ci.flags = 0x10
+    assert ci.flags & 0x10
+
+    # role
+    ci.role = FunctionRole.EMPTY
+    assert ci.role == FunctionRole.EMPTY
+
+    # call_stack_pointer_delta
+    ci.call_stack_pointer_delta = -8
+    assert ci.call_stack_pointer_delta == -8
+
+    # stack_args_top
+    ci.stack_args_top = 0x20
+    assert ci.stack_args_top == 0x20
+
+
+def test_microcode_call_info_add_and_clear_args(test_env):
+    """Test MicroCallInfo.add_arg() and clear_args()."""
+    from ida_domain.microcode import MicroCallArg, MicroCallInfo
+
+    ci = MicroCallInfo.create()
+    assert ci.arg_count == 0
+
+    # Add and configure first arg before adding more (vector reallocation
+    # invalidates previously returned wrappers)
+    arg1 = ci.add_arg()
+    assert isinstance(arg1, MicroCallArg)
+    assert ci.arg_count == 1
+    arg1.name = 'first'
+
+    # Add and configure second arg
+    arg2 = ci.add_arg()
+    assert ci.arg_count == 2
+    arg2.name = 'second'
+
+    # Re-fetch and verify names persisted
+    args = ci.args
+    assert len(args) == 2
+    assert args[0].name == 'first'
+    assert args[1].name == 'second'
+
+    # Clear all
+    ci.clear_args()
+    assert ci.arg_count == 0
+
+
+def test_microcode_call_info_set_type(test_env):
+    """Test MicroCallInfo.set_type()."""
+    from ida_domain.microcode import MicroCallInfo
+
+    ci = MicroCallInfo.create()
+
+    # Build a simple function type: int func(void)
+    func_type = ida_typeinf.tinfo_t()
+    func_data = ida_typeinf.func_type_data_t()
+    func_data.rettype = ida_typeinf.tinfo_t(ida_typeinf.BT_INT32)
+    func_type.create_func(func_data)
+
+    result = ci.set_type(func_type)
+    assert isinstance(result, bool)
