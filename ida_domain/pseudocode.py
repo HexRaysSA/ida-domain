@@ -1811,11 +1811,6 @@ class PseudocodeTry:
         """The try body block (``ctry_t`` extends ``cblock_t``)."""
         return PseudocodeBlock(self._raw, self)
 
-    @property
-    def catches(self) -> List[Any]:
-        """List of catch clauses (``catchlist_t``)."""
-        return list(self._raw.catches)
-
     def __repr__(self) -> str:
         return f'PseudocodeTry(catches={len(self._raw.catches)})'
 
