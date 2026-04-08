@@ -862,16 +862,20 @@ class PseudocodeExpression:
         return PseudocodeExpression(raw)
 
     @staticmethod
-    def from_object(obj_ea: int) -> PseudocodeExpression:
+    def from_object(
+        obj_ea: int,
+        ea: int = ida_idaapi.BADADDR,
+    ) -> PseudocodeExpression:
         """Create a detached object-reference expression.
 
         Args:
             obj_ea: Address of the referenced object (global, function, …).
+            ea: Address to associate with the expression itself.
 
         Note:
             The expression type is not set.  Call ``set_type`` if needed.
         """
-        raw = PseudocodeExpression._make_expr(ida_hexrays.cot_obj, obj_ea)
+        raw = PseudocodeExpression._make_expr(ida_hexrays.cot_obj, ea)
         raw.obj_ea = obj_ea
         return PseudocodeExpression(raw)
 
@@ -1474,19 +1478,17 @@ class PseudocodeBlock:
     # -- mutation -----------------------------------------------------------
 
     def append(self, insn: PseudocodeInstruction) -> PseudocodeInstruction:
-        """Append an instruction to the end of this block.
+        """Append a copy of an instruction to the end of this block.
 
-        The block receives a copy.  The original `insn` is no longer
-        managed by SWIG after this call, so prefer the returned
-        reference for further operations.
+        The block copies the instruction internally.  The original
+        `insn` remains valid and is unaffected.
 
         Args:
-            insn: The instruction to append.
+            insn: The instruction to copy into the block.
 
         Returns:
-            A wrapper pointing to the copy now inside the block.
+            A wrapper pointing to the new copy inside the block.
         """
-        insn._raw.thisown = False
         self._raw.push_back(insn._raw)
         return PseudocodeInstruction(self._raw.back(), self)
 
