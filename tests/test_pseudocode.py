@@ -598,7 +598,7 @@ def test_number_protocol(test_env):
 def test_number_signed_value(tiny_pseudocode_env):
     """value returns signed interpretation for negative constants."""
     db = tiny_pseudocode_env
-    func = db.pseudocode.decompile(0x149)  # use_negative — has 'a1 >= -1'
+    func = db.pseudocode.decompile(0x157)  # use_negative — has 'a1 >= -1'
 
     neg_one = func.find_expression(
         lambda e: e.is_number and e.number == -1
@@ -734,7 +734,7 @@ def test_expression_object_access(test_env):
 def test_expression_call_args(tiny_pseudocode_env):
     """Call expressions expose call_args with correct argument count."""
     db = tiny_pseudocode_env
-    func = db.pseudocode.decompile(0x162)  # main — calls all functions
+    func = db.pseudocode.decompile(0x170)  # main — calls all functions
     calls = func.find_calls()
     assert len(calls) == 9
 
@@ -860,9 +860,9 @@ def test_instruction_walk_expressions(tiny_pseudocode_env):
     outer_if = func.find_if_instructions()[0]
 
     exprs = list(outer_if.walk_expressions())
-    # nested_if's outer if contains: 3 assignments to sink, 2 comparisons,
-    # NEG, SUB, ADD, VARs, OBJs, CASTs, NUMs — 31 total from exploration
-    assert len(exprs) > 20
+    # nested_if's outer if contains: 3 assignments (sink_a/b/c), 2 comparisons,
+    # NEG, SUB, ADD, VARs, OBJs, NUMs — 23 total
+    assert len(exprs) == 23
     ops = {e.op.name for e in exprs}
     assert 'ASG' in ops
     assert 'SLE' in ops
@@ -893,7 +893,7 @@ def test_instruction_walk_all(tiny_pseudocode_env):
     items = list(outer_if.walk_all())
     n_expr = sum(1 for i in items if isinstance(i, PseudocodeExpression))
     n_insn = sum(1 for i in items if isinstance(i, PseudocodeInstruction))
-    assert n_expr == 31  # from exploration
+    assert n_expr == 23
     assert n_insn == 12
 
 
@@ -989,8 +989,8 @@ def test_parent_visitor(tiny_pseudocode_env):
 
     v = FindAssignTargets()
     v.apply_to(func.body)
-    # nested_if assigns to 'sink' 3 times
-    assert v.targets.count('sink') == 3
+    # nested_if assigns to sink_a, sink_b, sink_c (one per branch)
+    assert sorted(v.targets) == ['sink_a', 'sink_b', 'sink_c']
 
 
 # ---------------------------------------------------------------------------
@@ -1035,11 +1035,16 @@ def test_find_objects_by_ea(tiny_pseudocode_env):
     """find_objects(obj_ea=...) filters by object address."""
     db = tiny_pseudocode_env
     func = db.pseudocode.decompile(0x26)
-    # All objects in nested_if are 'sink' at 0x200
+    # nested_if references three distinct sinks (sink_a/b/c), one per branch
     all_objs = func.find_objects()
     assert len(all_objs) == 3
-    filtered = func.find_objects(obj_ea=0x200)
-    assert len(filtered) == 3
+    addrs = {o.obj_ea for o in all_objs}
+    assert len(addrs) == 3
+    # Filtering by one of the actual object addresses returns exactly that one
+    one_addr = next(iter(addrs))
+    filtered = func.find_objects(obj_ea=one_addr)
+    assert len(filtered) == 1
+    assert filtered[0].obj_ea == one_addr
     empty = func.find_objects(obj_ea=0xDEAD)
     assert len(empty) == 0
 
@@ -1142,14 +1147,14 @@ def test_function_repr(test_env):
 
 
 # ---------------------------------------------------------------------------
-# FOR loop details (use_for at 0xBB)
+# FOR loop details (use_for at 0xC9)
 # ---------------------------------------------------------------------------
 
 
 def test_for_loop_details(tiny_pseudocode_env):
     """use_for has a FOR loop with init, condition, step, and body."""
     db = tiny_pseudocode_env
-    func = db.pseudocode.decompile(0xBB)  # use_for
+    func = db.pseudocode.decompile(0xC9)  # use_for
     loops = func.find_loops()
     assert len(loops) == 1
     assert loops[0].op == PseudocodeInstructionOp.FOR
@@ -1168,7 +1173,7 @@ def test_for_loop_details(tiny_pseudocode_env):
 def test_for_loop_has_break(tiny_pseudocode_env):
     """use_for's for-loop body contains a break instruction."""
     db = tiny_pseudocode_env
-    func = db.pseudocode.decompile(0xBB)
+    func = db.pseudocode.decompile(0xC9)
     for insn in func.walk_instructions():
         if insn.op == PseudocodeInstructionOp.BREAK:
             return
@@ -1176,14 +1181,14 @@ def test_for_loop_has_break(tiny_pseudocode_env):
 
 
 # ---------------------------------------------------------------------------
-# WHILE loop details (use_while at 0xEC)
+# WHILE loop details (use_while at 0xFA)
 # ---------------------------------------------------------------------------
 
 
 def test_while_loop_details(tiny_pseudocode_env):
     """use_while has a WHILE loop with condition 'a1 > 0' and a body."""
     db = tiny_pseudocode_env
-    func = db.pseudocode.decompile(0xEC)  # use_while
+    func = db.pseudocode.decompile(0xFA)  # use_while
     loops = func.find_loops()
     assert len(loops) == 1
     assert loops[0].op == PseudocodeInstructionOp.WHILE
@@ -1199,20 +1204,20 @@ def test_while_loop_details(tiny_pseudocode_env):
 def test_while_has_postdec(tiny_pseudocode_env):
     """use_while decrements with a1-- — ctree should contain POSTDEC."""
     db = tiny_pseudocode_env
-    func = db.pseudocode.decompile(0xEC)
+    func = db.pseudocode.decompile(0xFA)
     ops = {e.op for e in func.walk_expressions()}
     assert PseudocodeExpressionOp.POSTDEC in ops
 
 
 # ---------------------------------------------------------------------------
-# GOTO instruction (use_switch at 0x68 — compiler generates goto)
+# GOTO instruction (use_switch at 0x76 — compiler generates goto)
 # ---------------------------------------------------------------------------
 
 
 def test_goto_instruction(tiny_pseudocode_env):
     """use_switch's if-chain includes a GOTO instruction with a label."""
     db = tiny_pseudocode_env
-    func = db.pseudocode.decompile(0x68)  # use_switch
+    func = db.pseudocode.decompile(0x76)  # use_switch
 
     for insn in func.walk_instructions():
         if insn.op == PseudocodeInstructionOp.GOTO:
@@ -1225,14 +1230,14 @@ def test_goto_instruction(tiny_pseudocode_env):
 
 
 # ---------------------------------------------------------------------------
-# PTR and IDX expressions (use_struct at 0x129)
+# PTR and IDX expressions (use_struct at 0x137)
 # ---------------------------------------------------------------------------
 
 
 def test_struct_ptr_and_idx(tiny_pseudocode_env):
     """use_struct accesses *a1 and a1[1] — produces PTR and IDX expressions."""
     db = tiny_pseudocode_env
-    func = db.pseudocode.decompile(0x129)  # use_struct
+    func = db.pseudocode.decompile(0x137)  # use_struct
     ops = {e.op for e in func.walk_expressions()}
     assert PseudocodeExpressionOp.PTR in ops
     assert PseudocodeExpressionOp.IDX in ops
@@ -1241,7 +1246,7 @@ def test_struct_ptr_and_idx(tiny_pseudocode_env):
 def test_ptr_expression_has_operand(tiny_pseudocode_env):
     """PTR expressions have an x operand (the dereferenced pointer)."""
     db = tiny_pseudocode_env
-    func = db.pseudocode.decompile(0x129)
+    func = db.pseudocode.decompile(0x137)
     for e in func.walk_expressions():
         if e.op == PseudocodeExpressionOp.PTR:
             assert e.x is not None
@@ -1254,7 +1259,7 @@ def test_ptr_expression_has_operand(tiny_pseudocode_env):
 def test_idx_expression_has_operands(tiny_pseudocode_env):
     """IDX expressions have x (base) and y (index) operands."""
     db = tiny_pseudocode_env
-    func = db.pseudocode.decompile(0x129)
+    func = db.pseudocode.decompile(0x137)
     for e in func.walk_expressions():
         if e.op == PseudocodeExpressionOp.IDX:
             assert e.x is not None  # base pointer
@@ -1264,21 +1269,21 @@ def test_idx_expression_has_operands(tiny_pseudocode_env):
 
 
 # ---------------------------------------------------------------------------
-# CAST expressions (nested_if, use_for, use_while all have casts)
+# CAST expressions (use_for, use_while, use_struct, use_negative all have casts)
 # ---------------------------------------------------------------------------
 
 
 def test_cast_expression(tiny_pseudocode_env):
     """CAST is a unary expression — x is the inner expression, y is None."""
     db = tiny_pseudocode_env
-    func = db.pseudocode.decompile(0x26)  # nested_if has (unsigned int) casts
+    func = db.pseudocode.decompile(0xC9)  # use_for has (unsigned int) loop-counter casts
     for e in func.walk_expressions():
         if e.op == PseudocodeExpressionOp.CAST:
             assert e.x is not None
             assert e.y is None  # unary
             assert e.type_info is not None
             return
-    pytest.fail("Expected a CAST expression in nested_if")
+    pytest.fail("Expected a CAST expression in use_for")
 
 
 # ---------------------------------------------------------------------------
@@ -1289,7 +1294,7 @@ def test_cast_expression(tiny_pseudocode_env):
 def test_expression_type_checks_on_use_switch(tiny_pseudocode_env):
     """use_switch has EQ comparisons, numbers, variables, objects, and assignments."""
     db = tiny_pseudocode_env
-    func = db.pseudocode.decompile(0x68)
+    func = db.pseudocode.decompile(0x76)
 
     has_eq = any(e.op == PseudocodeExpressionOp.EQ for e in func.walk_expressions())
     has_sgt = any(e.op == PseudocodeExpressionOp.SGT for e in func.walk_expressions())
@@ -1311,7 +1316,7 @@ def test_instruction_is_shortcuts(tiny_pseudocode_env):
     db = tiny_pseudocode_env
 
     # use_for has FOR, IF, BREAK, RETURN, BLOCK, EXPR
-    func = db.pseudocode.decompile(0xBB)
+    func = db.pseudocode.decompile(0xC9)
     ops_seen = set()
     for insn in func.walk_instructions():
         if insn.is_block:
@@ -1403,7 +1408,7 @@ def test_return_repr(tiny_pseudocode_env):
 def test_goto_repr(tiny_pseudocode_env):
     """PseudocodeGoto repr includes label number."""
     db = tiny_pseudocode_env
-    func = db.pseudocode.decompile(0x68)
+    func = db.pseudocode.decompile(0x76)
     for insn in func.walk_instructions():
         if insn.op == PseudocodeInstructionOp.GOTO:
             gd = insn.goto_details
@@ -1422,7 +1427,7 @@ def test_goto_repr(tiny_pseudocode_env):
 def test_for_repr(tiny_pseudocode_env):
     """PseudocodeFor repr includes ea."""
     db = tiny_pseudocode_env
-    func = db.pseudocode.decompile(0xBB)
+    func = db.pseudocode.decompile(0xC9)
     loop = func.find_loops()[0]
     r = repr(loop.for_details)
     assert 'PseudocodeFor' in r
@@ -1431,7 +1436,7 @@ def test_for_repr(tiny_pseudocode_env):
 def test_while_repr(tiny_pseudocode_env):
     """PseudocodeWhile repr includes ea."""
     db = tiny_pseudocode_env
-    func = db.pseudocode.decompile(0xEC)
+    func = db.pseudocode.decompile(0xFA)
     loop = func.find_loops()[0]
     r = repr(loop.while_details)
     assert 'PseudocodeWhile' in r
@@ -1838,7 +1843,7 @@ def test_find_expression_stops_early(test_env):
 def test_find_instruction_for_loop(tiny_pseudocode_env):
     """find_instruction finds a FOR loop with accessible details."""
     db = tiny_pseudocode_env
-    func = db.pseudocode.decompile(0xBB)  # use_for
+    func = db.pseudocode.decompile(0xC9)  # use_for
 
     insn = func.find_instruction(lambda i: i.op == PseudocodeInstructionOp.FOR)
     assert insn is not None

@@ -10,7 +10,9 @@
  *
  * Expected decompiler output (ctree features produced by IDA at -O0):
  *   - classify     : ternary (IDA optimises the if/else away)
- *   - nested_if    : nested if/else, SLE comparisons, NEG, SUB, ADD, 3 returns
+ *   - nested_if    : nested if/else, SLE comparisons, NEG, SUB, ADD,
+ *                    3 distinct returns and 3 distinct sinks per branch
+ *                    so the decompiler cannot consolidate across IDA versions
  *   - use_switch   : if-chain + GOTO (compiler converts switch to if-chain)
  *   - use_for      : FOR loop with PREINC step, BREAK (IDA restructures the loop)
  *   - use_while    : WHILE loop with POSTDEC, SGT comparison
@@ -23,6 +25,9 @@
 #include <string.h>
 
 volatile int sink;
+volatile int sink_a;
+volatile int sink_b;
+volatile int sink_c;
 const char *msg = "hello";
 
 struct Point { int x; int y; };
@@ -34,14 +39,18 @@ void classify(int x) {
         sink = 0;
 }
 
-void nested_if(int a, int b) {
+int nested_if(int a, int b) {
     if (a > 0) {
-        if (b > 0)
-            sink = a + b;
-        else
-            sink = a - b;
+        if (b > 0) {
+            sink_a = a + b;
+            return 1;
+        } else {
+            sink_b = a - b;
+            return 2;
+        }
     } else {
-        sink = -a;
+        sink_c = -a;
+        return 3;
     }
 }
 
@@ -83,7 +92,7 @@ int use_negative(int x) {
 int main(int argc, char **argv) {
     struct Point pt = {1, 2};
     classify(argc);
-    nested_if(argc, argc + 1);
+    sink = nested_if(argc, argc + 1);
     use_switch(argc);
     use_for(argc);
     use_while(argc);
