@@ -192,16 +192,15 @@ class PseudocodeExpressionOp(IntEnum):
         ``helper``, and ``type``.
         """
         return (
-            self.value >= ida_hexrays.cot_num
-            and self.value <= ida_hexrays.cot_type
-            and self.value != ida_hexrays.cot_insn
-            and self.value != ida_hexrays.cot_sizeof
+            PseudocodeExpressionOp.NUM <= self <= PseudocodeExpressionOp.TYPE
+            and self is not PseudocodeExpressionOp.INSN
+            and self is not PseudocodeExpressionOp.SIZEOF
         )
 
     @property
     def is_call(self) -> bool:
         """True for call expressions."""
-        return self.value == ida_hexrays.cot_call
+        return self is PseudocodeExpressionOp.CALL
 
     @property
     def is_prepost(self) -> bool:
@@ -211,19 +210,20 @@ class PseudocodeExpressionOp(IntEnum):
     @property
     def is_arithmetic(self) -> bool:
         """True for integer arithmetic operators (``+``, ``-``, ``*``, ``/``, ``%``)."""
-        return self.value in (
-            ida_hexrays.cot_add, ida_hexrays.cot_sub, ida_hexrays.cot_mul,
-            ida_hexrays.cot_sdiv, ida_hexrays.cot_udiv,
-            ida_hexrays.cot_smod, ida_hexrays.cot_umod,
+        return self in (
+            PseudocodeExpressionOp.ADD, PseudocodeExpressionOp.SUB,
+            PseudocodeExpressionOp.MUL,
+            PseudocodeExpressionOp.SDIV, PseudocodeExpressionOp.UDIV,
+            PseudocodeExpressionOp.SMOD, PseudocodeExpressionOp.UMOD,
         )
 
     @property
     def is_floating_point(self) -> bool:
         """True for floating-point arithmetic operators."""
-        return self.value in (
-            ida_hexrays.cot_fadd, ida_hexrays.cot_fsub,
-            ida_hexrays.cot_fmul, ida_hexrays.cot_fdiv,
-            ida_hexrays.cot_fneg,
+        return self in (
+            PseudocodeExpressionOp.FADD, PseudocodeExpressionOp.FSUB,
+            PseudocodeExpressionOp.FMUL, PseudocodeExpressionOp.FDIV,
+            PseudocodeExpressionOp.FNEG,
         )
 
 
@@ -251,16 +251,18 @@ class PseudocodeInstructionOp(IntEnum):
     @property
     def is_loop(self) -> bool:
         """True for loop instructions (``for``, ``while``, ``do``)."""
-        return self.value in (
-            ida_hexrays.cit_for, ida_hexrays.cit_while, ida_hexrays.cit_do,
+        return self in (
+            PseudocodeInstructionOp.FOR,
+            PseudocodeInstructionOp.WHILE,
+            PseudocodeInstructionOp.DO,
         )
 
     @property
     def is_control_flow(self) -> bool:
         """True for control-flow instructions (``break``, ``continue``, ``return``, ``goto``)."""
-        return self.value in (
-            ida_hexrays.cit_break, ida_hexrays.cit_continue,
-            ida_hexrays.cit_return, ida_hexrays.cit_goto,
+        return self in (
+            PseudocodeInstructionOp.BREAK, PseudocodeInstructionOp.CONTINUE,
+            PseudocodeInstructionOp.RETURN, PseudocodeInstructionOp.GOTO,
         )
 
 
@@ -365,9 +367,9 @@ class PseudocodeNumber:
     def _signext(self, tif: Any) -> int:
         """Sign-extend the raw value based on `tif`.
 
-        IDA's SWIG bridge returns unsigned Python ints even for signed
-        C types.  Uses the bit-twiddling pattern from IDA SDK
-        (ebc.py ``SIGNEXT``).
+        ``ida_hexrays`` exposes raw numeric values as unsigned Python
+        integers regardless of the C type's signedness, so signed types
+        need explicit sign extension.
         """
         if tif.is_signed():
             bits = tif.get_size() * 8
@@ -639,8 +641,8 @@ class PseudocodeExpression:
 
     @property
     def z(self) -> Optional[PseudocodeExpression]:
-        """Third operand (ternary ``z``), or ``None`` if not ternary."""
-        if self._raw.op == self._Op.TERNARY:
+        """Third operand (ternary ``z``), or ``None`` if the operator does not use z."""
+        if ida_hexrays.op_uses_z(self._raw.op):
             return PseudocodeExpression(self._raw.z, self)
         return None
 
@@ -815,27 +817,32 @@ class PseudocodeExpression:
     def from_number(
         value: int,
         ea: int = ida_idaapi.BADADDR,
+        type_info: Optional[tinfo_t] = None,
     ) -> PseudocodeExpression:
         """Create a detached numeric constant expression.
 
         Args:
             value: The integer value.
             ea: Address to associate with the expression.
+            type_info: Type to assign to the expression.
 
-        Note:
-            The expression type is not set.  Call ``set_type`` if the
-            result will be used in a context that requires type info.
+        Warning:
+            You must always provide a type before inserting the
+            expression into a ctree.  Otherwise it won't work and no
+            exception is raised.
         """
-        raw = PseudocodeExpression._make_expr(ida_hexrays.cot_num, ea)
+        raw = PseudocodeExpression._make_expr(PseudocodeExpressionOp.NUM, ea)
         raw.n = ida_hexrays.cnumber_t()
         raw.n._value = value
+        if type_info is not None:
+            raw.type = type_info
         return PseudocodeExpression(raw)
 
     @staticmethod
     def _make_expr(op: int, ea: int = ida_idaapi.BADADDR) -> ida_hexrays.cexpr_t:
         """Create a properly initialized ``cexpr_t`` with given op.
 
-        Uses ``_set_op()`` to bypass the SWIG property guard on ``.op``,
+        Uses ``_set_op()`` to bypass the property guard on ``.op``,
         which rejects assignment on uninitialised proxy objects.
         Requires a loaded IDA database.
         """
@@ -848,36 +855,48 @@ class PseudocodeExpression:
     def from_string(
         text: str,
         ea: int = ida_idaapi.BADADDR,
+        type_info: Optional[tinfo_t] = None,
     ) -> PseudocodeExpression:
         """Create a detached string literal expression.
 
         Args:
             text: The string content.
             ea: Address to associate with the expression.
+            type_info: Type to assign to the expression.
 
-        Note:
-            The expression type is not set.  Call ``set_type`` if needed.
+        Warning:
+            You must always provide a type before inserting the
+            expression into a ctree.  Otherwise it won't work and no
+            exception is raised.
         """
-        raw = PseudocodeExpression._make_expr(ida_hexrays.cot_str, ea)
+        raw = PseudocodeExpression._make_expr(PseudocodeExpressionOp.STR, ea)
         raw._set_string(text)
+        if type_info is not None:
+            raw.type = type_info
         return PseudocodeExpression(raw)
 
     @staticmethod
     def from_object(
         obj_ea: int,
         ea: int = ida_idaapi.BADADDR,
+        type_info: Optional[tinfo_t] = None,
     ) -> PseudocodeExpression:
         """Create a detached object-reference expression.
 
         Args:
             obj_ea: Address of the referenced object (global, function, …).
             ea: Address to associate with the expression itself.
+            type_info: Type to assign to the expression.
 
-        Note:
-            The expression type is not set.  Call ``set_type`` if needed.
+        Warning:
+            You must always provide a type before inserting the
+            expression into a ctree.  Otherwise it won't work and no
+            exception is raised.
         """
-        raw = PseudocodeExpression._make_expr(ida_hexrays.cot_obj, ea)
+        raw = PseudocodeExpression._make_expr(PseudocodeExpressionOp.OBJ, ea)
         raw.obj_ea = obj_ea
+        if type_info is not None:
+            raw.type = type_info
         return PseudocodeExpression(raw)
 
     @staticmethod
@@ -892,7 +911,7 @@ class PseudocodeExpression:
             Unlike other factories, the expression type is set
             automatically from the variable's declared type.
         """
-        raw = PseudocodeExpression._make_expr(ida_hexrays.cot_var)
+        raw = PseudocodeExpression._make_expr(PseudocodeExpressionOp.VAR)
         vref = ida_hexrays.var_ref_t()
         vref.idx = idx
         vref.mba = mba._raw
@@ -901,20 +920,32 @@ class PseudocodeExpression:
         return PseudocodeExpression(raw)
 
     @staticmethod
-    def from_helper(name: str) -> PseudocodeExpression:
+    def from_helper(
+        name: str,
+        type_info: Optional[tinfo_t] = None,
+    ) -> PseudocodeExpression:
         """Create a detached helper/intrinsic name expression.
 
         Args:
             name: Helper function name (e.g. ``"LOWORD"``).
+            type_info: Type to assign to the expression.
+
+        Warning:
+            You must always provide a type before inserting the
+            expression into a ctree.  Otherwise it won't work and no
+            exception is raised.
         """
-        raw = PseudocodeExpression._make_expr(ida_hexrays.cot_helper)
+        raw = PseudocodeExpression._make_expr(PseudocodeExpressionOp.HELPER)
         raw.helper = name
+        if type_info is not None:
+            raw.type = type_info
         return PseudocodeExpression(raw)
 
     @staticmethod
     def from_unary(
         op: PseudocodeExpressionOp,
         x: PseudocodeExpression,
+        type_info: Optional[tinfo_t] = None,
     ) -> PseudocodeExpression:
         """Create a detached unary expression (``op x``).
 
@@ -922,13 +953,10 @@ class PseudocodeExpression:
         ``CAST``, ``PTR``, ``REF``, ``FNEG``, and pre/post
         increment/decrement.
 
-        Note:
-            The expression type is not set.  Call ``set_type`` if IDA
-            needs to know the result type.
-
         Args:
             op: A unary operator (a ``PseudocodeExpressionOp`` value).
             x: The operand.
+            type_info: Type to assign to the result expression.
 
         Example:
             ```python
@@ -938,6 +966,10 @@ class PseudocodeExpression:
             ```
 
         Warning:
+            You must always provide a type before inserting the
+            expression into a ctree.  Otherwise it won't work and no
+            exception is raised.
+
             The result and `x` share the underlying ``cexpr_t``:
             mutations through either wrapper are visible to the other.
             Ownership is transferred to the result, so `x` will dangle
@@ -954,6 +986,8 @@ class PseudocodeExpression:
         raw = PseudocodeExpression._make_expr(int(op))
         raw._set_x(x._raw)
         x._raw.thisown = False
+        if type_info is not None:
+            raw.type = type_info
         return PseudocodeExpression(raw)
 
     @staticmethod
@@ -961,22 +995,24 @@ class PseudocodeExpression:
         op: PseudocodeExpressionOp,
         x: PseudocodeExpression,
         y: PseudocodeExpression,
+        type_info: Optional[tinfo_t] = None,
     ) -> PseudocodeExpression:
         """Create a detached binary expression (``x op y``).
 
         Works for any operator that uses two operands: arithmetic,
         assignment, comparison, bitwise, shift, and access operators.
 
-        Note:
-            The expression type is not set.  Call ``set_type`` if IDA
-            needs to know the result type.
-
         Args:
             op: A binary operator (a ``PseudocodeExpressionOp`` value).
             x: Left operand.
             y: Right operand.
+            type_info: Type to assign to the result expression.
 
         Warning:
+            You must always provide a type before inserting the
+            expression into a ctree.  Otherwise it won't work and no
+            exception is raised.
+
             The result shares the underlying ``cexpr_t`` nodes with
             `x` and `y`: mutations through either wrapper are visible
             to the other.  Ownership is transferred to the result, so
@@ -1003,12 +1039,15 @@ class PseudocodeExpression:
         x._raw.thisown = False
         raw._set_y(y._raw)
         y._raw.thisown = False
+        if type_info is not None:
+            raw.type = type_info
         return PseudocodeExpression(raw)
 
     @staticmethod
     def from_call(
         callee: PseudocodeExpression,
         args: Optional[List[PseudocodeExpression]] = None,
+        type_info: Optional[tinfo_t] = None,
     ) -> PseudocodeExpression:
         """Create a detached call expression (``callee(args…)``).
 
@@ -1016,8 +1055,15 @@ class PseudocodeExpression:
             callee: The function being called (typically built via
                 ``from_object`` or ``from_helper``).
             args: Optional list of argument expressions.
+            type_info: Type to assign to the call result (the return
+                type of the callee).
 
         Warning:
+            You must always provide a type before inserting the
+            expression into a ctree.  Otherwise it won't work and no
+            exception is raised.  The same applies to `callee` and
+            every item in `args`.
+
             The result shares the underlying ``cexpr_t`` with `callee`:
             mutations through either wrapper are visible to the other,
             and `callee` will dangle once the result is freed or
@@ -1027,13 +1073,13 @@ class PseudocodeExpression:
 
         Example:
             ```python
-            # Build "strlen(msg)"
-            callee = PseudocodeExpression.from_object(strlen_ea)
-            arg = PseudocodeExpression.from_object(msg_ea)
-            call = PseudocodeExpression.from_call(callee, [arg])
+            # Build "strlen(msg)" — every node is typed
+            callee = PseudocodeExpression.from_object(strlen_ea, type_info=strlen_t)
+            arg = PseudocodeExpression.from_object(msg_ea, type_info=charptr_t)
+            call = PseudocodeExpression.from_call(callee, [arg], type_info=size_t)
             ```
         """
-        raw = PseudocodeExpression._make_expr(ida_hexrays.cot_call)
+        raw = PseudocodeExpression._make_expr(PseudocodeExpressionOp.CALL)
         raw._set_x(callee._raw)
         callee._raw.thisown = False
         raw.a = ida_hexrays.carglist_t()
@@ -1042,6 +1088,8 @@ class PseudocodeExpression:
                 carg = ida_hexrays.carg_t()
                 carg.swap(arg_expr._raw)
                 raw.a.push_back(carg)
+        if type_info is not None:
+            raw.type = type_info
         return PseudocodeExpression(raw)
 
     # -- text / display ----------------------------------------------------
@@ -1093,13 +1141,16 @@ class PseudocodeInstruction:
     def _make_insn(op: int, ea: int) -> ida_hexrays.cinsn_t:
         """Create a properly initialized ``cinsn_t`` with given op.
 
-        Uses ``_set_op()`` to bypass the SWIG property guard.
+        Uses ``_set_op()`` to bypass the property guard.
         Requires a loaded IDA database.
 
         Note:
-            SWIG ownership is left enabled.  Callers that insert
-            the instruction into a block or ctree must transfer
-            ownership (e.g. via ``append``).
+            The Python wrapper retains ownership of the new instruction.
+            ``PseudocodeBlock.append`` deep-copies the instruction, so
+            the wrapper remains usable after appending.  The ``make_*``
+            factories (e.g. ``make_if``, ``make_return``) consume their
+            inputs by transferring ownership; do not reuse a wrapper
+            after passing it to one.
         """
         raw = ida_hexrays.cinsn_t()
         raw._set_op(op)
@@ -1123,7 +1174,7 @@ class PseudocodeInstruction:
             two parents share one child, corrupting the ctree.  Do not
             use `expr` independently after this call.
         """
-        raw = PseudocodeInstruction._make_insn(ida_hexrays.cit_expr, ea)
+        raw = PseudocodeInstruction._make_insn(PseudocodeInstructionOp.EXPR, ea)
         raw.cexpr = expr._raw
         expr._raw.thisown = False
         return PseudocodeInstruction(raw)
@@ -1136,7 +1187,7 @@ class PseudocodeInstruction:
             ea: Address to associate with the instruction.
         """
         return PseudocodeInstruction(
-            PseudocodeInstruction._make_insn(ida_hexrays.cit_empty, ea)
+            PseudocodeInstruction._make_insn(PseudocodeInstructionOp.EMPTY, ea)
         )
 
     @staticmethod
@@ -1148,7 +1199,7 @@ class PseudocodeInstruction:
         Args:
             ea: Address to associate with the block.
         """
-        raw = PseudocodeInstruction._make_insn(ida_hexrays.cit_block, ea)
+        raw = PseudocodeInstruction._make_insn(PseudocodeInstructionOp.BLOCK, ea)
         raw.cblock = ida_hexrays.cblock_t()
         return PseudocodeInstruction(raw)
 
@@ -1160,7 +1211,7 @@ class PseudocodeInstruction:
             ea: Address to associate with the instruction.
             label_num: Target label number.
         """
-        raw = PseudocodeInstruction._make_insn(ida_hexrays.cit_goto, ea)
+        raw = PseudocodeInstruction._make_insn(PseudocodeInstructionOp.GOTO, ea)
         raw.cgoto = ida_hexrays.cgoto_t()
         raw.cgoto.label_num = label_num
         return PseudocodeInstruction(raw)
@@ -1181,7 +1232,7 @@ class PseudocodeInstruction:
             becomes an empty expression afterward.  Do not use `expr`
             independently after this call.
         """
-        raw = PseudocodeInstruction._make_insn(ida_hexrays.cit_return, ea)
+        raw = PseudocodeInstruction._make_insn(PseudocodeInstructionOp.RETURN, ea)
         raw.creturn = ida_hexrays.creturn_t()
         if expr is not None:
             raw.creturn.expr.swap(expr._raw)
@@ -1213,7 +1264,7 @@ class PseudocodeInstruction:
             or replaced).  Do not use any of the arguments
             independently after this call.
         """
-        raw = PseudocodeInstruction._make_insn(ida_hexrays.cit_if, ea)
+        raw = PseudocodeInstruction._make_insn(PseudocodeInstructionOp.IF, ea)
         raw.cif = ida_hexrays.cif_t()
         raw.cif.expr.swap(condition._raw)
         raw.cif.ithen = then_branch._raw

@@ -1523,9 +1523,8 @@ def test_expression_replace_with(test_env):
             break
     assert target is not None
 
-    # Replace with 99
-    new_expr = PseudocodeExpression.from_number(99)
-    new_expr.set_type(target.type_info)
+    # Replace with 99 — pass the type inline via the factory's type_info=
+    new_expr = PseudocodeExpression.from_number(99, type_info=target.type_info)
     target.replace_with(new_expr)
     assert target.number.value == 99
 
@@ -1554,6 +1553,35 @@ def test_expression_replace_with_string(test_env):
 
     # Swap back to restore the tree
     target.replace_with(new_str)
+
+
+def test_replace_then_refresh_renders_substitution(tiny_pseudocode_env):
+    """Typed factory + replace_with + refresh must render the substitution.
+
+    Without ``type_info``, refresh silently invalidates the cfunc and
+    ``to_text`` returns an empty body — see the warning in the
+    ``from_*`` factory docstrings.
+    """
+    db = tiny_pseudocode_env
+    func = db.pseudocode.decompile(0x170)  # main
+
+    cl = func.find_calls(target_name='classify')[0]
+    old_arg = cl.call_args[0].expression
+
+    # Build a number with the type carried inline and swap it in.
+    new_arg = PseudocodeExpression.from_number(
+        0x42, ea=old_arg.ea, type_info=old_arg.type_info,
+    )
+    old_arg.replace_with(new_arg)
+    func.refresh()
+
+    text = func.to_text()
+    # Rendering must not be silently invalidated: body is non-empty AND
+    # contains the new literal in the call we mutated.
+    assert text, 'refresh() produced an empty body — silent invalidation'
+    classify_lines = [line for line in text if 'classify' in line]
+    assert len(classify_lines) == 1
+    assert '0x42' in classify_lines[0] or '66' in classify_lines[0]
 
 
 # ---------------------------------------------------------------------------
