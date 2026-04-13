@@ -757,7 +757,8 @@ class PseudocodeExpression:
 
     @property
     def is_nice_cond(self) -> bool:
-        """True if this expression is a \"nice\" condition (no side effects)."""
+        """True if this expression is well-formed for use as a boolean
+        condition (e.g. no top-level commas)."""
         return self._raw.is_nice_cond()
 
     # -- query methods -----------------------------------------------------
@@ -935,6 +936,16 @@ class PseudocodeExpression:
                 PseudocodeExpressionOp.NEG, expr_a1,
             )
             ```
+
+        Warning:
+            The result and `x` share the underlying ``cexpr_t``:
+            mutations through either wrapper are visible to the other.
+            Ownership is transferred to the result, so `x` will dangle
+            once the result is freed or replaced.  Reusing `x` in
+            another factory would also create a tree where two parents
+            share one child, corrupting the ctree.  Do not use `x`
+            independently after this call.
+
         Raises:
             InvalidParameterError: If `op` is not a unary operator.
         """
@@ -965,6 +976,16 @@ class PseudocodeExpression:
             x: Left operand.
             y: Right operand.
 
+        Warning:
+            The result shares the underlying ``cexpr_t`` nodes with
+            `x` and `y`: mutations through either wrapper are visible
+            to the other.  Ownership is transferred to the result, so
+            `x` and `y` will dangle once the result is freed or
+            replaced.  Reusing them in another factory would also
+            create a tree where two parents share one child,
+            corrupting the ctree.  Do not use `x` or `y` independently
+            after this call.
+
         Raises:
             InvalidParameterError: If `op` does not use both operands.
 
@@ -991,14 +1012,18 @@ class PseudocodeExpression:
     ) -> PseudocodeExpression:
         """Create a detached call expression (``callee(args…)``).
 
-        Warning:
-            All arguments are consumed (moved, not copied).
-            Do not reuse `callee` or `args` items after this call.
-
         Args:
             callee: The function being called (typically built via
                 ``from_object`` or ``from_helper``).
             args: Optional list of argument expressions.
+
+        Warning:
+            The result shares the underlying ``cexpr_t`` with `callee`:
+            mutations through either wrapper are visible to the other,
+            and `callee` will dangle once the result is freed or
+            replaced.  Each item in `args` is moved (swapped) into the
+            call and becomes an empty expression afterward.  Do not
+            use `callee` or `args` items independently after this call.
 
         Example:
             ```python
@@ -1090,8 +1115,13 @@ class PseudocodeInstruction:
             expr: The expression to wrap as a statement.
 
         Warning:
-            Ownership of `expr` is transferred to the instruction.
-            Prefer not reusing it afterward.
+            The instruction and `expr` share the underlying ``cexpr_t``:
+            mutations through either wrapper are visible to the other.
+            Ownership is transferred to the instruction, so `expr` will
+            dangle once the instruction is freed or replaced.  Reusing
+            `expr` in another factory would also create a tree where
+            two parents share one child, corrupting the ctree.  Do not
+            use `expr` independently after this call.
         """
         raw = PseudocodeInstruction._make_insn(ida_hexrays.cit_expr, ea)
         raw.cexpr = expr._raw
@@ -1147,7 +1177,9 @@ class PseudocodeInstruction:
             expr: Optional return-value expression.
 
         Warning:
-            If provided, `expr` is consumed and must not be reused.
+            If provided, `expr` is moved (swapped) into the return and
+            becomes an empty expression afterward.  Do not use `expr`
+            independently after this call.
         """
         raw = PseudocodeInstruction._make_insn(ida_hexrays.cit_return, ea)
         raw.creturn = ida_hexrays.creturn_t()
@@ -1171,9 +1203,15 @@ class PseudocodeInstruction:
             else_branch: Optional else-branch instruction.
 
         Warning:
-            All arguments are consumed (moved, not copied).
-            Do not reuse `condition`, `then_branch`, or `else_branch`
-            after this call.
+            `condition` is moved (swapped) into the if and becomes an
+            empty expression afterward.
+
+            `then_branch` and `else_branch` share their underlying
+            ``cinsn_t`` with the if: mutations through either wrapper
+            are visible to the other, and ownership is transferred to
+            the if (so the wrappers will dangle once the if is freed
+            or replaced).  Do not use any of the arguments
+            independently after this call.
         """
         raw = PseudocodeInstruction._make_insn(ida_hexrays.cit_if, ea)
         raw.cif = ida_hexrays.cif_t()
@@ -1335,11 +1373,15 @@ class PseudocodeInstruction:
     def walk_expressions(self) -> Iterator[PseudocodeExpression]:
         """Iterate over all expressions in the subtree rooted at this instruction.
 
-        Collects all items first, so it is safe to inspect during iteration.
+        Collects all items first, so the iterator itself is stable.
 
         Warning:
-            Do not modify the tree during iteration.  Call
-            ``PseudocodeFunction.refresh`` after any mutations.
+            Structural mutations (deleting nodes, splicing subtrees) may
+            invalidate already-collected wrappers.  In-place swaps via
+            ``PseudocodeExpression.replace_with`` are safe because the
+            underlying ``cexpr_t`` pointer remains valid.  Call
+            ``PseudocodeFunction.refresh`` after all mutations to
+            regenerate the pseudocode text.
         """
         owner = self
 
@@ -1480,8 +1522,10 @@ class PseudocodeBlock:
     def append(self, insn: PseudocodeInstruction) -> PseudocodeInstruction:
         """Append a copy of an instruction to the end of this block.
 
-        The block copies the instruction internally.  The original
-        `insn` remains valid and is unaffected.
+        Unlike the ``from_*`` and ``make_*`` factories which transfer
+        ownership of their inputs, this method deep-copies `insn` via
+        ``cinsn_t``'s copy constructor.  The original `insn` remains
+        valid and is unaffected.
 
         Args:
             insn: The instruction to copy into the block.
@@ -2034,8 +2078,9 @@ class PseudocodeFunction:
             text: Comment text.  Pass an empty string to remove.
             placement: Item tree position constant (``ITP_SEMI``,
                 ``ITP_BLOCK1``, ``ITP_CURLY1``, etc.).
-                Defaults to ``ITP_SEMI`` which places the comment after
-                the statement's semicolon.
+                Defaults to ``ITP_SEMI``, which anchors the comment to
+                the statement's trailing semicolon (rendered as a
+                trailing-line comment).
         """
         tl = ida_hexrays.treeloc_t()
         tl.ea = ea
@@ -2177,7 +2222,8 @@ class PseudocodeFunction:
         iterate individual ``lvar_saved_info_t`` entries (each has
         ``name``, ``type``, ``cmt``, ``size``, and ``ll.defea``).
 
-        The object is valid only within the ``with`` block.
+        Treat the yielded object as scoped to the ``with`` block; do
+        not retain references after exit.
 
         Example:
             ```python
@@ -2200,9 +2246,6 @@ class PseudocodeFunction:
 
         Args:
             allow_unused_labels: If ``True``, unused labels are allowed.
-
-        Raises:
-            PseudocodeError: If verification fails.
         """
         flags = ida_hexrays.ALLOW_UNUSED_LABELS if allow_unused_labels else 0
         self._raw.verify(flags, True)
@@ -2220,11 +2263,15 @@ class PseudocodeFunction:
     def walk_expressions(self) -> Iterator[PseudocodeExpression]:
         """Iterate over all expressions in the function body.
 
-        Collects all items first, so it is safe to inspect during iteration.
+        Collects all items first, so the iterator itself is stable.
 
         Warning:
-            Do not modify the tree during iteration.  Call
-            ``refresh`` after any mutations.
+            Structural mutations (deleting nodes, splicing subtrees) may
+            invalidate already-collected wrappers.  In-place swaps via
+            ``PseudocodeExpression.replace_with`` are safe because the
+            underlying ``cexpr_t`` pointer remains valid.  Call
+            ``refresh`` after all mutations to regenerate the
+            pseudocode text.
         """
         return self.body.walk_expressions()
 
@@ -2577,7 +2624,7 @@ class PseudocodeInstructionVisitor(ida_hexrays.ctree_visitor_t):
     """
 
     def __init__(self, flags: int = ida_hexrays.CV_FAST | ida_hexrays.CV_INSNS):
-        super().__init__(flags)
+        super().__init__(flags | ida_hexrays.CV_INSNS)
         self._body_ref: Optional[PseudocodeInstruction] = None
 
     def visit_insn(self, raw_insn: Any) -> int:
