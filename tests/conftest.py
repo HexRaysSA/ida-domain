@@ -12,6 +12,7 @@ from ida_domain.database import IdaCommandOptions
 idb_path: str = ''
 tiny_c_idb_path: str = ''
 tiny_imports_idb_path: str = ''
+tiny_pseudocode_idb_path: str = ''
 
 
 def min_ida_version(v: str) -> pytest.MarkDecorator:
@@ -69,6 +70,30 @@ def tiny_c_env(tiny_c_setup):
     """Opens tiny_c database for each test."""
     ida_options = IdaCommandOptions(new_database=True, auto_analysis=True)
     db = ida_domain.Database.open(path=tiny_c_idb_path, args=ida_options, save_on_close=False)
+    yield db
+    if db.is_open():
+        db.close(False)
+
+
+@pytest.fixture(scope='session')
+def tiny_pseudocode_setup(global_setup):
+    """Setup for tiny_pseudocode binary tests - copies tiny_pseudocode.bin to work directory."""
+    global tiny_pseudocode_idb_path
+    tiny_pseudocode_idb_path = os.path.join(
+        tempfile.gettempdir(), 'api_tests_work_dir', 'tiny_pseudocode.bin'
+    )
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    src_path = os.path.join(current_dir, 'resources', 'tiny_pseudocode.bin')
+    shutil.copy(src_path, tiny_pseudocode_idb_path)
+
+
+@pytest.fixture(scope='function')
+def tiny_pseudocode_env(tiny_pseudocode_setup):
+    """Opens tiny_pseudocode database for each test."""
+    ida_options = IdaCommandOptions(new_database=True, auto_analysis=True)
+    db = ida_domain.Database.open(
+        path=tiny_pseudocode_idb_path, args=ida_options, save_on_close=False
+    )
     yield db
     if db.is_open():
         db.close(False)

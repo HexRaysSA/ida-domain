@@ -81,7 +81,7 @@ def analyze_functions(
             # Show first few lines of pseudocode
             pseudocode = db.functions.get_pseudocode(func)
             print('\nPseudocode :')
-            for line in pseudocode:
+            for line in pseudocode.to_text():
                 print(f'  {line}')
 
         if max_results > 0 and len(matching_functions) > max_results:

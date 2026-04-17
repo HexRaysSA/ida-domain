@@ -22,7 +22,7 @@ else:
 
         if pseudocode:
             print(f'Decompiled function at 0x{func.start_ea:X}:')
-            for line in pseudocode:
+            for line in pseudocode.to_text():
                 print(line)
         else:
             print('Failed to get pseudocode!')

@@ -622,7 +622,7 @@ class MicroCallArg:
         ``mcallarg_t`` inherits from ``mop_t``, so the argument
         itself is a micro-operand.
         """
-        return MicroOperand(self._raw)
+        return MicroOperand(self._raw, _parent_insn=self)
 
     # -- mutation ----------------------------------------------------------
 
@@ -1040,6 +1040,10 @@ class MicroLocalVar:
     def set_type(self, tif: tinfo_t) -> bool:
         """Set the variable type.
 
+        To persist the change to the database, call
+        :meth:`PseudocodeFunction.save_local_variable_info` with
+        ``save_type=True``.
+
         Args:
             tif: The new type to assign.
 
@@ -1074,6 +1078,19 @@ class MicroLocalVar:
         """Set a user-defined name for this variable."""
         self._raw.name = name
         self._raw.set_user_name()
+
+    def set_user_comment(self, comment: str) -> None:
+        """Set a user-defined comment for this variable.
+
+        The comment is stored in the underlying ``lvar_t`` object. To persist
+        changes to the database, call
+        :meth:`PseudocodeFunction.save_local_variable_info` with
+        ``save_comment=True`` after modifying.
+
+        Args:
+            comment: Comment text to assign to this variable.
+        """
+        self._raw.cmt = comment
 
     # -- text --------------------------------------------------------------
 
@@ -1196,7 +1213,7 @@ class MicroOperand:
 
     _T = MicroOperandType  # shorthand for type checks
 
-    def __init__(self, raw: mop_t, _parent_insn: Optional[MicroInstruction] = None):
+    def __init__(self, raw: mop_t, _parent_insn: Optional[Any] = None):
         self._raw = raw
         self._parent_insn = _parent_insn
 
