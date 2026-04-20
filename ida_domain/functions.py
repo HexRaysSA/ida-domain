@@ -33,6 +33,7 @@ from .flowchart import FlowChart, FlowChartFlags
 if TYPE_CHECKING:
     from .database import Database
     from .microcode import MicroBlockArray
+    from .pseudocode import PseudocodeFunction
 
 logger = logging.getLogger(__name__)
 
@@ -568,7 +569,7 @@ class Functions(DatabaseEntity):
 
         Raises:
             InvalidEAError: If the start_ea/end_ea are specified but they are not
-            in the database range.
+                in the database range.
         """
         if not self.database.is_valid_ea(start_ea, strict_check=False):
             raise InvalidEAError(start_ea)
@@ -693,35 +694,32 @@ class Functions(DatabaseEntity):
 
         return lines
 
-    def get_pseudocode(self, func: func_t, remove_tags: bool = True) -> List[str]:
+    def get_pseudocode(self, func: func_t) -> PseudocodeFunction:
         """
-        Retrieves the decompiled pseudocode of the given function.
+        Decompiles the given function and returns the pseudocode result.
+
+        Delegates to ``db.pseudocode.decompile()``.
+
+        The returned object provides full ctree access.  To get the
+        pseudocode as plain text, call ``str()`` or ``to_text()``:
+
+        ```python
+        pseudo = db.functions.get_pseudocode(func)
+        print(str(pseudo))           # full text
+        print(pseudo.to_text())      # list of lines
+        ```
 
         Args:
             func: The function instance.
-            remove_tags: If True, removes IDA color/formatting tags from the output.
 
         Returns:
-            A list of strings, each representing a line of pseudocode. Returns empty list if
-            function is invalid or decompilation fails.
+            A :class:`~ida_domain.pseudocode.PseudocodeFunction` wrapping the
+            decompiled result.
 
         Raises:
-            DecompilerError: If decompilation fails for the function.
+            PseudocodeError: If decompilation fails for the function.
         """
-        # Attempt to decompile the function
-        cfunc = ida_hexrays.decompile(func.start_ea)
-        if not cfunc:
-            raise DecompilerError(f'Failed to decompile function at 0x{func.start_ea:x}')
-
-        # Extract pseudocode lines
-        pseudocode = []
-        sv = cfunc.get_pseudocode()
-        for i in range(len(sv)):
-            line = sv[i].line
-            if remove_tags:
-                line = ida_lines.tag_remove(line)
-            pseudocode.append(line)
-        return pseudocode
+        return self.database.pseudocode.decompile(func)
 
     def get_microcode(self, func: func_t) -> MicroBlockArray:
         """

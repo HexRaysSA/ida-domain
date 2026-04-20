@@ -199,7 +199,7 @@ class Bytes(DatabaseEntity):
         Raises:
             InvalidEAError: If the effective address is invalid.
             NoValueError: If allow_uninitialized is False and the address contains an
-            uninitialized value.
+                uninitialized value.
         """
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
@@ -223,7 +223,7 @@ class Bytes(DatabaseEntity):
         Raises:
             InvalidEAError: If the effective address is invalid.
             NoValueError: If allow_uninitialized is False and the address contains an
-            uninitialized value.
+                uninitialized value.
         """
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
@@ -247,7 +247,7 @@ class Bytes(DatabaseEntity):
         Raises:
             InvalidEAError: If the effective address is invalid.
             NoValueError: If allow_uninitialized is False and the address contains an
-            uninitialized value.
+                uninitialized value.
         """
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
@@ -271,7 +271,7 @@ class Bytes(DatabaseEntity):
         Raises:
             InvalidEAError: If the effective address is invalid.
             NoValueError: If allow_uninitialized is False and the address contains an
-            uninitialized value.
+                uninitialized value.
         """
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
@@ -348,7 +348,7 @@ class Bytes(DatabaseEntity):
         Raises:
             InvalidEAError: If the effective address is invalid.
             NoValueError: If allow_uninitialized is False and the address contains an
-            uninitialized value.
+                uninitialized value.
             UnsupportedValueError: If the floating-point format is not supported
 
         Note:
@@ -381,7 +381,7 @@ class Bytes(DatabaseEntity):
         Raises:
             InvalidEAError: If the effective address is invalid.
             NoValueError: If allow_uninitialized is False and the address contains an
-            uninitialized value.
+                uninitialized value.
             UnsupportedValueError: If the floating-point format is not supported
 
         Note:
@@ -1201,7 +1201,7 @@ class Bytes(DatabaseEntity):
             ea: The effective address.
             length: Size of the item in bytes. 0 means to infer from alignment.
             alignment: Alignment exponent. Example: 3 means align to 8 bytes,
-            0 means to infer from length.
+                0 means to infer from length.
 
         Returns:
             True if successful, False otherwise.
