@@ -171,7 +171,7 @@ def test_types(test_env):
 # =============================================================================
 
 
-def test_serialize_structure_to_bytes_and_retrieve(test_env):
+def test_serialize_object_to_bytes_and_retrieve(test_env):
     """
     Test storing an object to bytes and retrieving it back.
     This tests the round-trip serialization without database involvement.
@@ -190,18 +190,18 @@ def test_serialize_structure_to_bytes_and_retrieve(test_env):
     test_data = {'x': 42, 'y': 100}
 
     # Serialize to bytes
-    packed = db.types.serialize_structure_to_bytes(point_type, test_data)
+    packed = db.types.serialize_object_to_bytes(point_type, test_data)
     assert packed is not None
     assert len(packed) == 8  # Two 4-byte integers
 
     # Parse from bytes
-    retrieved = db.types.parse_structure_from_bytes(point_type, packed)
+    retrieved = db.types.parse_object_from_bytes(point_type, packed)
     assert retrieved is not None
     assert retrieved['x'] == 42
     assert retrieved['y'] == 100
 
 
-def test_store_structure_at_and_retrieve(test_env):
+def test_store_object_at_and_retrieve(test_env):
     """
     Test storing an object to a database address and retrieving it back.
     This tests the full database integration.
@@ -216,25 +216,24 @@ def test_store_structure_at_and_retrieve(test_env):
         .build()
     )
 
-    # Find a data address to use for testing
-    # Use an address in the data section
-    test_ea = 0x100
+    # Use an address in the .data segment (starts at 0x330)
+    test_ea = 0x330
 
     # Create test data
     test_data = {'x': 123, 'y': 456}
 
     # Store to database
-    db.types.store_structure_at(test_ea, point_type, test_data)
+    db.types.store_object_at(test_ea, point_type, test_data)
 
     # Retrieve from database
-    retrieved = db.types.parse_structure_at(test_ea, point_type)
+    retrieved = db.types.parse_object_at(test_ea, point_type)
     assert retrieved is not None
     assert retrieved['x'] == 123
     assert retrieved['y'] == 456
 
 
 def test_retrieve_object_invalid_ea(test_env):
-    """Test that parse_structure_at raises InvalidEAError for invalid addresses."""
+    """Test that parse_object_at raises InvalidEAError for invalid addresses."""
     db = test_env
     from ida_domain.base import InvalidEAError
 
@@ -243,11 +242,11 @@ def test_retrieve_object_invalid_ea(test_env):
     )
 
     with pytest.raises(InvalidEAError):
-        db.types.parse_structure_at(BADADDR, point_type)
+        db.types.parse_object_at(BADADDR, point_type)
 
 
-def test_serialize_structure_to_bytes_invalid_parameter(test_env):
-    """Test that serialize_structure_to_bytes raises InvalidParameterError for invalid input."""
+def test_serialize_object_to_bytes_invalid_parameter(test_env):
+    """Test that serialize_object_to_bytes raises InvalidParameterError for invalid input."""
     db = test_env
 
     point_type = (
@@ -255,11 +254,11 @@ def test_serialize_structure_to_bytes_invalid_parameter(test_env):
     )
 
     with pytest.raises(InvalidParameterError):
-        db.types.serialize_structure_to_bytes(point_type, 'not a dict')  # type: ignore
+        db.types.serialize_object_to_bytes(point_type, 'not a dict')  # type: ignore
 
 
-def test_parse_structure_from_bytes_invalid_data(test_env):
-    """Test that parse_structure_from_bytes raises InvalidParameterError for invalid data."""
+def test_parse_object_from_bytes_invalid_data(test_env):
+    """Test that parse_object_from_bytes raises InvalidParameterError for invalid data."""
     db = test_env
 
     point_type = (
@@ -267,7 +266,7 @@ def test_parse_structure_from_bytes_invalid_data(test_env):
     )
 
     with pytest.raises(InvalidParameterError):
-        db.types.parse_structure_from_bytes(point_type, b'')  # Empty bytes
+        db.types.parse_object_from_bytes(point_type, b'')  # Empty bytes
 
 
 def test_apply_declaration_at(test_env):
@@ -311,8 +310,8 @@ def test_apply_declaration_at_invalid_decl(test_env):
         db.types.apply_declaration_at(entry.address, "not a valid declaration !!!")
 
 
-def test_store_structure_at_invalid_ea(test_env):
-    """Test that store_structure_at raises InvalidEAError for invalid addresses."""
+def test_store_object_at_invalid_ea(test_env):
+    """Test that store_object_at raises InvalidEAError for invalid addresses."""
     db = test_env
     from ida_domain.base import InvalidEAError
 
@@ -321,7 +320,7 @@ def test_store_structure_at_invalid_ea(test_env):
     )
 
     with pytest.raises(InvalidEAError):
-        db.types.store_structure_at(BADADDR, point_type, {'x': 1})
+        db.types.store_object_at(BADADDR, point_type, {'x': 1})
 
 
 def test_nested_structure_store_and_parse_at(test_env):
@@ -343,11 +342,11 @@ def test_nested_structure_store_and_parse_at(test_env):
         .build()
     )
 
-    test_ea = 0x100
+    test_ea = 0x330
     test_data = {'x': 1, 'nested': {'a': 2, 'b': 3}, 'y': 4}
-    db.types.store_structure_at(test_ea, outer_type, test_data)
+    db.types.store_object_at(test_ea, outer_type, test_data)
 
-    retrieved = db.types.parse_structure_at(test_ea, outer_type)
+    retrieved = db.types.parse_object_at(test_ea, outer_type)
     assert isinstance(retrieved, object_t)
     assert retrieved['x'] == 1
     assert retrieved['y'] == 4
@@ -377,10 +376,10 @@ def test_nested_structure_serialize_and_parse_bytes(test_env):
     )
 
     test_data = {'x': 10, 'nested': {'a': 20, 'b': 30}, 'y': 40}
-    packed = db.types.serialize_structure_to_bytes(outer_type, test_data)
+    packed = db.types.serialize_object_to_bytes(outer_type, test_data)
     assert len(packed) == 16  # 4 ints * 4 bytes
 
-    retrieved = db.types.parse_structure_from_bytes(outer_type, packed)
+    retrieved = db.types.parse_object_from_bytes(outer_type, packed)
     assert isinstance(retrieved, object_t)
     assert retrieved.x == 10
     assert isinstance(retrieved.nested, object_t)
@@ -403,10 +402,10 @@ def test_struct_with_array_member_round_trip(test_env):
     )
 
     test_data = {'id': 99, 'values': [10, 20, 30]}
-    packed = db.types.serialize_structure_to_bytes(struct_type, test_data)
+    packed = db.types.serialize_object_to_bytes(struct_type, test_data)
     assert len(packed) == 16  # 4 ints * 4 bytes
 
-    retrieved = db.types.parse_structure_from_bytes(struct_type, packed)
+    retrieved = db.types.parse_object_from_bytes(struct_type, packed)
     assert isinstance(retrieved, object_t)
     assert retrieved.id == 99
     # Array members are returned as object_t with string-index keys
@@ -429,11 +428,11 @@ def test_struct_with_array_member_store_and_parse_at(test_env):
         .build()
     )
 
-    test_ea = 0x100
+    test_ea = 0x330
     test_data = {'id': 42, 'values': [1, 2, 3]}
-    db.types.store_structure_at(test_ea, struct_type, test_data)
+    db.types.store_object_at(test_ea, struct_type, test_data)
 
-    retrieved = db.types.parse_structure_at(test_ea, struct_type)
+    retrieved = db.types.parse_object_at(test_ea, struct_type)
     assert isinstance(retrieved, object_t)
     assert retrieved.id == 42
     assert isinstance(retrieved.values, object_t)
@@ -443,21 +442,23 @@ def test_struct_with_array_member_store_and_parse_at(test_env):
 
 
 def test_serialize_primitive_type_rejected(test_env):
-    """Test that serializing a primitive type (not a struct) raises InvalidParameterError."""
+    """Test that serializing a primitive type (not a struct/union) raises InvalidParameterError."""
     db = test_env
 
     dword_type = db.types.create_primitive(4)
+    # Pass a dict so the obj check doesn't short-circuit before the UDT check.
     with pytest.raises(InvalidParameterError):
-        db.types.serialize_structure_to_bytes(dword_type, 42)
+        db.types.serialize_object_to_bytes(dword_type, {})
 
 
 def test_store_primitive_type_rejected(test_env):
-    """Test that storing a primitive type (not a struct) raises InvalidParameterError."""
+    """Test that storing a primitive type (not a struct/union) raises InvalidParameterError."""
     db = test_env
 
     dword_type = db.types.create_primitive(4)
+    # Pass a dict so the obj check doesn't short-circuit before the UDT check.
     with pytest.raises(InvalidParameterError):
-        db.types.store_structure_at(0x100, dword_type, 42)
+        db.types.store_object_at(0x330, dword_type, {})
 
 
 def test_union_serialize_and_parse_bytes(test_env):
@@ -474,16 +475,16 @@ def test_union_serialize_and_parse_bytes(test_env):
     )
     assert union_type.is_union()
 
-    packed = db.types.serialize_structure_to_bytes(union_type, {'as_signed': -1})
-    retrieved = db.types.parse_structure_from_bytes(union_type, packed)
+    packed = db.types.serialize_object_to_bytes(union_type, {'as_signed': -1})
+    retrieved = db.types.parse_object_from_bytes(union_type, packed)
     assert isinstance(retrieved, object_t)
     assert retrieved.as_signed == -1
     assert retrieved.as_unsigned == 0xFFFFFFFF
     assert retrieved.as_short == -1  # low 2 bytes of 0xFFFFFFFF
 
     # Store a value where the short member differs from the int members
-    packed2 = db.types.serialize_structure_to_bytes(union_type, {'as_unsigned': 0x00010002})
-    retrieved2 = db.types.parse_structure_from_bytes(union_type, packed2)
+    packed2 = db.types.serialize_object_to_bytes(union_type, {'as_unsigned': 0x00010002})
+    retrieved2 = db.types.parse_object_from_bytes(union_type, packed2)
     assert retrieved2.as_signed == 0x00010002
     assert retrieved2.as_unsigned == 0x00010002
     assert retrieved2.as_short == 2  # low 2 bytes only
@@ -502,9 +503,9 @@ def test_union_store_and_parse_at(test_env):
         .build()
     )
 
-    test_ea = 0x100
-    db.types.store_structure_at(test_ea, union_type, {'as_unsigned': 0x00010002})
-    retrieved = db.types.parse_structure_at(test_ea, union_type)
+    test_ea = 0x330
+    db.types.store_object_at(test_ea, union_type, {'as_unsigned': 0x00010002})
+    retrieved = db.types.parse_object_at(test_ea, union_type)
     assert isinstance(retrieved, object_t)
     assert retrieved.as_signed == 0x00010002
     assert retrieved.as_unsigned == 0x00010002
@@ -531,8 +532,8 @@ def test_struct_with_union_member_round_trip(test_env):
     )
 
     test_data = {'tag': 1, 'data': {'as_unsigned': 0x0003FFFF}}
-    packed = db.types.serialize_structure_to_bytes(struct_type, test_data)
-    retrieved = db.types.parse_structure_from_bytes(struct_type, packed)
+    packed = db.types.serialize_object_to_bytes(struct_type, test_data)
+    retrieved = db.types.parse_object_from_bytes(struct_type, packed)
 
     assert isinstance(retrieved, object_t)
     assert retrieved.tag == 1
@@ -590,14 +591,14 @@ def test_pointer_followed_at_idb(test_env):
         .build()
     )
 
-    # Write a known value at the target address
-    ida_bytes.put_dword(0x200, 0xDEAD)
+    # Write a known value at the target address (in .data)
+    ida_bytes.put_dword(0x340, 0xDEAD)
 
-    # Store struct with pointer to that address
-    db.types.store_structure_at(0x100, struct_type, {'value': 42, 'ptr': 0x200})
+    # Store struct with pointer to that address (in .data)
+    db.types.store_object_at(0x330, struct_type, {'value': 42, 'ptr': 0x340})
 
-    # Default: pointer is dereferenced, returns the value at 0x200
-    retrieved = db.types.parse_structure_at(0x100, struct_type)
+    # Default: pointer is dereferenced, returns the value at 0x340
+    retrieved = db.types.parse_object_at(0x330, struct_type)
     assert retrieved.value == 42
     assert retrieved.ptr == 0xDEAD
 
@@ -617,15 +618,15 @@ def test_pointer_ignored_at_idb(test_env):
         .build()
     )
 
-    ida_bytes.put_dword(0x200, 0xDEAD)
-    db.types.store_structure_at(0x100, struct_type, {'value': 42, 'ptr': 0x200})
+    ida_bytes.put_dword(0x340, 0xDEAD)
+    db.types.store_object_at(0x330, struct_type, {'value': 42, 'ptr': 0x340})
 
     # IGNORE_PTRS: pointer is NOT dereferenced, returns the address itself
-    retrieved = db.types.parse_structure_at(
-        0x100, struct_type, ObjectIOFlags.IGNORE_PTRS
+    retrieved = db.types.parse_object_at(
+        0x330, struct_type, ObjectIOFlags.IGNORE_PTRS
     )
     assert retrieved.value == 42
-    assert retrieved.ptr == 0x200
+    assert retrieved.ptr == 0x340
 
 
 def test_pointer_to_struct_followed_at_idb(test_env):
@@ -648,26 +649,26 @@ def test_pointer_to_struct_followed_at_idb(test_env):
         .build()
     )
 
-    # Write inner struct at 0x300
-    ida_bytes.put_dword(0x300, 0xAA)
-    ida_bytes.put_dword(0x304, 0xBB)
+    # Write inner struct at 0x340 (in .data)
+    ida_bytes.put_dword(0x340, 0xAA)
+    ida_bytes.put_dword(0x344, 0xBB)
 
-    # Store outer with pointer to inner
-    db.types.store_structure_at(0x100, outer_type, {'id': 1, 'data': 0x300})
+    # Store outer with pointer to inner (in .data)
+    db.types.store_object_at(0x330, outer_type, {'id': 1, 'data': 0x340})
 
     # Default: pointer followed, data is a nested object_t
-    retrieved = db.types.parse_structure_at(0x100, outer_type)
+    retrieved = db.types.parse_object_at(0x330, outer_type)
     assert retrieved.id == 1
     assert isinstance(retrieved.data, object_t)
     assert retrieved.data.a == 0xAA
     assert retrieved.data.b == 0xBB
 
     # IGNORE_PTRS: data is the raw address
-    retrieved2 = db.types.parse_structure_at(
-        0x100, outer_type, ObjectIOFlags.IGNORE_PTRS
+    retrieved2 = db.types.parse_object_at(
+        0x330, outer_type, ObjectIOFlags.IGNORE_PTRS
     )
     assert retrieved2.id == 1
-    assert retrieved2.data == 0x300
+    assert retrieved2.data == 0x340
 
 
 def test_pointer_lost_in_bytes_without_ignore_ptrs(test_env):
@@ -684,15 +685,15 @@ def test_pointer_lost_in_bytes_without_ignore_ptrs(test_env):
         .build()
     )
 
-    packed = db.types.serialize_structure_to_bytes(struct_type, {'value': 42, 'ptr': 0x200})
+    packed = db.types.serialize_object_to_bytes(struct_type, {'value': 42, 'ptr': 0x200})
 
     # Default from bytes: no IDB context, pointer value is lost (zeroed)
-    retrieved = db.types.parse_structure_from_bytes(struct_type, packed)
+    retrieved = db.types.parse_object_from_bytes(struct_type, packed)
     assert retrieved.value == 42
     assert retrieved.ptr == 0
 
     # IGNORE_PTRS from bytes: pointer value is preserved
-    retrieved2 = db.types.parse_structure_from_bytes(
+    retrieved2 = db.types.parse_object_from_bytes(
         struct_type, packed, ObjectIOFlags.IGNORE_PTRS
     )
     assert retrieved2.value == 42

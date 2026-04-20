@@ -1663,7 +1663,9 @@ class Types(DatabaseEntity):
             InvalidParameterError: If the declaration cannot be parsed.
 
         Example:
-            >>> db.types.apply_declaration_at(0x401000, "int __fastcall foo(int x)")
+            ```python
+            db.types.apply_declaration_at(0x401000, "int __fastcall foo(int x)")
+            ```
         """
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
@@ -2359,7 +2361,7 @@ class Types(DatabaseEntity):
         type_bytes, fields_bytes, _ = result
         return type_bytes, fields_bytes if fields_bytes else b''
 
-    def parse_structure_at(
+    def parse_object_at(
         self, ea: ea_t, type_info: tinfo_t, flags: ObjectIOFlags = ObjectIOFlags.NONE
     ) -> object_t:
         """
@@ -2388,9 +2390,11 @@ class Types(DatabaseEntity):
             DatabaseError: If unpacking fails.
 
         Example:
-            >>> point_type = db.types.get_by_name("Point")
-            >>> data = db.types.parse_structure_at(0x401000, point_type)
-            >>> data.x  # 10
+            ```python
+            point_type = db.types.get_by_name("Point")
+            data = db.types.parse_object_at(0x401000, point_type)
+            data.x  # 10
+            ```
         """
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
@@ -2409,7 +2413,7 @@ class Types(DatabaseEntity):
             return result[1]
         return result
 
-    def parse_structure_from_bytes(
+    def parse_object_from_bytes(
         self, type_info: tinfo_t, data: bytes, flags: ObjectIOFlags = ObjectIOFlags.NONE
     ) -> object_t:
         """
@@ -2422,7 +2426,7 @@ class Types(DatabaseEntity):
 
         Args:
             type_info: Type describing the structure layout.
-            data: Packed bytes buffer (typically from serialize_structure_to_bytes).
+            data: Packed bytes buffer (typically from serialize_object_to_bytes).
             flags: ObjectIOFlags controlling behavior:
                 - NONE: Default behavior
                 - NOATTR_FAIL: Treat missing attributes as failures
@@ -2436,10 +2440,12 @@ class Types(DatabaseEntity):
             SerializationError: If unpacking fails.
 
         Example:
-            >>> point_type = db.types.get_by_name("Point")
-            >>> packed = db.types.serialize_structure_to_bytes(point_type, {'x': 10, 'y': 20})
-            >>> data = db.types.parse_structure_from_bytes(point_type, packed)
-            >>> data.x  # 10
+            ```python
+            point_type = db.types.get_by_name("Point")
+            packed = db.types.serialize_object_to_bytes(point_type, {'x': 10, 'y': 20})
+            data = db.types.parse_object_from_bytes(point_type, packed)
+            data.x  # 10
+            ```
         """
         if not isinstance(data, bytes) or len(data) == 0:
             raise InvalidParameterError('data', data, 'must be non-empty bytes')
@@ -2458,7 +2464,7 @@ class Types(DatabaseEntity):
             return result[1]
         return result
 
-    def store_structure_at(
+    def store_object_at(
         self,
         ea: ea_t,
         type_info: tinfo_t,
@@ -2486,11 +2492,16 @@ class Types(DatabaseEntity):
             DatabaseError: If packing fails.
 
         Example:
-            >>> point_type = db.types.get_by_name("Point")
-            >>> db.types.store_structure_at(0x401000, point_type, {'x': 10, 'y': 20})
+            ```python
+            point_type = db.types.get_by_name("Point")
+            db.types.store_object_at(0x401000, point_type, {'x': 10, 'y': 20})
+            ```
         """
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
+
+        if not type_info.is_udt():
+            raise InvalidParameterError('type_info', type_info, 'must be a struct or union')
 
         if not isinstance(obj, dict):
             raise InvalidParameterError('obj', obj, 'must be a dictionary')
@@ -2504,7 +2515,7 @@ class Types(DatabaseEntity):
         if result != 0:
             raise DatabaseError(f'Failed to pack object to address 0x{ea:x}: error code {result}')
 
-    def serialize_structure_to_bytes(
+    def serialize_object_to_bytes(
         self,
         type_info: tinfo_t,
         obj: Dict[str, Any],
@@ -2516,7 +2527,7 @@ class Types(DatabaseEntity):
 
         Converts a dictionary to binary representation according to the type
         layout. The resulting bytes can be stored, transmitted, or later
-        deserialized with parse_structure_from_bytes.
+        deserialized with parse_object_from_bytes.
 
         Args:
             type_info: Type describing the structure layout.
@@ -2536,10 +2547,15 @@ class Types(DatabaseEntity):
             SerializationError: If packing fails.
 
         Example:
-            >>> point_type = db.types.get_by_name("Point")
-            >>> packed = db.types.serialize_structure_to_bytes(point_type, {'x': 10, 'y': 20})
-            >>> print(len(packed))  # 8 (two 4-byte integers)
+            ```python
+            point_type = db.types.get_by_name("Point")
+            packed = db.types.serialize_object_to_bytes(point_type, {'x': 10, 'y': 20})
+            print(len(packed))  # 8 (two 4-byte integers)
+            ```
         """
+        if not type_info.is_udt():
+            raise InvalidParameterError('type_info', type_info, 'must be a struct or union')
+
         if not isinstance(obj, dict):
             raise InvalidParameterError('obj', obj, 'must be a dictionary')
 
