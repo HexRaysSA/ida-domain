@@ -1354,36 +1354,27 @@ def test_microcode_instruction_comparisons(test_env):
     r = repr(a)
     assert 'MicroInstruction' in r
 
-    # __hash__: must be hashable (set/dict usage)
-    s = {a, b}
-    assert len(s) <= 2
-    d = {a: 'a', b: 'b'}
-    assert d[a] == 'a'
-    # hash/eq contract: equal objects produce equal hashes
-    assert hash(a) == hash(a)
+    # Intentionally unhashable — wrappers are mutable (set_*, in-place
+    # mutation). A hash derived from mutable fields would desync when the
+    # object is mutated after being used as a set/dict key. Users who need
+    # dedup should key on id(insn._raw) or insn._raw.obj_id explicitly.
+    with pytest.raises(TypeError):
+        hash(a)
+    with pytest.raises(TypeError):
+        {a, b}
 
 
-def test_microcode_operand_hashable(test_env):
-    """MicroOperand must be usable in sets / as dict keys."""
+def test_microcode_operand_unhashable(test_env):
+    """MicroOperand is intentionally unhashable — wrappers are mutable."""
     db = test_env
     func = db.functions.get_at(0x2BC)
     mf = db.microcode.generate(func)
 
-    ops = []
-    for insn in mf.instructions():
-        for op in insn.operands():
-            ops.append(op)
-            if len(ops) >= 2:
-                break
-        if len(ops) >= 2:
-            break
-
-    a, b = ops[0], ops[1]
-    s = {a, b}
-    assert len(s) <= 2
-    d = {a: 1, b: 2}
-    assert d[a] == 1
-    assert hash(a) == hash(a)
+    op = next(iter(next(iter(mf.instructions())).operands()))
+    with pytest.raises(TypeError):
+        hash(op)
+    with pytest.raises(TypeError):
+        {op}
 
 
 def test_microcode_block_tail_and_empty(test_env):

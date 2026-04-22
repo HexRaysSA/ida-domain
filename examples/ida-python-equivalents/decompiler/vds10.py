@@ -51,18 +51,23 @@ class vds10_plugin_t(ida_idaapi.plugin_t):
     help = ''
 
     def init(self):
-        if ida_hexrays.init_hexrays_plugin():
-            db = ida_domain.Database.open()
-            self.optimizer = AssertOptimizer(db)
-            self.optimizer.install()
+        self.optimizer = None
+        if not ida_hexrays.init_hexrays_plugin():
+            return ida_idaapi.PLUGIN_SKIP
+        db = ida_domain.Database.open()
+        self.optimizer = AssertOptimizer(db)
+        self.optimizer.install()
         return ida_idaapi.PLUGIN_KEEP
 
     def term(self):
-        self.optimizer.remove()
+        if self.optimizer is not None:
+            self.optimizer.uninstall()
 
     def run(self, arg):
+        if self.optimizer is None:
+            return
         if arg == 1:
-            return self.optimizer.remove()
+            return self.optimizer.uninstall()
         elif arg == 2:
             return self.optimizer.install()
 

@@ -1848,8 +1848,7 @@ class MicroOperand:
             return self._raw < other._raw
         return NotImplemented
 
-    def __hash__(self) -> int:
-        return hash((self._raw.t, self._raw.size))
+    __hash__ = None  # type: ignore[assignment]
 
     def __str__(self) -> str:
         return self.to_text()
@@ -2538,8 +2537,7 @@ class MicroInstruction:
             return self._raw < other._raw
         return NotImplemented
 
-    def __hash__(self) -> int:
-        return hash((self._raw.opcode, self._raw.ea))
+    __hash__ = None  # type: ignore[assignment]
 
     def __str__(self) -> str:
         return self.to_text()

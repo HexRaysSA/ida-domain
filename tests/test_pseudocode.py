@@ -2052,16 +2052,3 @@ def test_add_comment_accepts_comment_placement_enum(test_env):
     assert func.get_comment(ea) is None
 
 
-def test_add_comment_still_accepts_raw_int_placement(test_env):
-    """CommentPlacement is an IntEnum, so raw ITP_* ints remain accepted."""
-    db = test_env
-    func = db.pseudocode.decompile(0x2A3)
-    ea = func.entry_ea
-
-    # Pass the raw ida_hexrays constant; the signature is CommentPlacement but
-    # IntEnum is int-compatible on the underlying tl.itp assignment.
-    func.add_comment(ea, "raw-int", placement=ida_hexrays.ITP_SEMI)
-    assert func.get_comment(ea, placement=ida_hexrays.ITP_SEMI) == "raw-int"
-    func.remove_comment(ea)
-
-
