@@ -847,6 +847,22 @@ class MicroCallInfo:
 
     # -- argument mutation -------------------------------------------------
 
+    def add_string_argument(self, text: str) -> MicroCallArg:
+        """Append a ``const char *`` string argument to the call.
+
+        Convenience equivalent to ``add_arg()`` followed by
+        :meth:`MicroCallArg.make_string`.
+
+        Args:
+            text: The string value for the argument.
+
+        Returns:
+            The newly created argument wrapper.
+        """
+        arg = self.add_arg()
+        arg.make_string(text)
+        return arg
+
     def add_arg(self) -> MicroCallArg:
         """Append a new empty argument and return it for configuration.
 
@@ -1052,16 +1068,16 @@ class MicroLocalVar:
         """
         return self._raw.set_lvar_type(tif)
 
-    def set_final_type(self, tif: tinfo_t) -> bool:
+    def set_final_type(self, tif: tinfo_t) -> None:
         """Set the final variable type (no further propagation).
+
+        The underlying ``lvar_t.set_final_lvar_type()`` returns ``void``,
+        so callers cannot check success; the type is applied unconditionally.
 
         Args:
             tif: The new type to assign.
-
-        Returns:
-            True if the type was accepted.
         """
-        return self._raw.set_final_lvar_type(tif)
+        self._raw.set_final_lvar_type(tif)
 
     def accepts_type(self, tif: tinfo_t) -> bool:
         """Check if the variable accepts the given type.
@@ -1347,6 +1363,57 @@ class MicroOperand:
     def empty() -> MicroOperand:
         """Create an empty operand (``mop_z``)."""
         return MicroOperand(mop_t())
+
+    # -- in-place mutation -------------------------------------------------
+
+    def set_number(self, value: int, size: int, ea: int = ida_idaapi.BADADDR) -> None:
+        """Convert this operand to a numeric constant in place.
+
+        Args:
+            value: The integer constant value.
+            size: Operand size in bytes.
+            ea: Optional source address (default ``BADADDR``).
+        """
+        self._raw.make_number(value, size, ea)
+
+    def set_register(self, mreg: int, size: int) -> None:
+        """Convert this operand to a micro-register in place.
+
+        Args:
+            mreg: Micro-register number.
+            size: Operand size in bytes.
+        """
+        self._raw._make_reg(mreg, size)
+
+    def set_helper(self, name: str) -> None:
+        """Convert this operand to a helper function name in place.
+
+        Args:
+            name: Helper function name.
+        """
+        self._raw.make_helper(name)
+
+    def set_block_ref(self, serial: int) -> None:
+        """Convert this operand to a block reference in place.
+
+        Args:
+            serial: Target block serial number.
+        """
+        self._raw._make_blkref(serial)
+
+    def set_global_addr(self, ea: int, size: int) -> None:
+        """Convert this operand to a global address in place.
+
+        Args:
+            ea: Target address.
+            size: Operand size in bytes.
+        """
+        self._raw._make_gvar(ea)
+        self._raw.size = size
+
+    def erase(self) -> None:
+        """Reset this operand to an empty (``mop_z``) state."""
+        self._raw.erase()
 
     # -- raw access --------------------------------------------------------
 
@@ -1780,6 +1847,9 @@ class MicroOperand:
         if isinstance(other, MicroOperand):
             return self._raw < other._raw
         return NotImplemented
+
+    def __hash__(self) -> int:
+        return hash((self._raw.t, self._raw.size))
 
     def __str__(self) -> str:
         return self.to_text()
@@ -2467,6 +2537,9 @@ class MicroInstruction:
         if isinstance(other, MicroInstruction):
             return self._raw < other._raw
         return NotImplemented
+
+    def __hash__(self) -> int:
+        return hash((self._raw.opcode, self._raw.ea))
 
     def __str__(self) -> str:
         return self.to_text()

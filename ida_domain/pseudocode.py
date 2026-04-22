@@ -291,6 +291,34 @@ class PseudocodeVisitorFlags(IntFlag):
     INSNS = ida_hexrays.CV_INSNS
 
 
+class NumberFormatFlags(IntFlag):
+    """Number format property flags corresponding to ``NF_*`` constants."""
+
+    NEGATE = ida_hexrays.NF_NEGATE
+    BITNOT = ida_hexrays.NF_BITNOT
+    FIXED = ida_hexrays.NF_FIXED
+
+
+class CommentPlacement(IntEnum):
+    """Comment placement positions corresponding to ``ITP_*`` constants."""
+
+    SEMI = ida_hexrays.ITP_SEMI
+    BLOCK1 = ida_hexrays.ITP_BLOCK1
+    BLOCK2 = ida_hexrays.ITP_BLOCK2
+    CURLY1 = ida_hexrays.ITP_CURLY1
+    CURLY2 = ida_hexrays.ITP_CURLY2
+    BRACE1 = ida_hexrays.ITP_BRACE1
+    BRACE2 = ida_hexrays.ITP_BRACE2
+    COLON = ida_hexrays.ITP_COLON
+    ARG1 = ida_hexrays.ITP_ARG1
+    ARG64 = ida_hexrays.ITP_ARG64
+    ELSE = ida_hexrays.ITP_ELSE
+    DO = ida_hexrays.ITP_DO
+    CASE = ida_hexrays.ITP_CASE
+    SIGN = ida_hexrays.ITP_SIGN
+    EMPTY = ida_hexrays.ITP_EMPTY
+
+
 # ---------------------------------------------------------------------------
 # Exception
 # ---------------------------------------------------------------------------
@@ -2117,7 +2145,7 @@ class PseudocodeFunction:
         self,
         ea: int,
         text: str,
-        placement: int = ida_hexrays.ITP_SEMI,
+        placement: CommentPlacement = CommentPlacement.SEMI,
     ) -> None:
         """Add or replace a user comment at the given address.
 
@@ -2127,48 +2155,48 @@ class PseudocodeFunction:
             ea: Address to place the comment at (use the ``.ea`` property
                 of an expression or instruction).
             text: Comment text.  Pass an empty string to remove.
-            placement: Item tree position constant (``ITP_SEMI``,
-                ``ITP_BLOCK1``, ``ITP_CURLY1``, etc.).
-                Defaults to ``ITP_SEMI``, which anchors the comment to
+            placement: Item tree position (``CommentPlacement.SEMI``,
+                ``CommentPlacement.BLOCK1``, etc.).  Defaults to
+                ``CommentPlacement.SEMI``, which anchors the comment to
                 the statement's trailing semicolon (rendered as a
                 trailing-line comment).
         """
         tl = ida_hexrays.treeloc_t()
         tl.ea = ea
-        tl.itp = placement
+        tl.itp = int(placement)
         self._raw.set_user_cmt(tl, text)
         self._raw.save_user_cmts()
 
     def get_comment(
         self,
         ea: int,
-        placement: int = ida_hexrays.ITP_SEMI,
+        placement: CommentPlacement = CommentPlacement.SEMI,
     ) -> Optional[str]:
         """Get a user comment at the given address.
 
         Args:
             ea: Address to look up.
-            placement: Item tree position constant (default ``ITP_SEMI``).
+            placement: Item tree position (default ``CommentPlacement.SEMI``).
 
         Returns:
             The comment text, or ``None`` if no comment exists.
         """
         tl = ida_hexrays.treeloc_t()
         tl.ea = ea
-        tl.itp = placement
+        tl.itp = int(placement)
         result = self._raw.get_user_cmt(tl, ida_hexrays.RETRIEVE_ALWAYS)
         return result if result else None
 
     def remove_comment(
         self,
         ea: int,
-        placement: int = ida_hexrays.ITP_SEMI,
+        placement: CommentPlacement = CommentPlacement.SEMI,
     ) -> None:
         """Remove a user comment at the given address.
 
         Args:
             ea: Address of the comment to remove.
-            placement: Item tree position constant (default ``ITP_SEMI``).
+            placement: Item tree position (default ``CommentPlacement.SEMI``).
         """
         self.add_comment(ea, '', placement)
         self._raw.del_orphan_cmts()
