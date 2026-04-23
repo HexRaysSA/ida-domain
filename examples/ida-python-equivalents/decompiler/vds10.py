@@ -1,6 +1,8 @@
 """
 This is equivalent of vds10.py from IDAPython examples — assertion call argument injection.
 Original: https://github.com/HexRaysSA/ida-sdk/blob/main/src/plugins/idapython/examples/decompiler/vds10.py
+NOTE: Partially migrated - plugin scaffold (plugin_t, init_hexrays_plugin)
+still uses raw ida_idaapi / ida_hexrays.
 
 Demonstrates MicroInstructionOptimizer pattern: adds the assertion string
 as a call argument to DbgRaiseAssertionFailure() calls so they show up

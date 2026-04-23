@@ -275,3 +275,14 @@ def test_function(test_env):
         'rcx.8,r8.8,r9.8,r10.8,r11.8,fps.2,fl.1,c0.1,c2.1,c3.1,df.1,if.1,xmm4.16,'
         'xmm5.16,ALLMEM)'
     )
+
+
+def test_get_signature_returns_optional_str(test_env):
+    """get_signature returns Optional[str] — None when no type is stored,
+    str otherwise. The return must never be an empty string (that was the
+    old docstring's claim before the fix)."""
+    db = test_env
+    for func in db.functions:
+        sig = db.functions.get_signature(func)
+        assert sig is None or isinstance(sig, str)
+        assert sig != ''

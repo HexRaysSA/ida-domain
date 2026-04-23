@@ -1,5 +1,7 @@
 """
 Equivalent of https://github.com/HexRaysSA/ida-sdk/blob/main/src/plugins/idapython/examples/decompiler/vds4.py
+NOTE: Partially migrated - uses ida_bytes.get_radix for number-format
+radix decoding (no ida-domain wrapper yet).
 """
 
 import ida_bytes

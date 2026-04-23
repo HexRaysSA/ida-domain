@@ -739,7 +739,7 @@ class Functions(DatabaseEntity):
         """
         return self.database.microcode.generate(func)
 
-    def get_signature(self, func: func_t) -> str:
+    def get_signature(self, func: func_t) -> Optional[str]:
         """
         Retrieves the function's type signature.
 
@@ -747,8 +747,8 @@ class Functions(DatabaseEntity):
             func: The function instance.
 
         Returns:
-            The function signature as a string,
-            or empty string if unavailable or function is invalid.
+            The function signature as a string, or ``None`` if no type
+            is stored for this function.
         """
         return ida_typeinf.idc_get_type(func.start_ea)
 

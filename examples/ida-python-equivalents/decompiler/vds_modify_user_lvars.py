@@ -2,9 +2,8 @@
 Equivalent of https://github.com/HexRaysSA/ida-sdk/blob/main/src/plugins/idapython/examples/decompiler/vds_modify_user_lvars.py
 """
 
-import ida_typeinf
-
 import ida_domain
+from ida_domain.base import InvalidParameterError
 
 NAME_PREFIX = 'patched_'
 COMMENT_PREFIX = '(patched) '
@@ -31,12 +30,11 @@ for idx, lvar in enumerate(lvars):
     new_type_decl = NEW_TYPES.get(lvar.name)
     type_changed = False
     if new_type_decl:
-        decl = new_type_decl if new_type_decl.rstrip().endswith(';') else new_type_decl + ';'
-        tif = ida_typeinf.tinfo_t()
-        if ida_typeinf.parse_decl(tif, None, decl, 0) is not None:
+        try:
+            tif = db.types.parse_one_declaration(None, new_type_decl)
             lvar.set_type(tif)
             type_changed = True
-        else:
+        except InvalidParameterError:
             print(f"modify_lvars: could not parse type {new_type_decl!r}, skipping retype")
 
     lvar.set_user_name(NAME_PREFIX + lvar.name)
