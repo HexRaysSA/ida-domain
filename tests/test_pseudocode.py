@@ -1983,3 +1983,72 @@ def test_from_binary_rejects_unary_op(test_env):
         PseudocodeExpression.from_binary(PseudocodeExpressionOp.NEG, a, b)
 
 
+# ---------------------------------------------------------------------------
+# CommentPlacement / NumberFormatFlags enums
+# ---------------------------------------------------------------------------
+
+
+def test_comment_placement_values_match_ida_constants():
+    """CommentPlacement members expose the same integer as ida_hexrays.ITP_*."""
+    from ida_domain.pseudocode import CommentPlacement
+
+    mapping = {
+        CommentPlacement.SEMI: ida_hexrays.ITP_SEMI,
+        CommentPlacement.BLOCK1: ida_hexrays.ITP_BLOCK1,
+        CommentPlacement.BLOCK2: ida_hexrays.ITP_BLOCK2,
+        CommentPlacement.CURLY1: ida_hexrays.ITP_CURLY1,
+        CommentPlacement.CURLY2: ida_hexrays.ITP_CURLY2,
+        CommentPlacement.BRACE1: ida_hexrays.ITP_BRACE1,
+        CommentPlacement.BRACE2: ida_hexrays.ITP_BRACE2,
+        CommentPlacement.COLON: ida_hexrays.ITP_COLON,
+        CommentPlacement.ARG1: ida_hexrays.ITP_ARG1,
+        CommentPlacement.ARG64: ida_hexrays.ITP_ARG64,
+        CommentPlacement.ELSE: ida_hexrays.ITP_ELSE,
+        CommentPlacement.DO: ida_hexrays.ITP_DO,
+        CommentPlacement.CASE: ida_hexrays.ITP_CASE,
+        CommentPlacement.SIGN: ida_hexrays.ITP_SIGN,
+        CommentPlacement.EMPTY: ida_hexrays.ITP_EMPTY,
+    }
+    for member, raw in mapping.items():
+        assert int(member) == raw
+
+
+def test_number_format_flags_values_match_ida_constants():
+    """NumberFormatFlags members expose the same integer as ida_hexrays.NF_*."""
+    from ida_domain.pseudocode import NumberFormatFlags
+
+    assert int(NumberFormatFlags.NEGATE) == ida_hexrays.NF_NEGATE
+    assert int(NumberFormatFlags.BITNOT) == ida_hexrays.NF_BITNOT
+    assert int(NumberFormatFlags.FIXED) == ida_hexrays.NF_FIXED
+
+    # IntFlag combination semantics.
+    combined = NumberFormatFlags.NEGATE | NumberFormatFlags.BITNOT
+    assert int(combined) == (ida_hexrays.NF_NEGATE | ida_hexrays.NF_BITNOT)
+    assert NumberFormatFlags.NEGATE in combined
+    assert NumberFormatFlags.BITNOT in combined
+    assert NumberFormatFlags.FIXED not in combined
+
+
+def test_add_comment_accepts_comment_placement_enum(test_env):
+    """add_comment / get_comment round-trip with a CommentPlacement member."""
+    from ida_domain.pseudocode import CommentPlacement
+
+    db = test_env
+    func = db.pseudocode.decompile(0x2A3)
+    ea = func.entry_ea
+
+    # Explicit CommentPlacement value.
+    func.add_comment(ea, "semi-anchored", placement=CommentPlacement.SEMI)
+    assert func.get_comment(ea, placement=CommentPlacement.SEMI) == "semi-anchored"
+
+    # Default placement resolves to CommentPlacement.SEMI — same comment is returned.
+    assert func.get_comment(ea) == "semi-anchored"
+
+    # Placement mismatch returns None (the comment was stored at SEMI only).
+    assert func.get_comment(ea, placement=CommentPlacement.BLOCK1) is None
+
+    # remove_comment accepts the enum and clears the stored entry.
+    func.remove_comment(ea, placement=CommentPlacement.SEMI)
+    assert func.get_comment(ea) is None
+
+

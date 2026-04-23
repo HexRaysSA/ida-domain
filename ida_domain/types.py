@@ -68,6 +68,11 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _ensure_trailing_semicolon(decl: str) -> str:
+    """`ida_typeinf.parse_decl` requires a trailing ``;``. Append one if missing."""
+    return decl if decl.rstrip().endswith(';') else decl + ';'
+
+
 class LibraryAddFlags(IntFlag):
     """Flags for changing the way type libraries are added to the database"""
 
@@ -1542,36 +1547,45 @@ class Types(DatabaseEntity):
         self,
         library: til_t,
         decl: str,
-        name: str,
+        name: Optional[str] = None,
         flags: TypeFormattingFlags = TypeFormattingFlags.HTI_DCL | TypeFormattingFlags.HTI_PAKDEF,
     ) -> tinfo_t:
         """
-        Parse one declaration from string and create a named type.
+        Parse one declaration from string and return its ``tinfo_t``.
+
+        If ``name`` is provided, the parsed type is also saved into ``library``
+        as a named type.  Omit ``name`` to get a transient ``tinfo_t`` without
+        modifying the library.
 
         Args:
-            library: The type library used for parsing context.
-            decl: C type declaration string to parse.
-            name: The name to assign to the parsed type.
+            library: The type library used for parsing context. Pass ``None``
+                to use the default idati.
+            decl: C type declaration string to parse. A trailing ``;`` is
+                optional — it is appended if missing.
+            name: Optional name under which to register the parsed type in
+                ``library``. If ``None``, the type is returned transiently.
             flags: Optional combination of TypeFormattingFlags for parsing behavior.
 
         Returns:
             The tinfo_t instance on success.
 
         Raises:
-            InvalidParameterError: If name/decl is empty, decl cannot be parsed,
-                                  or name cannot be used to save the declaration.
+            InvalidParameterError: If decl is empty, decl cannot be parsed,
+                                  name is empty (but not ``None``), or name
+                                  cannot be used to save the declaration.
         """
-        if not name:
+        if name == '':
             raise InvalidParameterError('name', name, 'cannot be empty')
 
         if not decl:
             raise InvalidParameterError('decl', decl, 'cannot be empty')
 
         tif = ida_typeinf.tinfo_t()
-        if not ida_typeinf.parse_decl(tif, library, decl, flags):
+        ida_typeinf.parse_decl(tif, library, _ensure_trailing_semicolon(decl), flags)
+        if tif.empty():
             raise InvalidParameterError('decl', decl, 'cannot be parsed')
 
-        if tif.set_named_type(library, name) < 0:
+        if name is not None and tif.set_named_type(library, name) < 0:
             raise InvalidParameterError(
                 'name', name, f'could not be used to save the parsed declaration {decl}'
             )
@@ -1677,7 +1691,8 @@ class Types(DatabaseEntity):
             library = ida_typeinf.get_idati()
 
         tif = ida_typeinf.tinfo_t()
-        if not ida_typeinf.parse_decl(tif, library, decl, ida_typeinf.PT_SIL):
+        ida_typeinf.parse_decl(tif, library, _ensure_trailing_semicolon(decl), ida_typeinf.PT_SIL)
+        if tif.empty():
             raise InvalidParameterError('decl', decl, 'cannot be parsed')
 
         return ida_typeinf.apply_tinfo(ea, tif, flags)

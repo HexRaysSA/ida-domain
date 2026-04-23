@@ -1354,6 +1354,28 @@ def test_microcode_instruction_comparisons(test_env):
     r = repr(a)
     assert 'MicroInstruction' in r
 
+    # Intentionally unhashable — wrappers are mutable (set_*, in-place
+    # mutation). A hash derived from mutable fields would desync when the
+    # object is mutated after being used as a set/dict key. Users who need
+    # dedup should key on id(insn._raw) or insn._raw.obj_id explicitly.
+    with pytest.raises(TypeError):
+        hash(a)
+    with pytest.raises(TypeError):
+        {a, b}
+
+
+def test_microcode_operand_unhashable(test_env):
+    """MicroOperand is intentionally unhashable — wrappers are mutable."""
+    db = test_env
+    func = db.functions.get_at(0x2BC)
+    mf = db.microcode.generate(func)
+
+    op = next(iter(next(iter(mf.instructions())).operands()))
+    with pytest.raises(TypeError):
+        hash(op)
+    with pytest.raises(TypeError):
+        {op}
+
 
 def test_microcode_block_tail_and_empty(test_env):
     """Test tail property and empty block behavior."""
@@ -4097,3 +4119,189 @@ def test_microcode_call_info_set_type(test_env):
 
     result = ci.set_type(func_type)
     assert isinstance(result, bool)
+
+
+def test_microcode_local_var_set_final_type(test_env):
+    """set_final_type returns None and persists the new type on the lvar."""
+    from ida_domain.microcode import MicroLocalVars, MicroMaturity
+
+    db = test_env
+    func = db.functions.get_at(0x2A3)
+    mf = db.microcode.generate(func, maturity=MicroMaturity.LVARS)
+    lvars: MicroLocalVars = mf.vars
+    assert len(lvars) > 0
+    v = lvars[0]
+
+    # Pick a type distinct from the current one so the readback is meaningful.
+    new_tif = ida_typeinf.tinfo_t(ida_typeinf.BT_INT16)
+    assert new_tif.get_size() != 0
+    assert str(v.type_info) != str(new_tif)  # precondition: actually different
+
+    # The method must return None (underlying C++ is void).
+    result = v.set_final_type(new_tif)
+    assert result is None
+
+    # State readback: the wrapper now reports the new type, and width matches
+    # the new type's size (set_final_lvar_type also resizes the lvar).
+    assert str(v.type_info) == str(new_tif)
+    assert v.width == new_tif.get_size()
+
+
+def test_microcode_call_info_add_string_argument(test_env):
+    """add_string_argument appends an mop_str arg with correct type and value."""
+    from ida_domain.microcode import MicroCallArg, MicroCallInfo, MicroOperandType
+
+    ci = MicroCallInfo.create()
+    assert ci.arg_count == 0
+
+    arg = ci.add_string_argument('hello world')
+
+    # Return type and arg-list mutation.
+    assert isinstance(arg, MicroCallArg)
+    assert ci.arg_count == 1
+
+    # Read back via a fresh args list to avoid relying on the returned wrapper.
+    fetched = ci.args[0]
+    assert fetched.operand.type == MicroOperandType.STRING
+    assert fetched.operand.string_value == 'hello world'
+
+    # Type was set to const char * (STI_PCCHAR) — size matches a pointer.
+    pcchar = ida_typeinf.tinfo_t.get_stock(ida_typeinf.STI_PCCHAR)
+    assert fetched.size == pcchar.get_size()
+    assert str(fetched.type) == str(pcchar)
+
+    # A second call appends a second arg (not replace).
+    arg2 = ci.add_string_argument('second')
+    assert isinstance(arg2, MicroCallArg)
+    assert ci.arg_count == 2
+    assert ci.args[1].operand.string_value == 'second'
+
+
+def test_microcode_operand_in_place_mutators(test_env):
+    """set_number / set_register / set_helper / set_block_ref / set_global_addr / erase."""
+    from ida_domain.microcode import MicroOperand, MicroOperandType
+
+    # set_number: convert an existing (non-number) operand in place.
+    op = MicroOperand.helper('placeholder')
+    assert op.type == MicroOperandType.HELPER
+    assert op.set_number(0xDEADBEEF, size=4, ea=0x1000) is None
+    assert op.type == MicroOperandType.NUMBER
+    assert op.value == 0xDEADBEEF
+    assert op.size == 4
+
+    # set_register: convert a number operand to a register in place.
+    op2 = MicroOperand.number(0, size=4)
+    assert op2.type == MicroOperandType.NUMBER
+    assert op2.set_register(mreg=ida_hexrays.mr_cf, size=1) is None
+    assert op2.type == MicroOperandType.REGISTER
+    assert op2.register == ida_hexrays.mr_cf
+    assert op2.size == 1
+
+    # set_helper: overwrite to a helper operand.
+    op3 = MicroOperand.number(0, size=4)
+    assert op3.set_helper('memcpy') is None
+    assert op3.type == MicroOperandType.HELPER
+    assert op3.helper_name == 'memcpy'
+
+    # set_block_ref: overwrite to a block reference.
+    op4 = MicroOperand.number(0, size=4)
+    assert op4.set_block_ref(serial=7) is None
+    assert op4.type == MicroOperandType.BLOCK_REF
+    assert op4.block_ref == 7
+
+    # set_global_addr: overwrite to a global address operand with explicit size.
+    op5 = MicroOperand.number(0, size=4)
+    assert op5.set_global_addr(ea=0xCAFEBABE, size=8) is None
+    assert op5.type == MicroOperandType.GLOBAL_ADDR
+    assert op5.global_address == 0xCAFEBABE
+    assert op5.size == 8
+
+    # clear: reset to an empty operand.
+    op6 = MicroOperand.number(0x42, size=4)
+    assert op6.type == MicroOperandType.NUMBER
+    assert op6.clear() is None
+    assert op6.type == MicroOperandType.EMPTY
+    assert op6.is_empty
+
+
+def test_microcode_operand_in_place_mutators_on_real_instruction(test_env):
+    """Apply each MicroOperand mutator to an operand owned by a real
+    instruction from a decoded function, and verify the instruction's slot
+    reflects the mutation through the API."""
+    from ida_domain.microcode import (
+        MicroMaturity,
+        MicroOperandType,
+    )
+
+    db = test_env
+    func = db.functions.get_at(0xC4)
+    assert func is not None
+    mf = db.microcode.generate(func, maturity=MicroMaturity.PREOPTIMIZED)
+
+    # Locate the first real (non-sentinel) instruction whose left slot is
+    # populated — that's the operand we'll mutate in place.
+    target_insn = None
+    for insn in mf.instructions(skip_sentinels=True):
+        if not insn.l.is_empty:
+            target_insn = insn
+            break
+    assert target_insn is not None, 'no instruction with a left operand found'
+
+    original_ea = target_insn.ea
+
+    # Sanity: the wrapper returned by `insn.l` points into the instruction,
+    # so mutating it mutates the instruction.
+    initial_type = target_insn.l.type
+    assert initial_type != MicroOperandType.EMPTY
+
+    # set_number — overwrite in place, re-read through the instruction.
+    target_insn.l.set_number(0xDEADBEEF, size=4, ea=original_ea)
+    assert target_insn.l.type == MicroOperandType.NUMBER
+    assert target_insn.l.value == 0xDEADBEEF
+    assert target_insn.l.size == 4
+
+    # set_register — overwrite the same slot.
+    mreg = ida_hexrays.reg2mreg(0)
+    target_insn.l.set_register(mreg=mreg, size=4)
+    assert target_insn.l.type == MicroOperandType.REGISTER
+    assert target_insn.l.register == mreg
+    assert target_insn.l.size == 4
+
+    # set_helper.
+    target_insn.l.set_helper('memcpy')
+    assert target_insn.l.type == MicroOperandType.HELPER
+    assert target_insn.l.helper_name == 'memcpy'
+
+    # set_block_ref.
+    target_insn.l.set_block_ref(serial=3)
+    assert target_insn.l.type == MicroOperandType.BLOCK_REF
+    assert target_insn.l.block_ref == 3
+
+    # set_global_addr.
+    target_insn.l.set_global_addr(ea=0xCAFEBABE, size=8)
+    assert target_insn.l.type == MicroOperandType.GLOBAL_ADDR
+    assert target_insn.l.global_address == 0xCAFEBABE
+    assert target_insn.l.size == 8
+
+    # clear — slot becomes empty.
+    target_insn.l.clear()
+    assert target_insn.l.type == MicroOperandType.EMPTY
+    assert target_insn.l.is_empty
+
+    # The instruction itself (ea, position in the block) is unaffected — we
+    # only touched one operand slot.
+    assert target_insn.ea == original_ea
+
+    # Cross-check via block-level iteration: walk the block and confirm the
+    # same instruction now reports an empty left operand (i.e. the mutation
+    # is observable through a fresh lookup, not just the original wrapper).
+    found_via_walk = False
+    for blk in mf.blocks(skip_sentinels=True):
+        for insn in blk:
+            if insn.ea == original_ea and insn.opcode == target_insn.opcode:
+                assert insn.l.is_empty
+                found_via_walk = True
+                break
+        if found_via_walk:
+            break
+    assert found_via_walk, 'mutated instruction was not found via block iteration'
