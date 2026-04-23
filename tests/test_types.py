@@ -317,13 +317,13 @@ def test_parse_one_declaration_primitive_type(test_env):
     without the trailing ``;`` (the wrapper normalizes).  Also works in
     transient mode (no ``name``) — no til entry is created."""
     db = test_env
-    for decl in ['int;', 'int', 'unsigned short', 'char *', 'unsigned char[16]']:
+    for i, decl in enumerate(['int;', 'int', 'unsigned short', 'char *', 'unsigned char[16]']):
         # transient mode
         tif = db.types.parse_one_declaration(None, decl)
         assert tif is not None
         assert not tif.empty()
         # named mode still works
-        tif = db.types.parse_one_declaration(None, decl, f'_probe_{abs(hash(decl)) & 0xFFFF:x}')
+        tif = db.types.parse_one_declaration(None, decl, f'_probe_{i}')
         assert tif is not None
         assert not tif.empty()
 
@@ -333,9 +333,11 @@ def test_apply_declaration_at_primitive_type(test_env):
     parse stage, with or without the trailing ``;``."""
     db = test_env
     entry = db.entries[0]
-    # Neither form should raise InvalidParameterError at the parse stage.
-    db.types.apply_declaration_at(entry.address, 'int;')
-    db.types.apply_declaration_at(entry.address, 'int')
+    for decl in ['int;', 'int']:
+        try:
+            db.types.apply_declaration_at(entry.address, decl)
+        except InvalidParameterError as e:
+            pytest.fail(f'apply_declaration_at rejected {decl!r} at parse: {e}')
 
 
 def test_store_object_at_invalid_ea(test_env):

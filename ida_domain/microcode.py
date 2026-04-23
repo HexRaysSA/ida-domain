@@ -1411,10 +1411,6 @@ class MicroOperand:
         self._raw._make_gvar(ea)
         self._raw.size = size
 
-    def erase(self) -> None:
-        """Reset this operand to an empty (``mop_z``) state."""
-        self._raw.erase()
-
     # -- raw access --------------------------------------------------------
 
     @property

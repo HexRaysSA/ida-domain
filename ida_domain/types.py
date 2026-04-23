@@ -1581,7 +1581,8 @@ class Types(DatabaseEntity):
             raise InvalidParameterError('decl', decl, 'cannot be empty')
 
         tif = ida_typeinf.tinfo_t()
-        if ida_typeinf.parse_decl(tif, library, _ensure_trailing_semicolon(decl), flags) is None:
+        ida_typeinf.parse_decl(tif, library, _ensure_trailing_semicolon(decl), flags)
+        if tif.empty():
             raise InvalidParameterError('decl', decl, 'cannot be parsed')
 
         if name is not None and tif.set_named_type(library, name) < 0:
@@ -1690,9 +1691,8 @@ class Types(DatabaseEntity):
             library = ida_typeinf.get_idati()
 
         tif = ida_typeinf.tinfo_t()
-        if ida_typeinf.parse_decl(
-            tif, library, _ensure_trailing_semicolon(decl), ida_typeinf.PT_SIL
-        ) is None:
+        ida_typeinf.parse_decl(tif, library, _ensure_trailing_semicolon(decl), ida_typeinf.PT_SIL)
+        if tif.empty():
             raise InvalidParameterError('decl', decl, 'cannot be parsed')
 
         return ida_typeinf.apply_tinfo(ea, tif, flags)

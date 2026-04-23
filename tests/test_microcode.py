@@ -4216,10 +4216,10 @@ def test_microcode_operand_in_place_mutators(test_env):
     assert op5.global_address == 0xCAFEBABE
     assert op5.size == 8
 
-    # erase: reset to an empty operand.
+    # clear: reset to an empty operand.
     op6 = MicroOperand.number(0x42, size=4)
     assert op6.type == MicroOperandType.NUMBER
-    assert op6.erase() is None
+    assert op6.clear() is None
     assert op6.type == MicroOperandType.EMPTY
     assert op6.is_empty
 
@@ -4283,8 +4283,8 @@ def test_microcode_operand_in_place_mutators_on_real_instruction(test_env):
     assert target_insn.l.global_address == 0xCAFEBABE
     assert target_insn.l.size == 8
 
-    # erase — slot becomes empty.
-    target_insn.l.erase()
+    # clear — slot becomes empty.
+    target_insn.l.clear()
     assert target_insn.l.type == MicroOperandType.EMPTY
     assert target_insn.l.is_empty
 
