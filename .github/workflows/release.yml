@@ -13,6 +13,11 @@ on:
           - Minor Release
           - Major Release
         default: 'Development'
+      dry_run:
+        description: 'Create the release PR but do not merge, tag, release, publish, or trigger docs'
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   create-release:
@@ -21,6 +26,9 @@ jobs:
     permissions:
       contents: write
       id-token: write
+      pull-requests: write
+      checks: read
+      statuses: read
 
     steps:
       - name: Checkout
@@ -37,39 +45,156 @@ jobs:
       - name: Install dependencies
         run: uv sync --extra dev
 
-      - name: Bump version and build package
+      - name: Bump version on release branch
+        id: version
         run: |
+          BASE_BRANCH="${GITHUB_REF_NAME}"
+          RELEASE_BRANCH="release/${{ github.run_id }}-${{ github.run_attempt }}"
+
+          git checkout -B "$RELEASE_BRANCH"
+
           case "${{ github.event.inputs.release_type }}" in
             "Development")
               VERSION=$(uv run semantic-release version --print-last-released | tail -1)
               if [[ "$VERSION" == *dev* ]]; then
-                uv run semantic-release version --prerelease --prerelease-token dev --no-changelog
+                uv run semantic-release version --prerelease --prerelease-token dev --no-changelog --no-push --no-vcs-release
               else
-                uv run semantic-release version --as-prerelease --patch --prerelease-token dev  --no-changelog
+                uv run semantic-release version --as-prerelease --patch --prerelease-token dev --no-changelog --no-push --no-vcs-release
               fi
               ;;
             "Major Release")
-              uv run semantic-release version --major  --no-changelog
+              uv run semantic-release version --major --no-changelog --no-push --no-vcs-release
               ;;
             "Minor Release")
-              uv run semantic-release version --minor  --no-changelog
+              uv run semantic-release version --minor --no-changelog --no-push --no-vcs-release
               ;;
             "Hotfix")
               # Remove local dev tags to ensure patch increments from last stable release
               git tag -d $(git tag -l | grep -E "dev") 2>/dev/null || true
-              uv run semantic-release version --patch  --no-changelog
+              uv run semantic-release version --patch --no-changelog --no-push --no-vcs-release
               ;;
           esac
+
+          RELEASE_TAG=$(git tag --points-at HEAD | sort -V | tail -1)
+          if [[ -z "$RELEASE_TAG" ]]; then
+            echo "semantic-release did not create a release tag" >&2
+            exit 1
+          fi
+
+          git push origin "HEAD:$RELEASE_BRANCH"
+
+          echo "base_branch=$BASE_BRANCH" >> "$GITHUB_OUTPUT"
+          echo "release_branch=$RELEASE_BRANCH" >> "$GITHUB_OUTPUT"
+          echo "release_tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create release PR
+        id: release-pr
+        run: |
+          PR_URL=$(gh pr create \
+            --base "${{ steps.version.outputs.base_branch }}" \
+            --head "${{ steps.version.outputs.release_branch }}" \
+            --title "chore(release): ${{ steps.version.outputs.release_tag }}" \
+            --body "Automated ${{ github.event.inputs.release_type }} version bump.")
+
+          echo "pr_url=$PR_URL" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Wait for release PR checks
+        run: |
+          PR_URL="${{ steps.release-pr.outputs.pr_url }}"
+          CHECK_COUNT=0
+          for attempt in {1..30}; do
+            set +e
+            CHECK_COUNT=$(gh pr checks "$PR_URL" --json name --jq 'length' 2>/dev/null)
+            CHECK_STATUS=$?
+            set -e
+
+            if [[ "$CHECK_STATUS" -ne 0 && "$CHECK_STATUS" -ne 8 ]]; then
+              echo "Unable to read PR checks for $PR_URL" >&2
+              exit "$CHECK_STATUS"
+            fi
+
+            if [[ "${CHECK_COUNT:-0}" -gt 0 ]]; then
+              break
+            fi
+
+            sleep 10
+          done
+
+          if [[ "${CHECK_COUNT:-0}" -gt 0 ]]; then
+            gh pr checks "$PR_URL" --watch --fail-fast --interval 30
+          else
+            echo "No PR checks reported; continuing."
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Stop before merge for dry run
+        if: github.event.inputs.dry_run == 'true'
+        run: |
+          echo "Dry run requested."
+          echo "Release PR was created but will not be merged: ${{ steps.release-pr.outputs.pr_url }}"
+
+      - name: Merge release PR
+        if: github.event.inputs.dry_run != 'true'
+        run: |
+          PR_URL="${{ steps.release-pr.outputs.pr_url }}"
+          gh pr merge "$PR_URL" \
+            --rebase \
+            --delete-branch
+
+          for attempt in {1..60}; do
+            PR_STATE=$(gh pr view "$PR_URL" --json state --jq '.state')
+            if [[ "$PR_STATE" == "MERGED" ]]; then
+              break
+            fi
+            if [[ "$PR_STATE" == "CLOSED" ]]; then
+              echo "Release PR closed without merging: $PR_URL" >&2
+              exit 1
+            fi
+            sleep 10
+          done
+
+          PR_STATE=$(gh pr view "$PR_URL" --json state --jq '.state')
+          if [[ "$PR_STATE" != "MERGED" ]]; then
+            echo "Timed out waiting for release PR to merge: $PR_URL" >&2
+            exit 1
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Tag merged release commit and build package
+        if: github.event.inputs.dry_run != 'true'
+        run: |
+          git fetch origin "${{ steps.version.outputs.base_branch }}" --tags
+          git checkout -B "${{ steps.version.outputs.base_branch }}" FETCH_HEAD
+          git tag -f "${{ steps.version.outputs.release_tag }}"
+          git push origin "${{ steps.version.outputs.release_tag }}"
+
+          rm -rf dist
+          uv build
+
+      - name: Create GitHub release
+        if: github.event.inputs.dry_run != 'true'
+        run: |
+          gh release create "${{ steps.version.outputs.release_tag }}" dist/* \
+            --target "${{ steps.version.outputs.base_branch }}" \
+            --title "${{ steps.version.outputs.release_tag }}" \
+            --generate-notes
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish to PyPI
+        if: github.event.inputs.dry_run != 'true'
         run: uv publish
 
   publish-documentation:
     runs-on: ubuntu-latest
     needs: [create-release]
-    if: github.event.inputs.release_type != 'Development'
+    if: github.event.inputs.release_type != 'Development' && github.event.inputs.dry_run != 'true'
     permissions:
       contents: read
       actions: write
