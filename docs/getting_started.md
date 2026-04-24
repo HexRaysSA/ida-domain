@@ -4,7 +4,7 @@ This guide will take you from nothing to a working first script with the IDA Dom
 
 ## Prerequisites
 
-- **Python 3.9 or higher**
+- **Python 3.10 or higher**
 - **IDA Pro 9.1 or higher**
 
 ## Installation

@@ -33,7 +33,7 @@ Feature requests are welcome! Please provide:
 
 ### Prerequisites for Development
 
-- Python 3.9+
+- Python 3.10+
 - IDA Pro (for testing)
 - UV for dependency management
 - pytest for testing (included in dev dependencies)
