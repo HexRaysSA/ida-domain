@@ -1,0 +1,148 @@
+name: Publish Release
+
+on:
+  push:
+    branches: [ "main" ]
+
+concurrency:
+  group: publish-release-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  publish-release:
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      actions: write
+      contents: write
+      id-token: write
+      issues: read
+      pull-requests: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Verify release PR
+        id: verify
+        run: |
+          PR_NUMBER=$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls" \
+            --jq '[.[] | select(.merged_at != null and .base.ref == "main")] | .[0].number // empty')
+
+          if [[ -z "$PR_NUMBER" ]]; then
+            echo "No merged PR is associated with ${GITHUB_SHA}; skipping release publish."
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          HAS_RELEASE_LABEL=$(gh pr view "$PR_NUMBER" --json labels --jq 'any(.labels[].name; . == "automated-release")')
+          if [[ "$HAS_RELEASE_LABEL" != "true" ]]; then
+            echo "PR #$PR_NUMBER is not an automated release PR; skipping release publish."
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          AUTHOR=$(gh pr view "$PR_NUMBER" --json author --jq '.author.login')
+          if [[ "$AUTHOR" != "app/github-actions" ]]; then
+            echo "Release PR #$PR_NUMBER was authored by '$AUTHOR', not GitHub Actions; refusing to publish." >&2
+            exit 1
+          fi
+
+          HEAD_REF=$(gh pr view "$PR_NUMBER" --json headRefName --jq '.headRefName')
+          if [[ "$HEAD_REF" != release/* ]]; then
+            echo "Release PR #$PR_NUMBER came from unexpected branch '$HEAD_REF'; refusing to publish." >&2
+            exit 1
+          fi
+
+          UNEXPECTED_FILES=$(gh pr view "$PR_NUMBER" --json files --jq '[.files[].path | select(. != "pyproject.toml" and . != "ida_domain/__init__.py" and . != "uv.lock")] | join(", ")')
+          if [[ -n "$UNEXPECTED_FILES" ]]; then
+            echo "Release PR #$PR_NUMBER changed unexpected files: $UNEXPECTED_FILES" >&2
+            exit 1
+          fi
+
+          PROJECT_VERSION=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          INIT_VERSION=$(python -c "import ast, pathlib; tree = ast.parse(pathlib.Path('ida_domain/__init__.py').read_text()); print(next(ast.literal_eval(n.value) for n in tree.body if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == '__version__' for t in n.targets)))")
+          if [[ "$PROJECT_VERSION" != "$INIT_VERSION" ]]; then
+            echo "Version mismatch: pyproject.toml has $PROJECT_VERSION, ida_domain/__init__.py has $INIT_VERSION" >&2
+            exit 1
+          fi
+
+          RELEASE_TAG="v$PROJECT_VERSION"
+          if git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Release tag $RELEASE_TAG already exists; refusing to publish." >&2
+            exit 1
+          fi
+
+          if [[ "$PROJECT_VERSION" == *dev* ]]; then
+            IS_PRERELEASE=true
+          else
+            IS_PRERELEASE=false
+          fi
+
+          echo "should_publish=true" >> "$GITHUB_OUTPUT"
+          echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "version=$PROJECT_VERSION" >> "$GITHUB_OUTPUT"
+          echo "release_tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          echo "is_prerelease=$IS_PRERELEASE" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install uv
+        if: steps.verify.outputs.should_publish == 'true'
+        uses: astral-sh/setup-uv@v7
+
+      - name: Install Python
+        if: steps.verify.outputs.should_publish == 'true'
+        run: uv python install 3.13
+
+      - name: Build package
+        if: steps.verify.outputs.should_publish == 'true'
+        run: |
+          rm -rf dist
+          uv build
+
+      - name: Tag release commit
+        if: steps.verify.outputs.should_publish == 'true'
+        run: |
+          git tag "${{ steps.verify.outputs.release_tag }}"
+          git push origin "${{ steps.verify.outputs.release_tag }}"
+
+      - name: Create GitHub release
+        if: steps.verify.outputs.should_publish == 'true'
+        run: |
+          RELEASE_ARGS=(
+            --target "$GITHUB_SHA"
+            --title "${{ steps.verify.outputs.release_tag }}"
+            --generate-notes
+          )
+
+          if [[ "${{ steps.verify.outputs.is_prerelease }}" == "true" ]]; then
+            RELEASE_ARGS+=(--prerelease)
+          fi
+
+          gh release create "${{ steps.verify.outputs.release_tag }}" dist/* "${RELEASE_ARGS[@]}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish to PyPI
+        if: steps.verify.outputs.should_publish == 'true' && github.repository == 'hexrayssa/ida-domain'
+        run: uv publish
+
+      - name: Trigger documentation workflow
+        if: steps.verify.outputs.should_publish == 'true' && steps.verify.outputs.is_prerelease != 'true' && github.repository == 'hexrayssa/ida-domain'
+        uses: benc-uk/workflow-dispatch@v1
+        with:
+          workflow: docs.yml
+          ref: ${{ github.ref_name }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fork safety summary
+        if: steps.verify.outputs.should_publish == 'true' && github.repository != 'hexrayssa/ida-domain'
+        run: |
+          echo "Release PR verification passed for #${{ steps.verify.outputs.pr_number }}."
+          echo "Created the fork-local tag and GitHub release."
+          echo "Skipping PyPI publish and docs because this repository is ${{ github.repository }}."
