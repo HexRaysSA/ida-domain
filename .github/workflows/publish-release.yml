@@ -47,8 +47,8 @@ jobs:
           fi
 
           AUTHOR=$(gh pr view "$PR_NUMBER" --json author --jq '.author.login')
-          if [[ "$AUTHOR" != "github-actions[bot]" ]]; then
-            echo "Release PR #$PR_NUMBER was authored by '$AUTHOR', not github-actions[bot]; refusing to publish." >&2
+          if [[ "$AUTHOR" != "app/github-actions" ]]; then
+            echo "Release PR #$PR_NUMBER was authored by '$AUTHOR', not GitHub Actions; refusing to publish." >&2
             exit 1
           fi
 
