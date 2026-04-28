@@ -555,7 +555,7 @@ wheels = [
 
 [[package]]
 name = "ida-domain"
-version = "0.5.0"
+version = "0.5.1.dev1"
 source = { editable = "." }
 dependencies = [
     { name = "idapro" },
