@@ -46,10 +46,11 @@ Feature requests are welcome! Please provide:
    cd ida-domain
    ```
 
-2. **Set up environment variables**:
+2. **Register your IDA installation** (one-time setup, unless IDA was installed via HCLI):
    ```bash
-   export IDADIR="[Your IDA Installation Directory]"
+   python "[Your IDA Installation Directory]/idalib/python/py-activate-idalib.py"
    ```
+   This writes the install path to a per-user config file used by the `idapro` Python module. See the [Getting Started guide](https://ida-domain.docs.hex-rays.com/getting_started/) for details.
 
 3. **Install dependencies using UV**:
    ```bash
@@ -289,12 +290,14 @@ if __name__ == '__main__':
 ### Working with IDA
 
 ```bash
-# Set IDA directory for development
+# Override the registered IDA install for this shell only (e.g. to test against a specific build)
 export IDADIR="/Applications/IDA Professional 9.1.app/Contents/MacOS/"
 
 # Test with different binary types
 python examples/explore_database.py -f tests/resources/tiny_asm.bin
 ```
+
+> Do not export `IDADIR` persistently (e.g. via `~/.bashrc`) — a globally exported `IDADIR` can interfere with the IDA GUI and other IDA tools. Use it only for the current shell session.
 
 ### Common Development Tasks
 

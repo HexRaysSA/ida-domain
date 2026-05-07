@@ -11,32 +11,27 @@ This guide will take you from nothing to a working first script with the IDA Dom
 
 ### Step 1: Set up IDA SDK Access
 
-The IDA Domain API needs access to the IDA SDK. Choose one of these options:
+The `idapro` Python module needs to know where IDA Pro is installed. The location is stored in a per-user config file (`%APPDATA%\Hex-Rays\IDA Pro\ida-config.json` on Windows, `~/.idapro/ida-config.json` on Linux/macOS).
 
-**Option A: Set IDADIR Environment Variable**
+- **If IDA was installed via HCLI:** the install path is configured automatically — no further setup is required.
+- **Otherwise:** run the `py-activate-idalib.py` activation script that ships with IDA once. It auto-detects the install directory from its own location and writes it to the per-user config. The script normally lives in `<IDA install dir>/idalib/python/`:
 
-Point to your IDA installation directory:
+    === "macOS"
+        ```bash
+        python3 "/Applications/IDA Professional 9.2.app/Contents/MacOS/idalib/python/py-activate-idalib.py"
+        ```
 
-=== "macOS"
-    ```bash
-    export IDADIR="/Applications/IDA Professional 9.2.app/Contents/MacOS/"
-    ```
+    === "Linux"
+        ```bash
+        python3 "/opt/ida-9.2/idalib/python/py-activate-idalib.py"
+        ```
 
-=== "Linux"
-    ```bash
-    export IDADIR="/opt/ida-9.2/"
-    ```
+    === "Windows"
+        ```cmd
+        python "C:\Program Files\IDA Professional 9.2\idalib\python\py-activate-idalib.py"
+        ```
 
-=== "Windows"
-    ```cmd
-    set IDADIR="C:\Program Files\IDA Professional 9.2\"
-    ```
-
-To make this permanent, add the export command to your shell profile (`~/.bashrc`, `~/.zshrc`, etc.).
-
-**Option B: Use idapro Python Package**
-
-If you already have the `idapro` Python package configured, skip setting `IDADIR`.
+    You can also pass `-d <ida-install-dir>` to point at a specific IDA installation explicitly.
 
 ### Step 2: Install the Package
 
@@ -106,12 +101,36 @@ When running inside IDA, call `Database.open()` with no arguments to get a handl
 - Check you're in the correct virtual environment
 
 **IDA SDK not found**
-- Verify `IDADIR` is set: `echo $IDADIR`
-- Ensure the path points to your actual IDA installation
+- Ensure you have run `py-activate-idalib.py` (or installed IDA via HCLI) so the install path is registered
+- Verify IDA Pro is properly installed
 
 **Database won't open**
 - Check the file path exists
 - Ensure the database was created with IDA Pro 9.0+
+
+## Advanced Usage
+
+### Overriding the IDA install directory with `IDADIR`
+
+To override the configured install directory for a single session or script — for example to test a specific IDA build, switch between multiple installed versions, or in CI — set the `IDADIR` environment variable before importing `idapro`:
+
+=== "macOS"
+    ```bash
+    export IDADIR="/Applications/IDA Professional 9.2.app/Contents/MacOS/"
+    ```
+
+=== "Linux"
+    ```bash
+    export IDADIR="/opt/ida-9.2/"
+    ```
+
+=== "Windows"
+    ```cmd
+    set IDADIR="C:\Program Files\IDA Professional 9.2\"
+    ```
+
+!!! warning
+    Set `IDADIR` only for the current shell session or inside the script that uses `idapro` — do **not** set it as a persistent/global environment variable (e.g. via `~/.bashrc`, `~/.zshrc`, or Windows System Properties). A globally exported `IDADIR` can interfere with the IDA GUI and other IDA tools on your system.
 
 ## Next Steps
 
