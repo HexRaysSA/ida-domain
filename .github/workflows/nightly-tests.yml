@@ -30,7 +30,7 @@ jobs:
       - name: Install IDA nightly
         run: |
           echo "Installing hcli..."
-          uv tool install ida-hcli==0.15.0
+          uv tool install ida-hcli==0.17.6
           echo "Downloading and installing IDA nightly..."
           mkdir -p /opt/ida/
           hcli ida install -d nightly@ida-pro:latest -l ${{ secrets.IDA_LICENSE_ID }} -i /opt/ida/
