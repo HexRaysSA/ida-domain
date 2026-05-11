@@ -1,3 +1,4 @@
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -212,4 +213,5 @@ def test_complex_variable_access(tiny_c_env):
 
     assert refs[2].access_type == LocalVariableAccessType.READ
     assert refs[2].context == LocalVariableContext.CALL_ARG
-    assert refs[2].code_line == 'use_val(v9);'
+    # IDA 9.3 emits `use_val(v9);`; 9.4+ may prepend the parameter name as `use_val(a1: v9);`.
+    assert re.fullmatch(r'use_val\((?:\w+:\s*)?v9\);', refs[2].code_line)
