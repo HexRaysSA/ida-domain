@@ -21,6 +21,7 @@ from ida_hexrays import (
 )
 from typing_extensions import TYPE_CHECKING, Any, Iterator, List, Optional, Tuple
 
+from . import _ida_compat
 from .base import (
     DatabaseEntity,
     DecompilerError,
@@ -4367,7 +4368,7 @@ class Microcode(DatabaseEntity):
         Raises:
             MicrocodeError: If microcode generation fails.
         """
-        mbr = ida_hexrays.mba_ranges_t(func)
+        mbr = _ida_compat.make_decomp_ranges(func)
         hf = ida_hexrays.hexrays_failure_t()
         ml = ida_hexrays.mlist_t()
         mba = ida_hexrays.gen_microcode(mbr, hf, ml, int(flags), int(maturity))
@@ -4403,7 +4404,7 @@ class Microcode(DatabaseEntity):
         Raises:
             MicrocodeError: If microcode generation fails.
         """
-        mbr = ida_hexrays.mba_ranges_t()
+        mbr = _ida_compat.make_decomp_ranges()
         mbr.ranges.push_back(ida_range.range_t(start_ea, end_ea))
         hf = ida_hexrays.hexrays_failure_t()
         ml = ida_hexrays.mlist_t()

@@ -20,6 +20,7 @@ from typing_extensions import TYPE_CHECKING, Any, Iterator, List, Optional
 import ida_domain
 import ida_domain.flowchart
 
+from . import _ida_compat
 from .base import (
     DatabaseEntity,
     DecompilerError,
@@ -843,7 +844,7 @@ class Functions(DatabaseEntity):
         Returns:
             True if this is an entry chunk, False otherwise
         """
-        return ida_funcs.is_func_entry(chunk)
+        return _ida_compat.is_function_entry(chunk.start_ea)
 
     def is_tail_chunk(self, chunk: func_t) -> bool:
         """
@@ -855,7 +856,7 @@ class Functions(DatabaseEntity):
         Returns:
             True if this is a tail chunk, False otherwise
         """
-        return ida_funcs.is_func_tail(chunk)
+        return _ida_compat.is_function_tail(chunk.start_ea)
 
     def get_flags(self, func: func_t) -> FunctionFlags:
         """
@@ -984,7 +985,7 @@ class Functions(DatabaseEntity):
         Returns:
             List of tail chunks, empty if not entry chunk
         """
-        if not ida_funcs.is_func_entry(func):
+        if not _ida_compat.is_function_entry(func.start_ea):
             return []
 
         tails = []
@@ -1018,7 +1019,7 @@ class Functions(DatabaseEntity):
         Returns:
             TailInfo with owner details, or None if not a tail chunk
         """
-        if not ida_funcs.is_func_tail(chunk):
+        if not _ida_compat.is_function_tail(chunk.start_ea):
             return None
 
         owner_name = ''
@@ -1070,9 +1071,9 @@ class Functions(DatabaseEntity):
         yield FunctionChunk(start_ea=func.start_ea, end_ea=func.end_ea, is_main=True)
 
         # Tail chunks
-        for tail in ida_funcs.func_tail_iterator_t(func):
-            if tail.start_ea != func.start_ea:  # Skip main chunk
-                yield FunctionChunk(start_ea=tail.start_ea, end_ea=tail.end_ea, is_main=False)
+        for tail_start, tail_end in _ida_compat.iter_func_tail_ranges(func):
+            if tail_start != func.start_ea:  # Skip main chunk
+                yield FunctionChunk(start_ea=tail_start, end_ea=tail_end, is_main=False)
 
     def is_chunk_at(self, ea: ea_t) -> bool:
         """
@@ -1101,7 +1102,7 @@ class Functions(DatabaseEntity):
         Returns:
             True if successful, False otherwise.
         """
-        return ida_funcs.set_func_cmt(func, comment, repeatable)
+        return _ida_compat.set_func_cmt_ea(func.start_ea, comment, repeatable)
 
     def get_comment(self, func: func_t, repeatable: bool = False) -> str:
         """
@@ -1115,7 +1116,7 @@ class Functions(DatabaseEntity):
         Returns:
             Comment text, or empty string if no comment exists.
         """
-        return ida_funcs.get_func_cmt(func, repeatable) or ''
+        return _ida_compat.get_func_cmt_ea(func.start_ea, repeatable) or ''
 
     def get_local_variables(self, func: func_t) -> List[LocalVariable]:
         """
