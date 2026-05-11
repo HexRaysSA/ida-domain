@@ -22,7 +22,6 @@ import ida_segment
 from ida_funcs import func_t
 from ida_idaapi import ea_t
 
-
 # --- ida_funcs ---------------------------------------------------------------
 
 if hasattr(ida_funcs, 'is_function_entry'):
