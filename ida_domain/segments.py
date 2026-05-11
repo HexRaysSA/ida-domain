@@ -127,7 +127,7 @@ class Segments(DatabaseEntity):
         Returns:
             True if the rename operation succeeded, False otherwise.
         """
-        return _ida_compat.set_segment_name(segment.start_ea, name)
+        return bool(_ida_compat.set_segment_name(segment.start_ea, name))
 
     def __len__(self) -> int:
         """
