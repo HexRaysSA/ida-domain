@@ -10,6 +10,7 @@ from ida_idaapi import ea_t
 from ida_segment import segment_t
 from typing_extensions import TYPE_CHECKING, Iterator, Optional
 
+from . import _ida_compat
 from .base import (
     DatabaseEntity,
     DatabaseError,
@@ -113,7 +114,7 @@ class Segments(DatabaseEntity):
         Returns:
             The segment name as a string, or an empty string if unavailable.
         """
-        return ida_segment.get_segm_name(segment)
+        return _ida_compat.get_segment_name(segment.start_ea)
 
     def set_name(self, segment: segment_t, name: str) -> bool:
         """
@@ -126,7 +127,7 @@ class Segments(DatabaseEntity):
         Returns:
             True if the rename operation succeeded, False otherwise.
         """
-        return ida_segment.set_segm_name(segment, name)
+        return bool(_ida_compat.set_segment_name(segment.start_ea, name))
 
     def __len__(self) -> int:
         """
@@ -159,9 +160,8 @@ class Segments(DatabaseEntity):
             segment_t if found, None otherwise
         """
         for seg_ea in idautils.Segments():
-            seg = ida_segment.getseg(seg_ea)
-            if seg and ida_segment.get_segm_name(seg) == name:
-                return seg
+            if _ida_compat.get_segment_name(seg_ea) == name:
+                return ida_segment.getseg(seg_ea)
         return None
 
     def add(
@@ -306,7 +306,7 @@ class Segments(DatabaseEntity):
         Returns:
             True if successful, False otherwise.
         """
-        return ida_segment.set_segm_addressing(segment, int(mode))
+        return _ida_compat.set_segment_addressing(segment.start_ea, int(mode))
 
     def get_size(self, segment: segment_t) -> int:
         """Calculate segment size in bytes."""
@@ -340,7 +340,7 @@ class Segments(DatabaseEntity):
         Returns:
             True if successful, False otherwise.
         """
-        ida_segment.set_segment_cmt(segment, comment, repeatable)
+        _ida_compat.set_segment_cmt_by_ea(segment.start_ea, comment, repeatable)
         return self.get_comment(segment, repeatable) == comment
 
     def get_comment(self, segment: segment_t, repeatable: bool = False) -> str:
@@ -355,4 +355,4 @@ class Segments(DatabaseEntity):
         Returns:
             Comment text, or empty string if no comment exists.
         """
-        return ida_segment.get_segment_cmt(segment, repeatable) or ''
+        return _ida_compat.get_segment_cmt_by_ea(segment.start_ea, repeatable) or ''
