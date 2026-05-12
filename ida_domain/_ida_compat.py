@@ -29,7 +29,7 @@ if hasattr(ida_funcs, 'is_function_entry'):
         return ida_funcs.is_function_entry(ea)
 else:
     def is_function_entry(ea: ea_t) -> bool:
-        chunk = ida_funcs.get_func(ea)
+        chunk = ida_funcs.get_fchunk(ea)
         return chunk is not None and ida_funcs.is_func_entry(chunk)
 
 
