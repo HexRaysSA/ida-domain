@@ -64,12 +64,12 @@ export IDADIR="/path/to/your/ida/installation"
 
 **Windows:**
 ```cmd
-set "IDADIR=C:\Program Files\IDA Pro 9.1"
+set "IDADIR=C:\Program Files\IDA Professional 9.1"
 ```
 
 **Example paths:**
 - **macOS:** `/Applications/IDA Professional 9.1.app/Contents/MacOS/`
-- **Windows:** `C:\Program Files\IDA Pro 9.1\`
+- **Windows:** `C:\Program Files\IDA Professional 9.1\`
 - **Linux:** `/opt/ida-9.1/`
 
 > **Important:** Set `IDADIR` only for the current shell session or inside the script that uses `idapro` — do **not** set it as a persistent/global environment variable (e.g. via `~/.bashrc`, `~/.zshrc`, or Windows System Properties). A globally exported `IDADIR` can interfere with the IDA GUI and other IDA tools on your system.
