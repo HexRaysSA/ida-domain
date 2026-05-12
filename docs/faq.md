@@ -10,7 +10,7 @@ Our first goal was to decouple the IDA Domain API from the SDK itself to be able
 Also, having it as a standalone package allows us to publish it independently and have a specific versioning cycle.
 
 ## Is the IDA Domain API published on PyPi
-Yes, the IDA Domain API is available directly using `pip install ida-domain`. You also need to register your IDA installation by running the `py-activate-idalib.py` script that ships with IDA (or by installing IDA via HCLI).
+Yes, the IDA Domain API is available directly using `pip install ida-domain`. You also need to register your IDA installation by running the `py-activate-idalib.py` script that ships with IDA (or by installing IDA via [HCLI](https://hcli.docs.hex-rays.com/)).
 See our [documentation](getting_started.md) how to get started.
 
 ## Why is the IDA Domain API only in Python?

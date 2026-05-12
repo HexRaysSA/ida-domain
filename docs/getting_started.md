@@ -13,7 +13,7 @@ This guide will take you from nothing to a working first script with the IDA Dom
 
 The `idapro` Python module needs to know where IDA Pro is installed. The location is stored in a per-user config file (`%APPDATA%\Hex-Rays\IDA Pro\ida-config.json` on Windows, `~/.idapro/ida-config.json` on Linux/macOS).
 
-- **If IDA was installed via HCLI:** the install path is configured automatically — no further setup is required.
+- **If IDA was installed via [HCLI](https://hcli.docs.hex-rays.com/):** the install path is configured automatically — no further setup is required.
 - **Otherwise:** run the `py-activate-idalib.py` activation script that ships with IDA once. It auto-detects the install directory from its own location and writes it to the per-user config. The script normally lives in `<IDA install dir>/idalib/python/`:
 
     === "macOS"
@@ -126,7 +126,7 @@ To override the configured install directory for a single session or script — 
 
 === "Windows"
     ```cmd
-    set IDADIR="C:\Program Files\IDA Professional 9.2\"
+    set "IDADIR=C:\Program Files\IDA Professional 9.2"
     ```
 
 !!! warning

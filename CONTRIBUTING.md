@@ -46,7 +46,7 @@ Feature requests are welcome! Please provide:
    cd ida-domain
    ```
 
-2. **Register your IDA installation** (one-time setup, unless IDA was installed via HCLI):
+2. **Register your IDA installation** (one-time setup, unless IDA was installed via [HCLI](https://hcli.docs.hex-rays.com/)):
    ```bash
    python "[Your IDA Installation Directory]/idalib/python/py-activate-idalib.py"
    ```
