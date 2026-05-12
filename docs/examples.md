@@ -84,5 +84,5 @@ python example_script.py
 
 Make sure you have:
 
-1. Set the `IDADIR` environment variable
+1. Registered your IDA installation so the `idapro` module can find it. If IDA was installed via [HCLI](https://hcli.docs.hex-rays.com/) this is already done; otherwise run the `py-activate-idalib.py` script that ships with IDA once. See [Getting Started](getting_started.md) for details.
 2. Installed the ida-domain package

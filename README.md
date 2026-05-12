@@ -30,24 +30,49 @@ The Domain API sits on top of the IDA Python SDK, complementing it rather than r
 
 **IDA Pro Version:** The IDA Domain library requires IDA Pro 9.1.0 or later.
 
-Set the `IDADIR` environment variable to point to your IDA installation directory:
+The `idapro` Python module needs to know where IDA Pro is installed. The location is stored in a per-user config file (`%APPDATA%\Hex-Rays\IDA Pro\ida-config.json` on Windows, `~/.idapro/ida-config.json` on Linux/macOS).
 
-```bash
-export IDADIR="[IDA Installation Directory]"
-```
+- **If IDA was installed via [HCLI](https://hcli.docs.hex-rays.com/):** the install path is configured automatically — no further setup is required.
+- **Otherwise:** run the `py-activate-idalib.py` activation script that ships with IDA once. It auto-detects the install directory from its own location and writes it to the per-user config. The script normally lives in `<IDA install dir>/idalib/python/`:
 
-**Example:**
-```bash
-export IDADIR="/Applications/IDA Professional 9.1.app/Contents/MacOS/"
-```
+  **Linux/macOS:**
+  ```bash
+  python3 "/path/to/ida/idalib/python/py-activate-idalib.py"
+  ```
 
-> **Note:** If you have already installed and configured the `idapro` Python package, setting `IDADIR` is not required.
+  **Windows:**
+  ```cmd
+  python "C:\Program Files\IDA Professional 9.1\idalib\python\py-activate-idalib.py"
+  ```
+
+  You can also pass `-d <ida-install-dir>` to point at a specific IDA installation explicitly.
 
 ### Install from PyPI
 
 ```bash
 pip install ida-domain
 ```
+
+### Overriding the IDA install directory with `IDADIR`
+
+To override the configured install directory for a single session or script — for example to test a specific IDA build, switch between multiple installed versions, or in CI — set the `IDADIR` environment variable before importing `idapro`:
+
+**Linux/macOS:**
+```bash
+export IDADIR="/path/to/your/ida/installation"
+```
+
+**Windows:**
+```cmd
+set "IDADIR=C:\Program Files\IDA Professional 9.1"
+```
+
+**Example paths:**
+- **macOS:** `/Applications/IDA Professional 9.1.app/Contents/MacOS/`
+- **Windows:** `C:\Program Files\IDA Professional 9.1\`
+- **Linux:** `/opt/ida-9.1/`
+
+> **Important:** Set `IDADIR` only for the current shell session or inside the script that uses `idapro` — do **not** set it as a persistent/global environment variable (e.g. via `~/.bashrc`, `~/.zshrc`, or Windows System Properties). A globally exported `IDADIR` can interfere with the IDA GUI and other IDA tools on your system.
 
 ## 🎯 Usage Example
 
@@ -126,8 +151,6 @@ uv run pre-commit install
 ```
 
 ## 🧪 Testing
-
-Set the `IDADIR` environment variable to point to your IDA installation directory:
 
 Run the test suite using pytest:
 
