@@ -48,6 +48,14 @@ def test_iterables(test_env):
     # check_iterations(types)
 
 
+def test_examples_path():
+    examples = ida_domain.examples_path()
+
+    assert examples.is_dir()
+    assert examples.joinpath('quick_example.py').is_file()
+    assert examples.joinpath('ida-python-equivalents', 'decompiler', 'vds1.py').is_file()
+
+
 def test_api_examples():
     """
     Make sure the examples are running fine

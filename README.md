@@ -188,6 +188,14 @@ Check the [`examples/`](https://github.com/HexRaysSA/ida-domain/tree/main/exampl
 uv run python examples/analyze_database.py
 ```
 
+Installed and editable packages can locate the examples programmatically:
+
+```python
+from ida_domain import examples_path
+
+examples = examples_path()
+```
+
 ## Contributing
 
 We welcome contributions! Please see our [Contributing Guidelines](https://github.com/HexRaysSA/ida-domain/blob/main/CONTRIBUTING.md) for details on how to:
