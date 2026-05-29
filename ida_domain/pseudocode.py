@@ -2586,6 +2586,7 @@ class PseudocodeFunction:
             List of classified references in walk order.
         """
         refs: List[LocalVariableReference] = []
+        sv = None  # pseudocode lines, fetched lazily and reused across refs
         for expr in self.find_variables(var_index=var_index, var_name=var_name):
             parent_item = self.find_parent_of(expr)
             parent = parent_item if isinstance(parent_item, PseudocodeExpression) else None
@@ -2599,7 +2600,8 @@ class PseudocodeFunction:
             coords = self._raw.find_item_coords(expr.raw_expr)
             if coords and len(coords) >= 2:
                 line_number = coords[1]
-                sv = self._raw.get_pseudocode()
+                if sv is None:
+                    sv = self._raw.get_pseudocode()
                 if 0 <= line_number < len(sv):
                     code_line = ida_lines.tag_remove(sv[line_number].line).strip()
 
@@ -2855,11 +2857,12 @@ class LocalVariableReference:
         being written, ``assignment_rhs`` is the expression whose value it
         receives.
         """
-        if self.assignment is None:
+        asg = self.assignment
+        if asg is None:
             return None
         if self.access_type != LocalVariableAccessType.WRITE:
             return None
-        return self.assignment.y
+        return asg.y
 
     @property
     def assignment_rhs_lvar(self) -> Optional[LocalVariable]:
