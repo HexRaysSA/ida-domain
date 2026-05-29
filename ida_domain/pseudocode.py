@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import logging
 from contextlib import contextmanager
-from enum import IntEnum, IntFlag
+from dataclasses import dataclass
+from enum import Enum, IntEnum, IntFlag
 
 import ida_hexrays
 import ida_idaapi
@@ -2385,6 +2386,22 @@ class PseudocodeFunction:
             return PseudocodeExpression(raw.cexpr, self)
         return PseudocodeInstruction(raw.cinsn, self)
 
+    def walk_ancestors_of(
+        self,
+        item: PseudocodeExpression,
+    ) -> Iterator[PseudocodeExpression]:
+        """Yield ancestor expressions of ``item`` from innermost to outermost.
+
+        Walks lazily via :meth:`find_parent_of`, so callers that look for
+        one specific ancestor pay only for the depth they actually visit.
+        Stops at the first non-expression ancestor (a statement-level
+        ``cinsn_t`` like a return or if-statement).
+        """
+        cur = self.find_parent_of(item)
+        while isinstance(cur, PseudocodeExpression):
+            yield cur
+            cur = self.find_parent_of(cur)
+
     # -- convenience finders -----------------------------------------------
 
     def find_expression(
@@ -2547,6 +2564,57 @@ class PseudocodeFunction:
             results.append(expr)
         return results
 
+    def find_variable_references(
+        self,
+        var_index: Optional[int] = None,
+        var_name: Optional[str] = None,
+    ) -> List[LocalVariableReference]:
+        """Find all references to a local variable, with access classification.
+
+        Like :meth:`find_variables`, but each returned object is a
+        :class:`LocalVariableReference` that classifies the access
+        (read/write/address-taken), tags the usage context, and exposes the
+        surrounding ctree nodes (``parent``, lazy ``assignment``,
+        ``walk_ancestors()``) for deeper analyses like taint tracking or
+        type inference.
+
+        Args:
+            var_index: If provided, restrict to references of this variable index.
+            var_name: If provided, restrict to references of this variable name.
+
+        Returns:
+            List of classified references in walk order.
+        """
+        refs: List[LocalVariableReference] = []
+        for expr in self.find_variables(var_index=var_index, var_name=var_name):
+            parent_item = self.find_parent_of(expr)
+            parent = parent_item if isinstance(parent_item, PseudocodeExpression) else None
+
+            access_type = _classify_lvar_access(self, expr, parent)
+            context = _classify_lvar_context(self, expr, parent)
+            ea = expr.ea if expr.ea != ida_idaapi.BADADDR else None
+
+            line_number: Optional[int] = None
+            code_line: Optional[str] = None
+            coords = self._raw.find_item_coords(expr.raw_expr)
+            if coords and len(coords) >= 2:
+                line_number = coords[1]
+                sv = self._raw.get_pseudocode()
+                if 0 <= line_number < len(sv):
+                    code_line = ida_lines.tag_remove(sv[line_number].line).strip()
+
+            refs.append(LocalVariableReference(
+                access_type=access_type,
+                context=context,
+                ea=ea,
+                line_number=line_number,
+                code_line=code_line,
+                expr=expr,
+                parent=parent,
+                cfunc=self,
+            ))
+        return refs
+
     def find_objects(self, obj_ea: Optional[int] = None) -> List[PseudocodeExpression]:
         """Find all object reference expressions, optionally filtered by address.
 
@@ -2616,6 +2684,388 @@ class PseudocodeFunction:
             f'PseudocodeFunction(ea=0x{self._raw.entry_ea:x}, '
             f'maturity={self.maturity.name})'
         )
+
+
+# ============================================================================
+# Ctree Assignment Detection
+# ============================================================================
+#
+# The hexrays ctree represents decompiled code as nested expression trees.
+# Determining write access requires analyzing the tree structure.
+#
+# Direct assignment: v9 = 10
+#
+#   cot_asg
+#   ├── x: cot_var (v9)     ← variable is direct child of assignment
+#   └── y: cot_num (10)
+#
+# Nested assignment: HIWORD(v9) = a1  (helper rendered as a call)
+#
+#   cot_asg
+#   ├── x: cot_call
+#   │       ├── x: cot_helper (HIWORD)
+#   │       └── a[0]: cot_var (v9)   ← variable lives in cot_call.a, not in cot_helper
+#   └── y: cot_var (a1)
+#
+# Other nested patterns include casts, pointer dereferences, and array indexing:
+#   *ptr = x        →  cot_ptr wraps the variable
+#   arr[i] = x      →  cot_idx wraps the variable
+#   (cast)v = x     →  cot_cast wraps the variable
+#
+# Problem:
+#   A direct parent check (parent.op == cot_asg and parent.x == expr) only
+#   handles direct assignments. In nested cases, the variable's immediate
+#   parent is the wrapper expression (helper/cast/ptr), not the assignment.
+#
+# Solution:
+#   Walk UP from the variable via ``cfunc.find_parent_of`` repeatedly,
+#   stopping at the first ancestor that is an assignment. The direction
+#   we arrived from (``asg.x`` vs ``asg.y``) tells us which subtree
+#   contains the variable, so a single walk does double duty.
+#
+#   Walking up is preferred over walking DOWN through the assignment's
+#   left subtree because ``find_parent_of`` already understands every
+#   ctree storage slot (``.x/.y/.z`` plus call-argument vectors), so we
+#   don't have to enumerate them manually — important for cases like
+#   ``BYTE8(v) += …`` where the variable hides inside ``cot_call.a``.
+#
+# Without this logic, `HIWORD(v9) = a1` incorrectly reports `v9` as READ
+# because the immediate parent is cot_helper. This affects data flow
+# analysis and variable access classification.
+#
+# Performance characteristics:
+#   - Walk-up: O(d) where d = ancestor depth, typically 1-5 levels
+#   - Invoked once per variable reference during classification
+#
+# ============================================================================
+
+
+class LocalVariableAccessType(IntEnum):
+    """Type of access to a local variable."""
+
+    READ = 1
+    """Variable value is read"""
+    WRITE = 2
+    """Variable value is modified"""
+    ADDRESS = 3
+    """Address of variable is taken (&var)"""
+
+
+class LocalVariableContext(Enum):
+    """Context where a local variable is referenced."""
+
+    ASSIGNMENT = 'assignment'
+    """var = expr or expr = var"""
+    CONDITION = 'condition'
+    """if (var), while (var), etc."""
+    CALL_ARG = 'call_arg'
+    """func(var)"""
+    RETURN = 'return'
+    """return var"""
+    ARITHMETIC = 'arithmetic'
+    """var + 1, var * 2, etc."""
+    COMPARISON = 'comparison'
+    """var == x, var < y, etc."""
+    ARRAY_INDEX = 'array_index'
+    """arr[var] or var[i]"""
+    POINTER_DEREF = 'pointer_deref'
+    """*var or var->field"""
+    CAST = 'cast'
+    """(type)var"""
+    OTHER = 'other'
+    """Other contexts"""
+
+
+@dataclass
+class LocalVariable:
+    """Represents a local variable or argument in a function."""
+
+    index: int
+    """Variable index in function"""
+    name: str
+    """Variable name"""
+    type: Optional[tinfo_t]
+    """Type information"""
+    size: int
+    """Size in bytes"""
+    is_argument: bool
+    """True if is a function argument"""
+    is_result: bool
+    """True if is a return value variable"""
+
+    @property
+    def type_str(self) -> str:
+        """Get string representation of the type."""
+        return str(self.type) if self.type else ''
+
+    @classmethod
+    def _from_raw(cls, raw_cfunc: Any, idx: int) -> LocalVariable:
+        """Build a LocalVariable from a raw cfunc and lvar index."""
+        raw = raw_cfunc.lvars[idx]
+        return cls(
+            index=idx,
+            name=raw.name,
+            type=raw.tif,
+            size=raw.width,
+            is_argument=raw.is_arg_var,
+            is_result=raw.is_result_var,
+        )
+
+
+@dataclass
+class LocalVariableReference:
+    """Reference to a local variable in pseudocode."""
+
+    access_type: LocalVariableAccessType
+    """How variable is accessed"""
+    context: Optional[LocalVariableContext] = None
+    """Usage context"""
+    ea: Optional[ea_t] = None
+    """Binary address if mappable"""
+    line_number: Optional[int] = None
+    """Line number in pseudocode"""
+    code_line: Optional[str] = None
+    """The pseudocode line containing the reference"""
+    expr: Optional[PseudocodeExpression] = None
+    """Wrapped ``cot_var`` expression at this reference site."""
+    parent: Optional[PseudocodeExpression] = None
+    """Immediate parent expression in the ctree, if any."""
+    cfunc: Optional[PseudocodeFunction] = None
+    """Owning decompiled function. Kept on the reference so the wrapped
+    ctree nodes above stay valid for the lifetime of this object."""
+
+    @property
+    def assignment(self) -> Optional[PseudocodeExpression]:
+        """Nearest enclosing assignment expression (``cot_asg`` or compound
+        assignment), if any. Set for both read and write references — for a
+        read, this is the assignment the read participates in (e.g. on the
+        RHS); for a write, this is the assignment that performs the write.
+        """
+        for anc in self.walk_ancestors():
+            if anc.is_assignment:
+                return anc
+        return None
+
+    @property
+    def assignment_rhs(self) -> Optional[PseudocodeExpression]:
+        """Right-hand side of the enclosing assignment, if this reference
+        is on the left side of one.
+
+        Useful for taint propagation and value tracking: when this lvar is
+        being written, ``assignment_rhs`` is the expression whose value it
+        receives.
+        """
+        if self.assignment is None:
+            return None
+        if self.access_type != LocalVariableAccessType.WRITE:
+            return None
+        return self.assignment.y
+
+    @property
+    def assignment_rhs_lvar(self) -> Optional[LocalVariable]:
+        """The local variable on the RHS of the enclosing assignment, if any.
+
+        Resolves the common taint/aliasing pattern (``v5 = v3``) directly to
+        a :class:`LocalVariable`. Returns ``None`` if there's no enclosing
+        assignment, this reference is not on the LHS, or the RHS is anything
+        other than a plain variable.
+        """
+        rhs = self.assignment_rhs
+        if rhs is None or not rhs.is_variable or self.cfunc is None:
+            return None
+        idx = rhs.variable_index
+        if idx is None:
+            return None
+        return LocalVariable._from_raw(self.cfunc.raw_cfunc, idx)
+
+    @property
+    def containing_call(self) -> Optional[PseudocodeExpression]:
+        """Nearest enclosing call expression, if any.
+
+        Set when this reference is (transitively) inside a ``cot_call``
+        argument list. Lets callers identify the call site and inspect the
+        callee or sibling arguments without re-walking the tree.
+        """
+        for anc in self.walk_ancestors():
+            if anc.is_call:
+                return anc
+        return None
+
+    @property
+    def containing_call_args_lvars(self) -> Optional[List[Optional[LocalVariable]]]:
+        """Local variables passed as arguments to the enclosing call.
+
+        When this reference is inside a call's argument list, returns one
+        entry per arg position: a :class:`LocalVariable` when the arg is a
+        variable (directly, or wrapped in transparent ``cot_cast`` /
+        ``cot_ref`` nodes — ``(int)v``, ``&v``, ``(int)&v`` all resolve
+        to ``v``), ``None`` for arg positions occupied by something else
+        (a constant, an arithmetic expression, a call result, etc.).
+
+        Returns ``None`` when this reference is not inside a call.
+        """
+        call = self.containing_call
+        if call is None or self.cfunc is None:
+            return None
+        args = call.call_args
+        if args is None:
+            return None
+        raw_cfunc = self.cfunc.raw_cfunc
+        result: List[Optional[LocalVariable]] = []
+        for arg in args:
+            # Peel transparent wrappers — (int)v and &v still refer to v.
+            inner: Optional[PseudocodeExpression] = arg.expression
+            while inner is not None and inner.op in (
+                PseudocodeExpressionOp.CAST,
+                PseudocodeExpressionOp.REF,
+            ):
+                inner = inner.x
+            if inner is not None and inner.is_variable and inner.variable_index is not None:
+                result.append(LocalVariable._from_raw(raw_cfunc, inner.variable_index))
+            else:
+                result.append(None)
+        return result
+
+    def walk_ancestors(self) -> Iterator[PseudocodeExpression]:
+        """Yield ancestor expressions from innermost (parent) to outermost.
+
+        Thin delegate over :meth:`PseudocodeFunction.walk_ancestors_of`.
+        """
+        if self.cfunc is None or self.expr is None:
+            return
+        yield from self.cfunc.walk_ancestors_of(self.expr)
+
+
+# Parent operators that wrap a variable on the write side of an enclosing
+# assignment (e.g. ``HIWORD(v) = ...``, ``*v = ...``, ``v[i] = ...``).
+# When the immediate parent is one of these, we must walk up to find the
+# assignment and verify the variable is in its left subtree.
+_LVAR_WRITE_WRAPPING_OPS = frozenset({
+    PseudocodeExpressionOp.CALL,
+    PseudocodeExpressionOp.HELPER,
+    PseudocodeExpressionOp.CAST,
+    PseudocodeExpressionOp.PTR,
+    PseudocodeExpressionOp.MEMPTR,
+    PseudocodeExpressionOp.MEMREF,
+    PseudocodeExpressionOp.ADD,
+    PseudocodeExpressionOp.IDX,
+})
+
+
+def _is_in_left_subtree(
+    cfunc: PseudocodeFunction,
+    asg: PseudocodeExpression,
+    target: PseudocodeExpression,
+) -> bool:
+    """Return True if `target` lives anywhere under `asg.x`.
+
+    Walks UP from ``target`` looking for either ``asg.x`` (target is in
+    the left subtree) or ``asg`` itself (target lives in .y/.z instead).
+    Using ``walk_ancestors_of`` avoids manually enumerating every ctree
+    storage slot — ``find_parent_of`` already knows the layout, including
+    how Hex-Rays renders helpers like ``BYTE8(v)`` as
+    ``cot_call(cot_helper, [v])`` where ``v`` sits in the call's ``.a``
+    rather than a regular operand slot.
+    """
+    asg_x = asg.x
+    if asg_x is None:
+        return False
+    if target.raw_expr == asg_x.raw_expr:
+        return True
+    asg_raw = asg.raw_expr
+    asg_x_raw = asg_x.raw_expr
+    for anc in cfunc.walk_ancestors_of(target):
+        if anc.raw_expr == asg_x_raw:
+            return True
+        if anc.raw_expr == asg_raw:
+            return False
+    return False
+
+
+def _has_write_ancestor(cfunc: PseudocodeFunction, expr: PseudocodeExpression) -> bool:
+    """Walk ancestors of `expr`; return True if any ancestor is an assignment
+    and `expr` lives in that assignment's left subtree."""
+    for anc in cfunc.walk_ancestors_of(expr):
+        if anc.is_assignment:
+            return _is_in_left_subtree(cfunc, anc, expr)
+    return False
+
+
+def _classify_lvar_access(
+    cfunc: PseudocodeFunction,
+    expr: PseudocodeExpression,
+    parent: Optional[PseudocodeExpression],
+) -> LocalVariableAccessType:
+    """Determine read/write/address-taken classification for a variable reference."""
+    if parent is None:
+        return LocalVariableAccessType.READ
+
+    # Immediate parent is an assignment and expr is its direct LHS.
+    if parent.is_assignment and parent.raw_expr.x == expr.raw_expr:
+        return LocalVariableAccessType.WRITE
+
+    # Pre/post increment/decrement self-mutate their operand: ``v++``, ``--v``
+    # write to v, regardless of any enclosing expression.
+    if parent.op.is_prepost:
+        return LocalVariableAccessType.WRITE
+
+    # &var — may itself be on the write side of an enclosing assignment.
+    if parent.op == PseudocodeExpressionOp.REF:
+        if _has_write_ancestor(cfunc, expr):
+            return LocalVariableAccessType.WRITE
+        return LocalVariableAccessType.ADDRESS
+
+    # Variable wrapped in helper/cast/ptr/idx/etc. — check enclosing assignment.
+    if parent.op in _LVAR_WRITE_WRAPPING_OPS:
+        if _has_write_ancestor(cfunc, expr):
+            return LocalVariableAccessType.WRITE
+
+    return LocalVariableAccessType.READ
+
+
+def _classify_lvar_context(
+    cfunc: PseudocodeFunction,
+    expr: PseudocodeExpression,
+    parent: Optional[PseudocodeExpression],
+) -> LocalVariableContext:
+    """Determine usage context (assignment / call_arg / comparison / etc.)."""
+    if parent is None:
+        return LocalVariableContext.OTHER
+
+    pop = parent.op
+    if pop.is_assignment:
+        return LocalVariableContext.ASSIGNMENT
+    if pop == PseudocodeExpressionOp.CALL:
+        if _has_write_ancestor(cfunc, expr):
+            return LocalVariableContext.ASSIGNMENT
+        return LocalVariableContext.CALL_ARG
+    if pop.is_relational:
+        return LocalVariableContext.COMPARISON
+    if pop.is_arithmetic:
+        if _has_write_ancestor(cfunc, expr):
+            return LocalVariableContext.ASSIGNMENT
+        return LocalVariableContext.ARITHMETIC
+    if pop == PseudocodeExpressionOp.IDX:
+        if _has_write_ancestor(cfunc, expr):
+            return LocalVariableContext.ASSIGNMENT
+        return LocalVariableContext.ARRAY_INDEX
+    if pop in (
+        PseudocodeExpressionOp.PTR,
+        PseudocodeExpressionOp.MEMPTR,
+        PseudocodeExpressionOp.MEMREF,
+    ):
+        if _has_write_ancestor(cfunc, expr):
+            return LocalVariableContext.ASSIGNMENT
+        return LocalVariableContext.POINTER_DEREF
+    if pop == PseudocodeExpressionOp.CAST:
+        if _has_write_ancestor(cfunc, expr):
+            return LocalVariableContext.ASSIGNMENT
+        return LocalVariableContext.CAST
+    if pop in (PseudocodeExpressionOp.REF, PseudocodeExpressionOp.HELPER):
+        if _has_write_ancestor(cfunc, expr):
+            return LocalVariableContext.ASSIGNMENT
+        return LocalVariableContext.OTHER
+    return LocalVariableContext.OTHER
 
 
 # ---------------------------------------------------------------------------

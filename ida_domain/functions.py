@@ -3,17 +3,15 @@ from __future__ import annotations
 import logging
 import warnings
 from dataclasses import dataclass
-from enum import Enum, Flag, IntEnum
+from enum import Flag
 
 import ida_bytes
 import ida_funcs
-import ida_hexrays
 import ida_lines
 import ida_name
 import ida_typeinf
 from ida_funcs import func_t
 from ida_idaapi import BADADDR, ea_t
-from ida_typeinf import tinfo_t
 from ida_ua import insn_t
 from typing_extensions import TYPE_CHECKING, Any, Iterator, List, Optional
 
@@ -30,49 +28,19 @@ from .base import (
     decorate_all_methods,
 )
 from .flowchart import FlowChart, FlowChartFlags
+from .pseudocode import (
+    LocalVariable,
+    LocalVariableAccessType,
+    LocalVariableContext,
+    LocalVariableReference,
+    PseudocodeFunction,
+)
 
 if TYPE_CHECKING:
     from .database import Database
     from .microcode import MicroBlockArray
-    from .pseudocode import PseudocodeFunction
 
 logger = logging.getLogger(__name__)
-
-
-class LocalVariableAccessType(IntEnum):
-    """Type of access to a local variable."""
-
-    READ = 1
-    """Variable value is read"""
-    WRITE = 2
-    """Variable value is modified"""
-    ADDRESS = 3
-    """Address of variable is taken (&var)"""
-
-
-class LocalVariableContext(Enum):
-    """Context where local variable is referenced."""
-
-    ASSIGNMENT = 'assignment'
-    """var = expr or expr = var"""
-    CONDITION = 'condition'
-    """if (var), while (var), etc."""
-    CALL_ARG = 'call_arg'
-    """func(var)"""
-    RETURN = 'return'
-    """return var"""
-    ARITHMETIC = 'arithmetic'
-    """var + 1, var * 2, etc."""
-    COMPARISON = 'comparison'
-    """var == x, var < y, etc."""
-    ARRAY_INDEX = 'array_index'
-    """arr[var] or var[i]"""
-    POINTER_DEREF = 'pointer_deref'
-    """*var or var->field"""
-    CAST = 'cast'
-    """(type)var"""
-    OTHER = 'other'
-    """Other contexts"""
 
 
 class FunctionFlags(Flag):
@@ -121,45 +89,6 @@ class FunctionFlags(Flag):
 
 
 @dataclass
-class LocalVariable:
-    """Represents a local variable or argument in a function."""
-
-    index: int
-    """Variable index in function"""
-    name: str
-    """Variable name"""
-    type: Optional[tinfo_t]
-    """Type information"""
-    size: int
-    """Size in bytes"""
-    is_argument: bool
-    """True if is a function argument"""
-    is_result: bool
-    """True if is a return value variable"""
-
-    @property
-    def type_str(self) -> str:
-        """Get string representation of the type."""
-        return str(self.type) if self.type else ''
-
-
-@dataclass
-class LocalVariableReference:
-    """Reference to a local variable in pseudocode."""
-
-    access_type: LocalVariableAccessType
-    """How variable is accessed"""
-    context: Optional[LocalVariableContext] = None
-    """Usage context"""
-    ea: Optional[ea_t] = None
-    """Binary address if mappable"""
-    line_number: Optional[int] = None
-    """Line number in pseudocode"""
-    code_line: Optional[str] = None
-    """The pseudocode line containing the reference"""
-
-
-@dataclass
 class StackPoint:
     """Stack pointer change information."""
 
@@ -189,338 +118,6 @@ class FunctionChunk:
     """End address of the function chunk"""
     is_main: bool
     """True if is the function main chunk"""
-
-
-# ============================================================================
-# Ctree Assignment Detection
-# ============================================================================
-#
-# The hexrays ctree represents decompiled code as nested expression trees.
-# Determining write access requires analyzing the tree structure.
-#
-# Direct assignment: v9 = 10
-#
-#   cot_asg
-#   ├── x: cot_var (v9)     ← variable is direct child of assignment
-#   └── y: cot_num (10)
-#
-# Nested assignment: HIWORD(v9) = a1  (helper function wrapping variable)
-#
-#   cot_asg
-#   ├── x: cot_helper (HIWORD)
-#   │       └── a[0]: cot_var (v9)   ← variable is nested in left subtree
-#   └── y: cot_var (a1)
-#
-# Other nested patterns include casts, pointer dereferences, and array indexing:
-#   *ptr = x        →  cot_ptr wraps the variable
-#   arr[i] = x      →  cot_idx wraps the variable
-#   (cast)v = x     →  cot_cast wraps the variable
-#
-# Problem:
-#   A direct parent check (parent.op == cot_asg and parent.x == expr) only
-#   handles direct assignments. In nested cases, the variable's immediate
-#   parent is the wrapper expression (helper/cast/ptr), not the assignment.
-#
-# Solution:
-#   Two-direction traversal:
-#   1. UP: Traverse ancestor chain to locate an assignment operator
-#   2. DOWN: Verify the variable resides in the assignment's left subtree
-#
-# Without this logic, `HIWORD(v9) = a1` incorrectly reports `v9` as READ
-# because the immediate parent is cot_helper. This affects data flow analysis
-# and variable access classification.
-#
-# Performance characteristics:
-#   - Up-traversal: O(d) where d = ancestor depth, typically 1-5 levels
-#   - Down-traversal: O(n) where n = nodes in left subtree, typically 1-10
-#   - Invoked once per variable reference during ctree visitor traversal
-#
-# ============================================================================
-
-# All assignment operators in IDA hexrays ctree
-_ASSIGNMENT_OPS = (
-    ida_hexrays.cot_asg,
-    ida_hexrays.cot_asgadd,
-    ida_hexrays.cot_asgmul,
-    ida_hexrays.cot_asgsub,
-    ida_hexrays.cot_asgsdiv,
-    ida_hexrays.cot_asgudiv,
-    ida_hexrays.cot_asgsmod,
-    ida_hexrays.cot_asgumod,
-    ida_hexrays.cot_asgbor,
-    ida_hexrays.cot_asgxor,
-    ida_hexrays.cot_asgband,
-    ida_hexrays.cot_asgsshr,
-    ida_hexrays.cot_asgushr,
-    ida_hexrays.cot_asgshl,
-)
-
-
-class _LVarRefsVisitor(ida_hexrays.ctree_parentee_t):
-    """Visitor to find references to a specific local variable in pseudocode.
-
-    Uses ctree_parentee_t which properly maintains parent information.
-    """
-
-    def __init__(self, cfunc: Any, lvar_index: int):
-        super().__init__()
-        self.cfunc = cfunc
-        self.lvar_index = lvar_index
-        self.refs: List[LocalVariableReference] = []
-
-    def visit_expr(self, expr: Any) -> int:
-        """Visit expression nodes to find variable references."""
-        if expr.op == ida_hexrays.cot_var:
-            # Found any variable - check if it's our target
-            if expr.v.idx == self.lvar_index:
-                # Found a reference to our variable
-                # Use parent_expr() to get the parent expression
-                parent = self.parent_expr()
-
-                access_type = self._determine_access_type(expr, parent)
-                context = self._determine_context(expr, parent)
-                ea = expr.ea if expr.ea != BADADDR else None
-
-                # Extract line information
-                line_number = None
-                code_line = None
-
-                # Get line coordinates from the expression
-                coords = self.cfunc.find_item_coords(expr)
-                if coords and len(coords) >= 2:
-                    line_number = coords[1]  # y coordinate is line number
-
-                    # Get the actual pseudocode line
-                    sv = self.cfunc.get_pseudocode()
-                    if 0 <= line_number < len(sv):
-                        code_line = sv[line_number].line
-                        # Remove IDA color/formatting tags
-                        code_line = ida_lines.tag_remove(code_line).strip()
-
-                ref = LocalVariableReference(
-                    access_type=access_type,
-                    context=context,
-                    ea=ea,
-                    line_number=line_number,
-                    code_line=code_line,
-                )
-                self.refs.append(ref)
-        return 0
-
-    def _is_on_left_side_of_assignment(self, asg_expr: Any, child_expr: Any) -> bool:
-        """Check if child_expr is in the left subtree of an assignment.
-
-        Performs a depth-first traversal from the assignment's left operand (.x)
-        to determine if child_expr is reachable. If reachable, the variable is
-        on the write side of the assignment.
-
-        This handles nested patterns where the variable is wrapped in expressions:
-            HIWORD(v9) = a1  →  v9 is inside cot_helper, which is in .x
-            *ptr = val       →  ptr is inside cot_ptr, which is in .x
-
-        Args:
-            asg_expr: An assignment expression (cot_asg or compound assignment).
-            child_expr: The expression to search for in the left subtree.
-
-        Returns:
-            True if child_expr is found in the left subtree (write side).
-
-        Performance:
-            O(n) where n = number of nodes in left subtree. Typically 1-10 nodes
-            for common patterns like helpers, casts, or pointer dereferences.
-        """
-        # asg_expr might be a citem_t, we need to access the cexpr_t
-        # Check if it's an expression type with x attribute
-        if not hasattr(asg_expr, 'x'):
-            # Try to get the expression from citem_t
-            if hasattr(asg_expr, 'cexpr'):
-                asg_expr = asg_expr.cexpr
-            else:
-                return False
-
-        # Get the left side of the assignment
-        left = asg_expr.x
-        if left is None:
-            return False
-
-        # Use a simple BFS/DFS to find if child_expr is in the left subtree
-        stack = [left]
-        while stack:
-            current = stack.pop()
-            if current is None:
-                continue
-            # Check if this is our target expression (by object identity or ea)
-            if current == child_expr:
-                return True
-            if hasattr(current, 'ea') and hasattr(child_expr, 'ea'):
-                if current.ea == child_expr.ea and current.op == child_expr.op:
-                    return True
-            # Traverse children based on expression type
-            if hasattr(current, 'x') and current.x is not None:
-                stack.append(current.x)
-            if hasattr(current, 'y') and current.y is not None:
-                stack.append(current.y)
-            if hasattr(current, 'z') and current.z is not None:
-                stack.append(current.z)
-        return False
-
-    def _find_assignment_in_ancestors(self) -> tuple:
-        """Find an assignment operator in the ancestor chain.
-
-        Traverses from the immediate parent upward through the ancestor chain
-        to locate an assignment operator. When found, determines whether the
-        current expression is on the left (write) or right (read) side.
-
-        This enables correct access type detection for nested patterns:
-            HIWORD(v9) = a1  →  parent of v9 is cot_helper, not assignment
-                             →  ancestor traversal finds the cot_asg above
-
-        Uses self.parents vector maintained by ctree_parentee_t during traversal.
-
-        Returns:
-            Tuple of (assignment_expr, is_on_left_side):
-                - (expr, True) if in left subtree (write side)
-                - (expr, False) if in right subtree (read side)
-                - (None, False) if no assignment found in ancestors
-
-        Performance:
-            O(d) where d = ancestor depth. Typically 1-5 levels for common
-            patterns. The parents vector is already maintained by the base
-            class during tree traversal.
-        """
-        num_parents = len(self.parents)
-        for i in range(num_parents):
-            # Access parents from end (nearest) to beginning (farthest)
-            parent_item = self.parents[num_parents - 1 - i]
-            if parent_item is None:
-                continue
-            # Check if this parent is an expression with an assignment op
-            if not hasattr(parent_item, 'op'):
-                continue
-            if parent_item.op in _ASSIGNMENT_OPS:
-                # Found an assignment - determine if we're on the left side
-                # The item right before this assignment in the parent chain
-                # is the child that leads to our expression
-                if i == 0:
-                    # Immediate parent is assignment, use parent_expr()
-                    child = self.parent_expr()
-                else:
-                    # Get the item that is child of this assignment
-                    child = self.parents[num_parents - i]
-                is_left = self._is_on_left_side_of_assignment(parent_item, child)
-                return (parent_item, is_left)
-        return (None, False)
-
-    def _determine_access_type(self, expr: Any, parent: Any) -> LocalVariableAccessType:
-        """Determine how the variable is being accessed."""
-        if not parent:
-            return LocalVariableAccessType.READ
-
-        # Check if this is a write operation (left side of assignment)
-        if parent.op == ida_hexrays.cot_asg and parent.x == expr:
-            return LocalVariableAccessType.WRITE
-        # Check compound assignments at immediate parent level
-        elif parent.op in _ASSIGNMENT_OPS and parent.x == expr:
-            return LocalVariableAccessType.WRITE
-        # Check if address is taken - but also check ancestors for assignment
-        elif parent.op == ida_hexrays.cot_ref:
-            # Address is taken - check if this is part of an assignment
-            asg, is_left = self._find_assignment_in_ancestors()
-            if asg and is_left:
-                return LocalVariableAccessType.WRITE
-            return LocalVariableAccessType.ADDRESS
-
-        # For calls (including helpers like HIWORD), casts, ptr derefs - check ancestors
-        if parent.op in (
-            ida_hexrays.cot_call,
-            ida_hexrays.cot_helper,
-            ida_hexrays.cot_cast,
-            ida_hexrays.cot_ptr,
-            ida_hexrays.cot_memptr,
-            ida_hexrays.cot_memref,
-            ida_hexrays.cot_add,
-            ida_hexrays.cot_idx,
-        ):
-            asg, is_left = self._find_assignment_in_ancestors()
-            if asg and is_left:
-                return LocalVariableAccessType.WRITE
-
-        return LocalVariableAccessType.READ
-
-    def _determine_context(self, expr: Any, parent: Any) -> LocalVariableContext:
-        """Determine the context where the variable is used."""
-        if not parent:
-            return LocalVariableContext.OTHER
-
-        if parent.op == ida_hexrays.cot_asg:
-            return LocalVariableContext.ASSIGNMENT
-        elif parent.op in _ASSIGNMENT_OPS:
-            return LocalVariableContext.ASSIGNMENT
-        elif parent.op == ida_hexrays.cot_call:
-            # Check if there's an assignment ancestor - if so, this is ASSIGNMENT context
-            asg, is_left = self._find_assignment_in_ancestors()
-            if asg and is_left:
-                return LocalVariableContext.ASSIGNMENT
-            return LocalVariableContext.CALL_ARG
-        elif parent.op in (
-            ida_hexrays.cot_eq,
-            ida_hexrays.cot_ne,
-            ida_hexrays.cot_sge,
-            ida_hexrays.cot_uge,
-            ida_hexrays.cot_sle,
-            ida_hexrays.cot_ule,
-            ida_hexrays.cot_sgt,
-            ida_hexrays.cot_ugt,
-            ida_hexrays.cot_slt,
-            ida_hexrays.cot_ult,
-        ):
-            return LocalVariableContext.COMPARISON
-        elif parent.op in (
-            ida_hexrays.cot_add,
-            ida_hexrays.cot_sub,
-            ida_hexrays.cot_mul,
-            ida_hexrays.cot_sdiv,
-            ida_hexrays.cot_udiv,
-            ida_hexrays.cot_smod,
-            ida_hexrays.cot_umod,
-        ):
-            # Check if there's an assignment ancestor
-            asg, is_left = self._find_assignment_in_ancestors()
-            if asg and is_left:
-                return LocalVariableContext.ASSIGNMENT
-            return LocalVariableContext.ARITHMETIC
-        elif parent.op == ida_hexrays.cot_idx:
-            # Check if there's an assignment ancestor
-            asg, is_left = self._find_assignment_in_ancestors()
-            if asg and is_left:
-                return LocalVariableContext.ASSIGNMENT
-            return LocalVariableContext.ARRAY_INDEX
-        elif parent.op in (ida_hexrays.cot_ptr, ida_hexrays.cot_memptr, ida_hexrays.cot_memref):
-            # Check if there's an assignment ancestor
-            asg, is_left = self._find_assignment_in_ancestors()
-            if asg and is_left:
-                return LocalVariableContext.ASSIGNMENT
-            return LocalVariableContext.POINTER_DEREF
-        elif parent.op == ida_hexrays.cot_cast:
-            # Check if there's an assignment ancestor
-            asg, is_left = self._find_assignment_in_ancestors()
-            if asg and is_left:
-                return LocalVariableContext.ASSIGNMENT
-            return LocalVariableContext.CAST
-        elif parent.op == ida_hexrays.cot_ref:
-            # Address taken - check for assignment ancestor
-            asg, is_left = self._find_assignment_in_ancestors()
-            if asg and is_left:
-                return LocalVariableContext.ASSIGNMENT
-            return LocalVariableContext.OTHER
-        elif parent.op == ida_hexrays.cot_helper:
-            # Helper functions like HIWORD - check for assignment ancestor
-            asg, is_left = self._find_assignment_in_ancestors()
-            if asg and is_left:
-                return LocalVariableContext.ASSIGNMENT
-            return LocalVariableContext.OTHER
-
-        return LocalVariableContext.OTHER
 
 
 @decorate_all_methods(check_db_open)
@@ -1122,6 +719,9 @@ class Functions(DatabaseEntity):
         """
         Get all local variables for a function.
 
+        Delegates to ``db.pseudocode.decompile()`` and reads the cfunc's
+        lvar table.
+
         Args:
             func: The function instance.
 
@@ -1129,36 +729,24 @@ class Functions(DatabaseEntity):
             List of local variables including arguments and local vars.
 
         Raises:
-            DecompilerError: If decompilation fails for the function.
+            PseudocodeError: If decompilation fails for the function.
         """
-        cfunc = ida_hexrays.decompile(func.start_ea)
-        if not cfunc:
-            raise DecompilerError(f'Failed to decompile function at 0x{func.start_ea:x}')
-
-        lvars = []
-        for i in range(cfunc.lvars.size()):
-            lvar = cfunc.lvars[i]
-
-            # Get type information
-            type_info = lvar.tif
-
-            local_var = LocalVariable(
-                index=i,
-                name=lvar.name,
-                type=type_info,
-                size=lvar.width,
-                is_argument=lvar.is_arg_var,
-                is_result=lvar.is_result_var,
-            )
-            lvars.append(local_var)
-
-        return lvars
+        pcfunc = self.database.pseudocode.decompile(func)
+        raw_cfunc = pcfunc.raw_cfunc
+        return [LocalVariable._from_raw(raw_cfunc, i) for i in range(raw_cfunc.lvars.size())]
 
     def get_local_variable_references(
         self, func: func_t, lvar: LocalVariable
     ) -> List[LocalVariableReference]:
         """
         Get all references to a specific local variable.
+
+        Convenience entry point that forwards to
+        :meth:`PseudocodeFunction.find_variable_references`. Each returned
+        :class:`LocalVariableReference` carries the wrapped ctree nodes
+        (``expr``, ``parent``, lazy ``assignment``, ``walk_ancestors``) so
+        callers can perform deeper analyses — taint tracking, type
+        inference, deobfuscation — without copying any visitor internals.
 
         Args:
             func: The function instance.
@@ -1168,19 +756,11 @@ class Functions(DatabaseEntity):
             List of references to the variable in pseudocode.
 
         Raises:
-            DecompilerError: If decompilation fails for the function.
+            PseudocodeError: If decompilation fails for the function.
         """
-        cfunc = ida_hexrays.decompile(func.start_ea)
-        if not cfunc:
-            raise DecompilerError(f'Failed to decompile function at 0x{func.start_ea:x}')
-
-        # Create visitor to find variable references
-        visitor = _LVarRefsVisitor(cfunc, lvar.index)
-
-        # Visit the function body to find references
-        visitor.apply_to(cfunc.body, None)
-
-        return visitor.refs
+        return self.database.pseudocode.decompile(func).find_variable_references(
+            var_index=lvar.index,
+        )
 
     def get_local_variable_by_name(self, func: func_t, name: str) -> Optional[LocalVariable]:
         """
@@ -1194,7 +774,7 @@ class Functions(DatabaseEntity):
             LocalVariable if found
 
         Raises:
-            DecompilerError: If decompilation fails for the function.
+            PseudocodeError: If decompilation fails for the function.
             KeyError: If the variable is not found
         """
         lvars = self.get_local_variables(func)

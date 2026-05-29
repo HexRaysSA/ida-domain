@@ -5,6 +5,9 @@ import ida_domain  # isort: skip
 
 from ida_domain.microcode import MicroLocalVar  # noqa: E402
 from ida_domain.pseudocode import (  # noqa: E402
+    LocalVariable,
+    LocalVariableAccessType,
+    LocalVariableReference,
     PseudocodeBlock,
     PseudocodeExpression,
     PseudocodeExpressionOp,
@@ -2050,5 +2053,432 @@ def test_add_comment_accepts_comment_placement_enum(test_env):
     # remove_comment accepts the enum and clears the stored entry.
     func.remove_comment(ea, placement=CommentPlacement.SEMI)
     assert func.get_comment(ea) is None
+
+
+# ---------------------------------------------------------------------------
+# PseudocodeFunction.find_variable_references + LocalVariableReference helpers
+# ---------------------------------------------------------------------------
+#
+# Test fixture — function at 0x2D0 in tiny_asm.bin (`print_number`):
+#
+#     signed __int64 __fastcall print_number(__int64 a1, __int64 a2, __int64 a3)
+#     {
+#       unsigned __int128 v3;          // rax
+#       const char *v4;                // rsi
+#       unsigned __int128 v5;          // rtt
+#       int v7;                        // [rsp+0h]  BYREF
+#       _UNKNOWN *retaddr;             // [rsp+14h] BYREF
+#
+#       *((_QWORD *)&v3 + 1) = a3;          // a3 READ; v3 nested-WRITE
+#       v4 = (const char *)&v7;             // v4 WRITE; v7 ADDRESS
+#       *((_QWORD *)&v3 + 1) = 0;           // v3 nested-WRITE
+#       do
+#       {
+#         v5 = v3;                          // v5 WRITE; v3 READ   ← anchor
+#         *(_QWORD *)&v3 = v3 / 0xA;        // v3 nested-WRITE; v3 READ
+#         *((_QWORD *)&v3 + 1) = v5 % 0xA;  // v3 nested-WRITE; v5 READ
+#         BYTE8(v3) += 48;                  // v3 compound-WRITE (via cot_call.a)
+#         *--v4 = BYTE8(v3);                // v4 nested-WRITE (predec); v3 READ
+#       }
+#       while ( (_QWORD)v3 );               // v3 READ
+#       return sys_write(1u, v4, (char *)&retaddr - v4);  // v4×2 R, retaddr ADDR
+#     }
+
+def _walk_cot_vars(pcfunc, var_index):
+    """Helper: enumerate all cot_var cexpr_t nodes matching var_index by
+    walking the ctree directly. Used as the ground-truth oracle for
+    find_variable_references() count assertions.
+    """
+    found = []
+    for expr in pcfunc.walk_expressions():
+        if expr.is_variable and expr.variable_index == var_index:
+            found.append(expr)
+    return found
+
+
+def test_find_variable_references_count_matches_walk(test_env):
+    """find_variable_references(var_index=i) returns one ref per cot_var
+    occurrence — should match a direct walk of the ctree.
+
+    Corpus: print_number (see header). v3 appears many times (in the
+    nested writes and arithmetic), v4 appears multiple times (writes
+    and call args), a3 once (RHS of the first assignment), etc.
+    Property: count(find_variable_references) == count(walk_expressions
+    filtered by `is_variable and variable_index == i`).
+    """
+    db = test_env
+    pcfunc = db.pseudocode.decompile(0x2D0)
+    lvars = db.functions.get_local_variables(db.functions.get_at(0x2D0))
+    assert len(lvars) > 0
+
+    for lvar in lvars:
+        refs = pcfunc.find_variable_references(var_index=lvar.index)
+        ground_truth = _walk_cot_vars(pcfunc, lvar.index)
+        assert len(refs) == len(ground_truth), (
+            f"{lvar.name}: find_variable_references returned {len(refs)} "
+            f"but ctree walk found {len(ground_truth)} cot_var occurrences"
+        )
+
+
+def test_find_variable_references_expr_is_cot_var(test_env):
+    """Every returned ref's expr is a cot_var leaf with matching index."""
+    db = test_env
+    pcfunc = db.pseudocode.decompile(0x2D0)
+    lvars = db.functions.get_local_variables(db.functions.get_at(0x2D0))
+
+    total = 0
+    for lvar in lvars:
+        for ref in pcfunc.find_variable_references(var_index=lvar.index):
+            assert isinstance(ref.expr, PseudocodeExpression)
+            assert ref.expr.is_variable
+            assert ref.expr.variable_index == lvar.index
+            assert ref.expr.op == PseudocodeExpressionOp.VAR
+            total += 1
+    assert total > 0, "expected at least one variable reference in func 0x2D0"
+
+
+def test_find_variable_references_parent_matches_find_parent_of(test_env):
+    """ref.parent is what cfunc.find_parent_of(ref.expr) returns (when an expr).
+
+    Corpus: print_number (see header). Examples:
+      - `v5 = v3;`             → v5's parent is cot_asg (expr → ref.parent set)
+      - `return sys_write(…)`  → v4's parent is the cot_call (expr → ref.parent set)
+      - `*--v4 = …`            → v4's parent is cot_predec (expr → ref.parent set)
+    """
+    db = test_env
+    pcfunc = db.pseudocode.decompile(0x2D0)
+    lvars = db.functions.get_local_variables(db.functions.get_at(0x2D0))
+
+    checked = 0
+    for lvar in lvars:
+        for ref in pcfunc.find_variable_references(var_index=lvar.index):
+            direct_parent = pcfunc.find_parent_of(ref.expr)
+            if isinstance(direct_parent, PseudocodeExpression):
+                # ref.parent should wrap the same raw cexpr_t
+                assert ref.parent is not None
+                assert ref.parent.raw_expr == direct_parent.raw_expr
+                checked += 1
+            else:
+                # Parent is a statement (cinsn_t) — ref.parent should be None
+                assert ref.parent is None
+    assert checked > 0
+
+
+def test_find_variable_references_write_has_assignment(test_env):
+    """Every WRITE ref must have a non-None .assignment whose op is an
+    assignment (the access classifier and the lazy walk agree).
+
+    Corpus: print_number (see header). Stress-tests nested writes:
+    ``*((_QWORD *)&v3 + 1) = a3`` (WRITE via deref+add+ref),
+    ``BYTE8(v3) += 48`` (WRITE via compound asg + cot_call.a),
+    ``*--v4 = …`` (WRITE via self-mutating predec).
+    """
+    db = test_env
+    pcfunc = db.pseudocode.decompile(0x2D0)
+    lvars = db.functions.get_local_variables(db.functions.get_at(0x2D0))
+
+    saw_write = False
+    for lvar in lvars:
+        for ref in pcfunc.find_variable_references(var_index=lvar.index):
+            if ref.access_type == LocalVariableAccessType.WRITE:
+                saw_write = True
+                assert ref.assignment is not None, (
+                    f"WRITE ref for {lvar.name} at line {ref.line_number} "
+                    f"has no enclosing assignment"
+                )
+                assert ref.assignment.is_assignment
+    assert saw_write, "expected at least one WRITE in func 0x2D0"
+
+
+def test_walk_ancestors_yields_expressions_only(test_env):
+    """walk_ancestors stops at the first non-expression ancestor.
+
+    Corpus: print_number (see header). The chain for v3 in
+    ``*((_QWORD *)&v3 + 1) = a3;`` climbs
+    cot_var -> cot_ref -> cot_cast -> cot_ptr -> cot_add -> cot_asg -> cit_expr.
+    walk_ancestors yields the cexpr_t ancestors and stops at cit_expr.
+    """
+    db = test_env
+    pcfunc = db.pseudocode.decompile(0x2D0)
+    lvars = db.functions.get_local_variables(db.functions.get_at(0x2D0))
+
+    checked = 0
+    for lvar in lvars:
+        for ref in pcfunc.find_variable_references(var_index=lvar.index):
+            for anc in ref.walk_ancestors():
+                assert isinstance(anc, PseudocodeExpression)
+                checked += 1
+    assert checked > 0
+
+
+def test_walk_ancestors_first_is_immediate_parent(test_env):
+    """If ref.parent is set, walk_ancestors's first yield is the same
+    expression (innermost-first contract)."""
+    db = test_env
+    pcfunc = db.pseudocode.decompile(0x2D0)
+    lvars = db.functions.get_local_variables(db.functions.get_at(0x2D0))
+
+    checked = 0
+    for lvar in lvars:
+        for ref in pcfunc.find_variable_references(var_index=lvar.index):
+            ancestors = list(ref.walk_ancestors())
+            if ref.parent is not None:
+                assert len(ancestors) >= 1
+                assert ancestors[0].raw_expr == ref.parent.raw_expr
+                checked += 1
+    assert checked > 0
+
+
+def test_assignment_rhs_matches_assignment_y(test_env):
+    """For a WRITE ref, assignment_rhs is the .y of the enclosing assignment.
+
+    Corpus: print_number (see header). Examples checked across all WRITE refs:
+    ``v5 = v3`` (.y is cot_var v3),
+    ``... = a3`` (.y is cot_var a3),
+    ``... = v3 / 0xA`` (.y is cot_sdiv),
+    ``BYTE8(v3) += 48`` (.y is cot_num 48).
+    """
+    db = test_env
+    pcfunc = db.pseudocode.decompile(0x2D0)
+    lvars = db.functions.get_local_variables(db.functions.get_at(0x2D0))
+
+    checked = 0
+    for lvar in lvars:
+        for ref in pcfunc.find_variable_references(var_index=lvar.index):
+            if ref.access_type == LocalVariableAccessType.WRITE and ref.assignment:
+                rhs = ref.assignment_rhs
+                assert rhs is not None
+                assert rhs.raw_expr == ref.assignment.y.raw_expr
+                checked += 1
+    assert checked > 0
+
+
+def test_assignment_rhs_lvar_v5_eq_v3(test_env):
+    """The only WRITE to v5 in print_number is the canonical copy:
+
+        v5 = v3;       // ref.assignment is this cot_asg
+                       // ref.assignment_rhs is the cot_var on .y
+                       // ref.assignment_rhs_lvar is LocalVariable("v3")
+    """
+    db = test_env
+    func = db.functions.get_at(0x2D0)
+    pcfunc = db.pseudocode.decompile(func)
+
+    v5_refs = pcfunc.find_variable_references(var_name='v5')
+    writes = [r for r in v5_refs if r.access_type == LocalVariableAccessType.WRITE]
+    assert len(writes) == 1, "expected exactly one WRITE for v5 (the v5 = v3;)"
+
+    write = writes[0]
+    assert write.code_line == 'v5 = v3;'
+
+    source = write.assignment_rhs_lvar
+    assert isinstance(source, LocalVariable)
+    assert source.name == 'v3'
+
+    # Cross-check: the assignment node's y operand is a plain cot_var with
+    # variable_index pointing at v3's slot.
+    rhs = write.assignment_rhs
+    assert rhs is not None
+    assert rhs.is_variable
+    assert rhs.variable_index == source.index
+
+
+def test_assignment_rhs_lvar_none_for_read_refs(test_env):
+    """a3 only appears once in print_number, on the RHS of an assignment:
+
+        *((_QWORD *)&v3 + 1) = a3;    // a3 is READ here, never written
+
+    So every a3 reference is READ, and assignment_rhs_lvar must be None
+    per its contract (it only resolves when the ref is on the LHS).
+    """
+    db = test_env
+    func = db.functions.get_at(0x2D0)
+    pcfunc = db.pseudocode.decompile(func)
+
+    a3_refs = pcfunc.find_variable_references(var_name='a3')
+    assert len(a3_refs) >= 1
+    for ref in a3_refs:
+        if ref.access_type != LocalVariableAccessType.WRITE:
+            assert ref.assignment_rhs_lvar is None
+
+
+def test_containing_call_args_lvars_sys_write(test_env):
+    """print_number ends with a 3-arg call:
+
+        return sys_write(1u, v4, (char *)&retaddr - v4);
+                         |   |   |
+                         |   |   └── cot_sub (expression, not a var)
+                         |   └────── cot_var (direct v4)
+                         └────────── cot_num (constant 1u)
+
+    For any ref to v4 inside this call, containing_call_args_lvars should
+    return [None, LocalVariable("v4"), None] — the cast/ref peel does not
+    recurse into cot_sub, so position 2 stays None even though retaddr/v4
+    live inside it.
+    """
+    db = test_env
+    func = db.functions.get_at(0x2D0)
+    pcfunc = db.pseudocode.decompile(func)
+
+    # Walk to find the sys_write call by name
+    calls = pcfunc.find_calls(target_name='sys_write')
+    assert len(calls) == 1, "expected exactly one sys_write call"
+    call = calls[0]
+
+    args = list(call.call_args)
+    assert len(args) == 3
+
+    # Build the expected lvar list directly from the call expression
+    # (this is the same computation the property performs, used here as
+    # a redundant ground-truth check).
+    v4_lvar = next(
+        lv for lv in db.functions.get_local_variables(func) if lv.name == 'v4'
+    )
+
+    # Grab any reference to v4 that sits inside this call — that ref's
+    # containing_call_args_lvars should match the call's args.
+    v4_refs = [
+        r for r in pcfunc.find_variable_references(var_index=v4_lvar.index)
+        if r.containing_call is not None
+    ]
+    assert len(v4_refs) > 0, "expected at least one v4 ref inside sys_write"
+
+    for ref in v4_refs:
+        assert ref.containing_call.raw_expr == call.raw_expr
+        args_lvars = ref.containing_call_args_lvars
+        assert args_lvars is not None
+        assert len(args_lvars) == 3
+        # Position 0: the constant 1u → None
+        assert args_lvars[0] is None
+        # Position 1: v4 directly → LocalVariable for v4
+        assert isinstance(args_lvars[1], LocalVariable)
+        assert args_lvars[1].name == 'v4'
+        # Position 2: arithmetic expression (cot_sub) wrapping retaddr and v4
+        # → not a plain variable after cast/ref peel → None
+        assert args_lvars[2] is None
+
+
+def test_containing_call_args_lvars_consistency(test_env):
+    """For every reference that sits inside a call's argument list across
+    the whole binary, containing_call_args_lvars has one entry per arg,
+    each entry is either a LocalVariable or None, and the length matches
+    the call's actual arg count."""
+    db = test_env
+    checked_refs = 0
+
+    for func in db.functions:
+        try:
+            pcfunc = db.pseudocode.decompile(func)
+        except Exception:
+            continue
+        if not pcfunc.find_calls():
+            continue
+
+        for lvar in db.functions.get_local_variables(func):
+            for ref in pcfunc.find_variable_references(var_index=lvar.index):
+                call = ref.containing_call
+                if call is None:
+                    assert ref.containing_call_args_lvars is None
+                    continue
+                assert call.is_call
+                args = ref.containing_call_args_lvars
+                assert args is not None
+                assert len(args) == len(list(call.call_args))
+                for a in args:
+                    assert a is None or isinstance(a, LocalVariable)
+                checked_refs += 1
+
+    assert checked_refs > 0, (
+        "expected at least one lvar reference inside a call across the binary"
+    )
+
+
+def test_print_number_ref_counts_hardcoded(test_env):
+    """Hand-counted reference and access-type counts derived from
+    print_number's pseudocode (see section header).
+
+    Each tuple is (total_refs, writes, reads, addresses) per lvar:
+
+      a1, a2:    declared but never referenced in body
+      a3:        RHS of `*((_QWORD *)&v3 + 1) = a3;`
+      v3:        nested-W in `*((_QWORD *)&v3 + 1) = a3;`
+                 nested-W in `*((_QWORD *)&v3 + 1) = 0;`
+                 R on RHS of `v5 = v3;`
+                 W (LHS *(_QWORD *)&v3 = …) + R (RHS v3 / 0xA)
+                 nested-W in `*((_QWORD *)&v3 + 1) = v5 % 0xA;`
+                 W via compound asg in `BYTE8(v3) += 48;`
+                 R in `BYTE8(v3)` on RHS of `*--v4 = …`
+                 R in the while condition cast
+      v4:        direct W (`v4 = (const char *)&v7;`)
+                 nested-W via predec (`*--v4 = …`)
+                 R x2 in `sys_write(1u, v4, … - v4)`
+      v5:        LHS W in `v5 = v3;`; R in `v5 % 0xA`
+      v7:        `&v7` — ADDRESS (no enclosing write to v7)
+      retaddr:   `&retaddr` — ADDRESS
+
+    If any of these don't match the live classifier, either the manual
+    count is wrong or the classifier has regressed.
+    """
+    db = test_env
+    func = db.functions.get_at(0x2D0)
+    pcfunc = db.pseudocode.decompile(func)
+
+    # (total, writes, reads, addresses)
+    expected = {
+        'a1':      (0, 0, 0, 0),
+        'a2':      (0, 0, 0, 0),
+        'a3':      (1, 0, 1, 0),
+        'v3':      (9, 5, 4, 0),
+        'v4':      (4, 2, 2, 0),
+        'v5':      (2, 1, 1, 0),
+        'v7':      (1, 0, 0, 1),
+        'retaddr': (1, 0, 0, 1),
+    }
+
+    seen = set()
+    for lvar in db.functions.get_local_variables(func):
+        if lvar.name not in expected:
+            continue
+        seen.add(lvar.name)
+        refs = pcfunc.find_variable_references(var_index=lvar.index)
+        total = len(refs)
+        writes = sum(1 for r in refs if r.access_type == LocalVariableAccessType.WRITE)
+        reads = sum(1 for r in refs if r.access_type == LocalVariableAccessType.READ)
+        addresses = sum(
+            1 for r in refs if r.access_type == LocalVariableAccessType.ADDRESS
+        )
+        exp = expected[lvar.name]
+        assert (total, writes, reads, addresses) == exp, (
+            f"{lvar.name}: expected (total,W,R,A)={exp}, "
+            f"got ({total},{writes},{reads},{addresses})"
+        )
+
+    # Sanity: every expected lvar was actually present in the function
+    assert seen == set(expected.keys()), (
+        f"missing lvars in print_number: {set(expected.keys()) - seen}"
+    )
+
+
+def test_containing_call_none_when_not_in_call(test_env):
+    """For refs not nested inside any call, containing_call must be None
+    and containing_call_args_lvars must be None.
+
+    Corpus: print_number (see header). Most refs live in plain assignments
+    or the do-while condition — none have a cot_call ancestor, so they all
+    report containing_call=None. Only the trailing sys_write call exercises
+    the opposite path (covered by the sys_write-specific test).
+    """
+    db = test_env
+    pcfunc = db.pseudocode.decompile(0x2D0)
+    lvars = db.functions.get_local_variables(db.functions.get_at(0x2D0))
+
+    found_one = False
+    for lvar in lvars:
+        for ref in pcfunc.find_variable_references(var_index=lvar.index):
+            if not any(a.is_call for a in ref.walk_ancestors()):
+                assert ref.containing_call is None
+                assert ref.containing_call_args_lvars is None
+                found_one = True
+    assert found_one
 
 

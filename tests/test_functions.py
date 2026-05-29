@@ -102,7 +102,7 @@ def test_function(test_env):
     refs = db.functions.get_local_variable_references(func, local_var)
     assert len(refs) == 1
 
-    from ida_domain.functions import LocalVariableAccessType, LocalVariableContext
+    from ida_domain.pseudocode import LocalVariableAccessType, LocalVariableContext
 
     first_ref = refs[0]
     assert first_ref.access_type == LocalVariableAccessType.READ
@@ -121,6 +121,46 @@ def test_function(test_env):
     assert write_refs[0].access_type == LocalVariableAccessType.WRITE
     assert write_refs[0].context == LocalVariableContext.ASSIGNMENT
     assert write_refs[0].code_line == 'v5 = v3;'
+
+    # Each ref carries the wrapped expr, parent, lazy assignment, and
+    # walk_ancestors() so callers can do deeper analyses without dropping
+    # into raw SWIG ctree walking.
+    from ida_domain.pseudocode import PseudocodeExpression, PseudocodeFunction
+
+    write_ref = write_refs[0]
+    assert isinstance(write_ref.expr, PseudocodeExpression)
+    assert write_ref.expr.is_variable
+    assert write_ref.expr.variable_index == v5_var.index
+    assert isinstance(write_ref.parent, PseudocodeExpression)
+    assert write_ref.parent.is_assignment
+    assert isinstance(write_ref.assignment, PseudocodeExpression)
+    assert write_ref.assignment.is_assignment
+    # assignment_rhs on a WRITE returns the RHS expression of the assignment
+    rhs = write_ref.assignment_rhs
+    assert isinstance(rhs, PseudocodeExpression)
+    assert rhs.is_variable  # v3
+    # assignment_rhs_lvar resolves the RHS directly to a LocalVariable
+    rhs_lvar = write_ref.assignment_rhs_lvar
+    from ida_domain.pseudocode import LocalVariable
+    assert isinstance(rhs_lvar, LocalVariable)
+    assert rhs_lvar.name == 'v3'
+    # This write is not inside a call, so containing_call_args_lvars is None
+    assert write_ref.containing_call_args_lvars is None
+    # walk_ancestors() yields lazily; innermost first
+    ancestors = list(write_ref.walk_ancestors())
+    assert len(ancestors) >= 1
+    assert ancestors[0].is_assignment
+    # cfunc keeps the wrapper layer alive
+    assert isinstance(write_ref.cfunc, PseudocodeFunction)
+
+    # A READ reference (e.g. a3 on the RHS of *((_QWORD *)&v3 + 1) = a3;)
+    # does NOT expose assignment_rhs (that's only for writes), but its
+    # `assignment` ancestor is still populated.
+    a3_ref = refs[0]
+    assert a3_ref.access_type == LocalVariableAccessType.READ
+    assert a3_ref.assignment_rhs is None
+    assert isinstance(a3_ref.assignment, PseudocodeExpression)
+    assert a3_ref.assignment.is_assignment
 
     func = db.functions.get_at(0x311)
     assert func is not None

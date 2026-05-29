@@ -190,7 +190,7 @@ def test_complex_variable_access(tiny_c_env):
     - LOWORD(v9) = a2;  -> WRITE / ASSIGNMENT
     - use_val(v9);      -> READ / CALL_ARG
     """
-    from ida_domain.functions import LocalVariableAccessType, LocalVariableContext
+    from ida_domain.pseudocode import LocalVariableAccessType, LocalVariableContext
 
     db = tiny_c_env
 
