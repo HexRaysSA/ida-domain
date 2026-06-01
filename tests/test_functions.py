@@ -6,6 +6,17 @@ from ida_idaapi import BADADDR
 from ida_domain.base import InvalidEAError, InvalidParameterError
 
 
+def _mc_insn(line: str) -> str:
+    """Return a microcode line without its trailing ``; ...`` comment.
+
+    Everything after the first ``;`` is the address plus the use/def
+    (``u=`` / ``d=``) register lists. Those vary between IDA builds (for
+    example the set of caller-saved registers a call is modeled as
+    clobbering), so microcode assertions compare only the instruction text.
+    """
+    return line.split(';', 1)[0].rstrip()
+
+
 def test_function(test_env):
     db = test_env
 
@@ -42,7 +53,7 @@ def test_function(test_env):
     mf = db.functions.get_microcode(func)
     microcode_lines = mf.to_text()
     assert len(microcode_lines) == 13
-    assert microcode_lines[11] == '1.11 mov    cs.2, seg.2             ; 2AE u=cs.2       d=seg.2'
+    assert _mc_insn(microcode_lines[11]) == '1.11 mov    cs.2, seg.2'
 
     # Validate expected instructions and their addresses
     expected_instructions = [
@@ -267,13 +278,10 @@ def test_function(test_env):
     mf = db.functions.get_microcode(func)
     microcode_lines = mf.to_text()
     assert len(microcode_lines) == 72
-    assert microcode_lines[53] == '2.40 jcnd   tt.1, @2                ; 2DE u=tt.1'
-    assert microcode_lines[67] == (
+    assert _mc_insn(microcode_lines[53]) == '2.40 jcnd   tt.1, @2'
+    assert _mc_insn(microcode_lines[67]) == (
         '3.13 call   !sys_write <spec:"unsigned int fd" edi.4,'
-        '"const char *buf" rsi.8,"size_t count" rdx.8> => "signed __int64" rax.8 ;'
-        ' 2F0 u=rdx.8,edi.4,rsi.8,(ALLMEM) d=rax.8,(cf.1,zf.1,sf.1,of.1,pf.1,rdx.8,'
-        'rcx.8,r8.8,r9.8,r10.8,r11.8,fps.2,fl.1,c0.1,c2.1,c3.1,df.1,if.1,xmm4.16,'
-        'xmm5.16,ALLMEM)'
+        '"const char *buf" rsi.8,"size_t count" rdx.8> => "signed __int64" rax.8'
     )
 
 
