@@ -14,6 +14,7 @@ from typing_extensions import (
     TYPE_CHECKING,
     Any,
     Callable,
+    Dict,
     Generator,
     Iterator,
     List,
@@ -1994,6 +1995,10 @@ class PseudocodeFunction:
 
     def __init__(self, raw: cfuncptr_t):
         self._raw = raw
+        # Lazily built child->parent map for the whole ctree, keyed by node
+        # pointer identity. See :meth:`_parent_map`. Invalidated by
+        # :meth:`refresh` / :meth:`build_ctree`.
+        self._parent_map_cache: Optional[Dict[int, Any]] = None
 
     @property
     def raw_cfunc(self) -> cfuncptr_t:
@@ -2333,10 +2338,12 @@ class PseudocodeFunction:
     def refresh(self) -> None:
         """Refresh the pseudocode text after ctree modifications."""
         self._raw.refresh_func_ctext()
+        self._parent_map_cache = None
 
     def build_ctree(self) -> None:
         """Regenerate the function body from microcode."""
         self._raw.build_c_tree()
+        self._parent_map_cache = None
 
     # -- convenience tree traversal ----------------------------------------
 
@@ -2365,21 +2372,66 @@ class PseudocodeFunction:
 
     # -- tree navigation ----------------------------------------------------
 
+    def _parent_map(self) -> Dict[int, Any]:
+        """Build (once) and return a child->parent map for the whole ctree.
+
+        ``citem_t`` has no parent pointer, so a parent lookup must search a
+        subtree. This builds the full mapping in a single traversal, keyed by
+        node pointer identity, so subsequent lookups are O(1). The build is a
+        Python-callback pass over every node, so it only pays off across many
+        lookups on the same function — hence it is opt-in via the
+        ``use_cache`` argument of :meth:`find_parent_of` /
+        :meth:`walk_ancestors_of`. Invalidated by :meth:`refresh` /
+        :meth:`build_ctree`.
+
+        Values are the raw parent ``citem_t`` (``None`` for the root body).
+        """
+        if self._parent_map_cache is None:
+            parent_map: Dict[int, Any] = {}
+
+            class _ParentMapBuilder(ida_hexrays.ctree_visitor_t):
+                def __init__(self) -> None:
+                    super().__init__(ida_hexrays.CV_PARENTS)
+
+                def _record(self, item: Any) -> int:
+                    parent_map[int(item.this)] = self.parent_item()
+                    return 0
+
+                def visit_expr(self, expr: Any) -> int:
+                    return self._record(expr)
+
+                def visit_insn(self, insn: Any) -> int:
+                    return self._record(insn)
+
+            _ParentMapBuilder().apply_to(self._raw.body, None)
+            self._parent_map_cache = parent_map
+        return self._parent_map_cache
+
     def find_parent_of(
         self,
         item: Union[PseudocodeExpression, PseudocodeInstruction],
+        use_cache: bool = False,
     ) -> Optional[Union[PseudocodeExpression, PseudocodeInstruction]]:
         """Find the parent ctree item of the given expression or instruction.
 
         Args:
             item: A ``PseudocodeExpression`` or
                 ``PseudocodeInstruction`` whose parent to find.
+            use_cache: If ``False`` (default), do a native early-terminating
+                subtree search — cheapest for a one-off lookup. If ``True``,
+                build once and reuse a whole-function child->parent map
+                (see :meth:`_parent_map`); worthwhile only when doing many
+                lookups on the same function. The cache is invalidated by
+                :meth:`refresh` / :meth:`build_ctree`.
 
         Returns:
             The parent item wrapped as the appropriate type, or ``None``
             if not found.
         """
-        raw = self._raw.body.find_parent_of(item._raw)
+        if use_cache:
+            raw = self._parent_map().get(int(item._raw.this))
+        else:
+            raw = self._raw.body.find_parent_of(item._raw)
         if raw is None:
             return None
         if raw.is_expr():
@@ -2389,6 +2441,7 @@ class PseudocodeFunction:
     def walk_ancestors_of(
         self,
         item: PseudocodeExpression,
+        use_cache: bool = False,
     ) -> Iterator[PseudocodeExpression]:
         """Yield ancestor expressions of ``item`` from innermost to outermost.
 
@@ -2396,11 +2449,18 @@ class PseudocodeFunction:
         one specific ancestor pay only for the depth they actually visit.
         Stops at the first non-expression ancestor (a statement-level
         ``cinsn_t`` like a return or if-statement).
+
+        Args:
+            item: The expression whose ancestors to walk.
+            use_cache: Forwarded to :meth:`find_parent_of`. Pass ``True`` when
+                walking ancestors for many nodes on the same function (e.g.
+                reference analysis) so the per-level lookups share one cached
+                parent map instead of each re-searching the tree.
         """
-        cur = self.find_parent_of(item)
+        cur = self.find_parent_of(item, use_cache=use_cache)
         while isinstance(cur, PseudocodeExpression):
             yield cur
-            cur = self.find_parent_of(cur)
+            cur = self.find_parent_of(cur, use_cache=use_cache)
 
     # -- convenience finders -----------------------------------------------
 
@@ -2588,7 +2648,7 @@ class PseudocodeFunction:
         refs: List[LocalVariableReference] = []
         sv = None  # pseudocode lines, fetched lazily and reused across refs
         for expr in self.find_variables(var_index=var_index, var_name=var_name):
-            parent_item = self.find_parent_of(expr)
+            parent_item = self.find_parent_of(expr, use_cache=True)
             parent = parent_item if isinstance(parent_item, PseudocodeExpression) else None
 
             access_type = _classify_lvar_access(self, expr, parent)
@@ -2736,8 +2796,16 @@ class PseudocodeFunction:
 # analysis and variable access classification.
 #
 # Performance characteristics:
-#   - Walk-up: O(d) where d = ancestor depth, typically 1-5 levels
-#   - Invoked once per variable reference during classification
+#   - ``citem_t`` has no parent pointer, so a parent lookup means searching a
+#     subtree. The reference analysis below passes ``use_cache=True``, which
+#     builds a child->parent map for the whole function once (O(N), N = nodes)
+#     and then answers each parent lookup in O(1).
+#   - With that map, a walk-up of depth d is O(d).
+#   - A reference is walked several times (both classification passes via
+#     ``_has_write_ancestor``, which also walks ``_is_in_left_subtree``, plus
+#     the lazy ``assignment*`` / ``containing_call`` properties), but every
+#     walk shares the one cached map, so the per-function total is O(N + R*d)
+#     for R references of average ancestor depth d.
 #
 # ============================================================================
 
@@ -2843,7 +2911,7 @@ class LocalVariableReference:
         read, this is the assignment the read participates in (e.g. on the
         RHS); for a write, this is the assignment that performs the write.
         """
-        for anc in self.walk_ancestors():
+        for anc in self.walk_ancestors(use_cache=True):
             if anc.is_assignment:
                 return anc
         return None
@@ -2889,7 +2957,7 @@ class LocalVariableReference:
         argument list. Lets callers identify the call site and inspect the
         callee or sibling arguments without re-walking the tree.
         """
-        for anc in self.walk_ancestors():
+        for anc in self.walk_ancestors(use_cache=True):
             if anc.is_call:
                 return anc
         return None
@@ -2929,14 +2997,17 @@ class LocalVariableReference:
                 result.append(None)
         return result
 
-    def walk_ancestors(self) -> Iterator[PseudocodeExpression]:
+    def walk_ancestors(
+        self, use_cache: bool = False
+    ) -> Iterator[PseudocodeExpression]:
         """Yield ancestor expressions from innermost (parent) to outermost.
 
-        Thin delegate over :meth:`PseudocodeFunction.walk_ancestors_of`.
+        Thin delegate over :meth:`PseudocodeFunction.walk_ancestors_of`;
+        ``use_cache`` is forwarded there.
         """
         if self.cfunc is None or self.expr is None:
             return
-        yield from self.cfunc.walk_ancestors_of(self.expr)
+        yield from self.cfunc.walk_ancestors_of(self.expr, use_cache=use_cache)
 
 
 # Parent operators that wrap a variable on the write side of an enclosing
@@ -2977,7 +3048,7 @@ def _is_in_left_subtree(
         return True
     asg_raw = asg.raw_expr
     asg_x_raw = asg_x.raw_expr
-    for anc in cfunc.walk_ancestors_of(target):
+    for anc in cfunc.walk_ancestors_of(target, use_cache=True):
         if anc.raw_expr == asg_x_raw:
             return True
         if anc.raw_expr == asg_raw:
@@ -2988,7 +3059,7 @@ def _is_in_left_subtree(
 def _has_write_ancestor(cfunc: PseudocodeFunction, expr: PseudocodeExpression) -> bool:
     """Walk ancestors of `expr`; return True if any ancestor is an assignment
     and `expr` lives in that assignment's left subtree."""
-    for anc in cfunc.walk_ancestors_of(expr):
+    for anc in cfunc.walk_ancestors_of(expr, use_cache=True):
         if anc.is_assignment:
             return _is_in_left_subtree(cfunc, anc, expr)
     return False

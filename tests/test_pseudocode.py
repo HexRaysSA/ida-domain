@@ -199,6 +199,50 @@ def test_find_parent_of_call_target(test_env):
     assert parent.is_call
 
 
+def test_find_parent_of_cache_matches_native(test_env):
+    """The cached parent map (use_cache=True) yields identical parents to the
+    native search (use_cache=False) for every node in the ctree.
+
+    Corpus: print_number (0x2D0) — a rich nested tree (deref/add/ref chains,
+    calls, compound assignments) that exercises every ctree storage slot.
+    Checks both the immediate parent of every node and the full ancestor
+    chain of every expression.
+    """
+    db = test_env
+    func = db.pseudocode.decompile(0x2D0)
+
+    def node_id(node):
+        # Pointer identity is the cache key; None for "no parent".
+        return None if node is None else int(node._raw.this)
+
+    # Immediate parent of every node (expressions and instructions).
+    nodes_checked = 0
+    for node in func.walk_all():
+        native = func.find_parent_of(node, use_cache=False)
+        cached = func.find_parent_of(node, use_cache=True)
+        assert node_id(cached) == node_id(native), (
+            f"parent mismatch for {node.op.name} at 0x{node.ea:x}"
+        )
+        assert type(cached) is type(native)
+        nodes_checked += 1
+    assert nodes_checked > 0
+
+    # Full ancestor chain of every expression.
+    chains_checked = 0
+    for expr in func.walk_expressions():
+        native_chain = [
+            node_id(a) for a in func.walk_ancestors_of(expr, use_cache=False)
+        ]
+        cached_chain = [
+            node_id(a) for a in func.walk_ancestors_of(expr, use_cache=True)
+        ]
+        assert cached_chain == native_chain, (
+            f"ancestor chain mismatch for {expr.op.name} at 0x{expr.ea:x}"
+        )
+        chains_checked += 1
+    assert chains_checked > 0
+
+
 # ---------------------------------------------------------------------------
 # MicroLocalVar.set_user_comment
 # ---------------------------------------------------------------------------
