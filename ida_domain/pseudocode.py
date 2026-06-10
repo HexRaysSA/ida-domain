@@ -1288,10 +1288,8 @@ class PseudocodeInstruction:
         raw.cif = ida_hexrays.cif_t()
         raw.cif.expr.swap(condition._raw)
         raw.cif.ithen = then_branch._raw
-        then_branch._raw.thisown = False
         if else_branch is not None:
             raw.cif.ielse = else_branch._raw
-            else_branch._raw.thisown = False
         return PseudocodeInstruction(raw)
 
     # -- basic properties (from citem_t) -----------------------------------
