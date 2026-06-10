@@ -2008,6 +2008,15 @@ def test_from_binary_rejects_consumed_operand(test_env):
         PseudocodeExpression.from_binary(PseudocodeExpressionOp.MUL, a, c)
 
 
+def test_from_call_rejects_consumed_callee(test_env):
+    """A callee consumed by from_call cannot be reused in another factory."""
+    callee = PseudocodeExpression.from_helper("memset")
+    call = PseudocodeExpression.from_call(callee)
+    assert call.op == PseudocodeExpressionOp.CALL
+    with pytest.raises(Exception, match="already owned"):
+        PseudocodeExpression.from_call(callee)
+
+
 def test_make_expr_rejects_consumed_expression(test_env):
     """An expression consumed by make_expr cannot be reused in a factory."""
     expr = PseudocodeExpression.from_number(67)
