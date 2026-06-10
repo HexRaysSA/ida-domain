@@ -1001,10 +1001,9 @@ class PseudocodeExpression:
             The result and `x` share the underlying ``cexpr_t``:
             mutations through either wrapper are visible to the other.
             Ownership is transferred to the result, so `x` will dangle
-            once the result is freed or replaced.  Reusing `x` in
-            another factory would also create a tree where two parents
-            share one child, corrupting the ctree.  Do not use `x`
-            independently after this call.
+            once the result is freed or replaced.  Do not use `x`
+            independently after this call; reusing it in another
+            factory raises an error.
 
         Raises:
             InvalidParameterError: If `op` is not a unary operator.
@@ -1012,8 +1011,7 @@ class PseudocodeExpression:
         if not ida_hexrays.is_unary(int(op)):
             raise InvalidParameterError('op', op.name, 'not a unary operator')
         raw = PseudocodeExpression._make_expr(int(op))
-        raw._set_x(x._raw)
-        x._raw.thisown = False
+        raw.x = x._raw
         if type_info is not None:
             raw.type = type_info
         return PseudocodeExpression(raw)
@@ -1045,10 +1043,8 @@ class PseudocodeExpression:
             `x` and `y`: mutations through either wrapper are visible
             to the other.  Ownership is transferred to the result, so
             `x` and `y` will dangle once the result is freed or
-            replaced.  Reusing them in another factory would also
-            create a tree where two parents share one child,
-            corrupting the ctree.  Do not use `x` or `y` independently
-            after this call.
+            replaced.  Do not use `x` or `y` independently after this
+            call; reusing them in another factory raises an error.
 
         Raises:
             InvalidParameterError: If `op` does not use both operands.
@@ -1063,10 +1059,8 @@ class PseudocodeExpression:
         if not ida_hexrays.is_binary(int(op)):
             raise InvalidParameterError('op', op.name, 'not a binary operator')
         raw = PseudocodeExpression._make_expr(int(op))
-        raw._set_x(x._raw)
-        x._raw.thisown = False
-        raw._set_y(y._raw)
-        y._raw.thisown = False
+        raw.x = x._raw
+        raw.y = y._raw
         if type_info is not None:
             raw.type = type_info
         return PseudocodeExpression(raw)
@@ -1095,7 +1089,8 @@ class PseudocodeExpression:
             The result shares the underlying ``cexpr_t`` with `callee`:
             mutations through either wrapper are visible to the other,
             and `callee` will dangle once the result is freed or
-            replaced.  Each item in `args` is moved (swapped) into the
+            replaced.  Reusing `callee` in another factory raises an
+            error.  Each item in `args` is moved (swapped) into the
             call and becomes an empty expression afterward.  Do not
             use `callee` or `args` items independently after this call.
 
@@ -1108,8 +1103,7 @@ class PseudocodeExpression:
             ```
         """
         raw = PseudocodeExpression._make_expr(PseudocodeExpressionOp.CALL)
-        raw._set_x(callee._raw)
-        callee._raw.thisown = False
+        raw.x = callee._raw
         raw.a = ida_hexrays.carglist_t()
         if args:
             for arg_expr in args:
@@ -1197,14 +1191,12 @@ class PseudocodeInstruction:
             The instruction and `expr` share the underlying ``cexpr_t``:
             mutations through either wrapper are visible to the other.
             Ownership is transferred to the instruction, so `expr` will
-            dangle once the instruction is freed or replaced.  Reusing
-            `expr` in another factory would also create a tree where
-            two parents share one child, corrupting the ctree.  Do not
-            use `expr` independently after this call.
+            dangle once the instruction is freed or replaced.  Do not
+            use `expr` independently after this call; reusing it in
+            another factory raises an error.
         """
         raw = PseudocodeInstruction._make_insn(PseudocodeInstructionOp.EXPR, ea)
         raw.cexpr = expr._raw
-        expr._raw.thisown = False
         return PseudocodeInstruction(raw)
 
     @staticmethod
