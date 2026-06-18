@@ -41,6 +41,6 @@ if __ida_version__ < Version('9.1'):
     raise ImportError('IDA Domain requires IDA 9.1.0 or later')
 
 # If we reach this point kernel libraries were successfully loaded
-from .database import Database
+from .database import Database as Database
 
 logging.getLogger(__name__).addHandler(NullHandler())
