@@ -83,25 +83,14 @@ jobs:
       - name: Checkout sources
         uses: actions/checkout@v6
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.13"
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
-        with:
-          version: "latest"
-
       - name: Install IDA ${{ matrix.ida_version.version }}
-        run: |
-          echo "Installing hcli..."
-          uv tool install ida-hcli==0.18.2
-          echo "Downloading and installing IDA ${{ matrix.ida_version.version }}..."
-          hcli ida install -y -d ${{ matrix.ida_version.installer_path }} -l ${{ secrets.IDA_LICENSE_ID }} -i /opt/ida/
-          echo "Done!"
-        env:
-          HCLI_API_KEY: ${{ secrets.HCLI_API_KEY }}
+        uses: HexRaysSA/ida-hcli-actions/install-ida@v1
+        with:
+          installer-id: ${{ matrix.ida_version.installer_path }}
+          license-id: ${{ secrets.IDA_LICENSE_ID }}
+          api-key: ${{ secrets.HCLI_API_KEY }}
+          python-version: "3.13"
+          clean: "false"
 
       - name: Sync dependencies
         run: uv sync --extra dev
@@ -112,7 +101,6 @@ jobs:
       - name: Run tests and generate coverage
         run: uv run coverage run --source=ida_domain -m pytest -v --junitxml=test-results.xml
         env:
-          IDADIR: /opt/ida/
           IDALOG: ida.log
 
       - name: Generate coverage reports
