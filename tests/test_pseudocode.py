@@ -3,6 +3,8 @@ import pytest
 
 import ida_domain  # isort: skip
 
+from conftest import min_ida_version  # noqa: E402
+
 from ida_domain.microcode import MicroLocalVar  # noqa: E402
 from ida_domain.pseudocode import (  # noqa: E402
     PseudocodeBlock,
@@ -1632,6 +1634,7 @@ def test_instruction_make_return(test_env):
     assert insn.return_details is not None
 
 
+@min_ida_version("9.5")
 def test_instruction_make_if(test_env):
     """make_if creates an IF instruction with condition and branches."""
     db = test_env
@@ -1646,6 +1649,7 @@ def test_instruction_make_if(test_env):
     assert insn.if_details.has_else
 
 
+@min_ida_version("9.5")
 def test_instruction_make_if_no_else(test_env):
     """make_if without else_branch creates IF without else."""
     db = test_env
