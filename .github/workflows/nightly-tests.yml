@@ -34,6 +34,8 @@ jobs:
 
       - name: Run tests and generate coverage
         run: uv run coverage run --source=ida_domain -m pytest -v --junitxml=test-results.xml
+        env:
+          IDALOG: ida.log
 
       - name: Generate coverage reports
         run: |
@@ -50,4 +52,5 @@ jobs:
             test-results.xml
             coverage.xml
             htmlcov/
+            ida.log
           retention-days: 30
