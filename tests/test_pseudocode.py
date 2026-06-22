@@ -2427,7 +2427,7 @@ def test_containing_call_args_lvars_consistency(test_env):
                 assert call.is_call
                 args = ref.containing_call_args_lvars
                 assert args is not None
-                assert len(args) == len(list(call.call_args))
+                assert len(args) == len(call.call_args)
                 for a in args:
                     assert a is None or isinstance(a, LocalVariable)
                 checked_refs += 1
