@@ -2393,8 +2393,15 @@ class PseudocodeFunction:
                 def __init__(self) -> None:
                     super().__init__(ida_hexrays.CV_PARENTS)
 
+                def _parent(self) -> Any:
+                    # parent_item() is available since IDA 9.2
+                    if hasattr(self, 'parent_item'):
+                        return self.parent_item()
+                    parents = self.parents
+                    return parents.back() if parents.size() else None
+
                 def _record(self, item: Any) -> int:
-                    parent_map[int(item.this)] = self.parent_item()
+                    parent_map[int(item.this)] = self._parent()
                     return 0
 
                 def visit_expr(self, expr: Any) -> int:
