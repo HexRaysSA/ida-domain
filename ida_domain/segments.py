@@ -248,14 +248,14 @@ class Segments(DatabaseEntity):
             raise InvalidParameterError('seg_size', seg_size, 'must be a positive integer/ea')
 
         # Find last segment
-        last_seg_end_ea = _ida_compat.get_last_segment_end_ea()
-        if last_seg_end_ea is None:  # No segments exist in database
+        last_seg = ida_segment.get_last_seg()
+        if last_seg is None:  # No segments exist in database
             # No segments exist in database: require explicit addresses via add.
             raise DatabaseError(
                 'No existing segments found, cannot append. Use add(...) with explicit addresses.'
             )
 
-        start_ea = last_seg_end_ea
+        start_ea = last_seg.end_ea
         end_ea = start_ea + seg_size
 
         # Delegate to the canonical add(...) method (it normalizes name/class/flags)
@@ -265,27 +265,35 @@ class Segments(DatabaseEntity):
         """
         Set the segment permissions exactly to `perms` (overwrites existing flags).
         """
-        return _ida_compat.set_segment_permissions(segment.start_ea, int(perms))
+        seg = ida_segment.getseg(segment.start_ea)
+        if not seg:
+            return False
+
+        seg.perm = int(perms)
+        return True
 
     def add_permissions(self, segment: segment_t, perms: SegmentPermissions) -> bool:
         """
         OR the given permission bits into the existing segment permissions.
         """
-        perm = _ida_compat.get_segment_permissions(segment.start_ea)
-        if perm is None:
+        seg = ida_segment.getseg(segment.start_ea)
+        if not seg:
             return False
 
-        return _ida_compat.set_segment_permissions(segment.start_ea, perm | int(perms))
+        seg.perm |= int(perms)
+        return True
 
     def remove_permissions(self, segment: segment_t, perms: SegmentPermissions) -> bool:
         """
         Clear the given permission bits from the existing segment permissions.
         """
-        perm = _ida_compat.get_segment_permissions(segment.start_ea)
-        if perm is None:
+        seg = ida_segment.getseg(segment.start_ea)
+        if not seg:
             return False
 
-        return _ida_compat.set_segment_permissions(segment.start_ea, perm & ~int(perms))
+        seg.perm &= ~int(perms)
+
+        return True
 
     def set_addressing_mode(self, segment: segment_t, mode: AddressingMode) -> bool:
         """
