@@ -344,7 +344,7 @@ class Xrefs(DatabaseEntity):
 
         for xref in self.to_ea(func_ea):
             if xref.is_call:
-                caller_start_ea = _ida_compat.get_func_start_ea(xref.from_ea)
+                caller_start_ea = _ida_compat.get_func_start(xref.from_ea)
                 caller_name: Optional[str] = None
                 caller_func_ea = None
 

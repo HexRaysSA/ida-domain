@@ -6,9 +6,11 @@ from typing import Any
 
 import ida_gdl
 from ida_gdl import qbasic_block_t, qflow_chart_t
+from ida_idaapi import BADADDR
 from ida_ua import insn_t
 from typing_extensions import TYPE_CHECKING, Iterator, Optional
 
+from . import _ida_compat
 from .base import (
     DatabaseEntity,
     InvalidEAError,
@@ -18,10 +20,10 @@ from .base import (
 )
 
 if TYPE_CHECKING:
-    from ida_funcs import func_t
     from ida_idaapi import ea_t
 
     from .database import Database
+    from .functions import FunctionLike
 
 
 logger = logging.getLogger(__name__)
@@ -96,7 +98,7 @@ class FlowChart(ida_gdl.FlowChart, DatabaseEntity):
     def __init__(
         self,
         database: Optional[Database],
-        func: func_t = None,
+        func: Optional[FunctionLike] = None,
         bounds: Optional[tuple[ea_t, ea_t]] = None,
         flags: FlowChartFlags = FlowChartFlags.NONE,
     ) -> None:
@@ -105,7 +107,8 @@ class FlowChart(ida_gdl.FlowChart, DatabaseEntity):
 
         Args:
             database: Database instance to associate with this flowchart. Can be None.
-            func: IDA function object (func_t) to analyze. Defaults to None.
+            func: The function to analyze (FunctionInfo, any address inside it,
+                or func_t). Defaults to None.
             bounds: Address range tuple (start_ea, end_ea) defining the analysis scope.
                 Defaults to None.
             flags: FlowChart creation flags controlling analysis behavior.
@@ -115,6 +118,8 @@ class FlowChart(ida_gdl.FlowChart, DatabaseEntity):
             At least one of `func` or `bounds` must be specified.
         """
         DatabaseEntity.__init__(self, database)
+        if func is None and bounds is None:
+            raise InvalidParameterError('func', None, 'either func or bounds must be specified')
         if bounds:
             if not self.database.is_valid_ea(bounds[0], strict_check=False):
                 raise InvalidEAError(bounds[0])
@@ -123,7 +128,8 @@ class FlowChart(ida_gdl.FlowChart, DatabaseEntity):
             if bounds[0] >= bounds[1]:
                 raise InvalidParameterError('bounds', bounds, 'must be a valid range')
 
-        ida_gdl.FlowChart.__init__(self, func, bounds, int(flags))
+        start_ea, end_ea = bounds if bounds is not None else (BADADDR, BADADDR)
+        self._q = _ida_compat.make_qflow_chart(func, start_ea, end_ea, int(flags))
 
     def __getitem__(self, index: int) -> BasicBlock:
         """

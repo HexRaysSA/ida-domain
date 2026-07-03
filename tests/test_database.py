@@ -70,7 +70,8 @@ def test_database(test_env):
         assert func is not None
         assert func.start_ea == 0x2A3
         assert db2.functions.set_name(func, 'testing_function_rename')
-        assert func.name == 'testing_function_rename'
+        # func is a value snapshot - re-query to observe the rename
+        assert db2.functions.get_name(func) == 'testing_function_rename'
     # The database should be close automatically
     assert not db2.is_open()
 
@@ -89,7 +90,8 @@ def test_database(test_env):
         assert func is not None
         assert func.start_ea == 0x2A3
         assert db3.functions.set_name(func, 'testing_function_rename')
-        assert func.name == 'testing_function_rename'
+        # func is a value snapshot - re-query to observe the rename
+        assert db3.functions.get_name(func) == 'testing_function_rename'
 
     # The database should be close automatically
     assert not db3.is_open()

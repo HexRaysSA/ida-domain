@@ -22,6 +22,7 @@ from typing_extensions import (
     Union,
 )
 
+from . import _ida_compat
 from .base import (
     DatabaseEntity,
     DecompilerError,
@@ -49,6 +50,7 @@ if TYPE_CHECKING:
     from ida_typeinf import tinfo_t
 
     from .database import Database
+    from .functions import FunctionLike
     from .microcode import MicroBlockArray
 
 logger = logging.getLogger(__name__)
@@ -3369,13 +3371,14 @@ class Pseudocode(DatabaseEntity):
 
     def decompile(
         self,
-        ea_or_func: Union[int, func_t],
+        ea_or_func: FunctionLike,
         flags: DecompilationFlags = DecompilationFlags(0),
     ) -> PseudocodeFunction:
         """Decompile a function and return the ctree result.
 
         Args:
-            ea_or_func: Function entry address or ``func_t`` object.
+            ea_or_func: The function (FunctionInfo, any address inside it,
+                or func_t).
             flags: Decompilation flags (``DecompilationFlags``).
 
         Returns:
@@ -3384,7 +3387,7 @@ class Pseudocode(DatabaseEntity):
         Raises:
             PseudocodeError: If decompilation fails.
         """
-        ea = ea_or_func.start_ea if isinstance(ea_or_func, func_t) else ea_or_func
+        ea = _ida_compat.func_ea(ea_or_func)
         hf = ida_hexrays.hexrays_failure_t()
         cfunc = ida_hexrays.decompile(ea, hf, int(flags))
         if not cfunc:
@@ -3397,7 +3400,7 @@ class Pseudocode(DatabaseEntity):
 
     def get_text(
         self,
-        ea_or_func: Union[int, func_t],
+        ea_or_func: FunctionLike,
         remove_tags: bool = True,
     ) -> List[str]:
         """Decompile and return pseudocode text lines.
@@ -3410,7 +3413,8 @@ class Pseudocode(DatabaseEntity):
         ```
 
         Args:
-            ea_or_func: Function entry address or ``func_t`` object.
+            ea_or_func: The function (FunctionInfo, any address inside it,
+                or func_t).
             remove_tags: If ``True``, strips IDA color/formatting tags.
 
         Returns:
@@ -3421,12 +3425,13 @@ class Pseudocode(DatabaseEntity):
 
     def decompile_many(
         self,
-        functions: List[Union[int, func_t]],
+        functions: List[FunctionLike],
     ) -> List[PseudocodeFunction]:
         """Decompile multiple functions.
 
         Args:
-            functions: List of function addresses or ``func_t`` objects.
+            functions: List of function references (FunctionInfo, address,
+                or func_t).
 
         Returns:
             List of ``PseudocodeFunction`` results.
