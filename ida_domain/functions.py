@@ -682,9 +682,7 @@ class Functions(DatabaseEntity):
         Returns:
             True if the address is in a function chunk.
         """
-        func = ida_funcs.get_func(ea)
-        chunk = ida_funcs.get_fchunk(ea)
-        return chunk is not None and (func != chunk)
+        return _ida_compat.is_function_tail(ea)
 
     def set_comment(self, func: func_t, comment: str, repeatable: bool = False) -> bool:
         """

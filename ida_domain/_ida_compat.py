@@ -13,14 +13,14 @@ and migrated separately when the surrounding public API can be reshaped.
 
 from __future__ import annotations
 
-from typing import Any, Iterator, Optional, Tuple
+from typing import Any, Dict, Iterator, Optional, Tuple
 
 import ida_funcs
 import ida_hexrays
 import ida_range
 import ida_segment
 from ida_funcs import func_t
-from ida_idaapi import ea_t
+from ida_idaapi import BADADDR, ea_t
 
 # --- ida_funcs ---------------------------------------------------------------
 
@@ -62,6 +62,15 @@ else:
         if func is None:
             return False
         return ida_funcs.set_func_cmt(func, cmt, repeatable)
+
+
+if hasattr(ida_funcs, 'get_func_start'):
+    def get_func_start_ea(ea: ea_t) -> ea_t:
+        return ida_funcs.get_func_start(ea)
+else:
+    def get_func_start_ea(ea: ea_t) -> ea_t:
+        func = ida_funcs.get_func(ea)
+        return BADADDR if func is None else func.start_ea
 
 
 def iter_func_tail_ranges(func: func_t) -> Iterator[Tuple[ea_t, ea_t]]:
@@ -139,6 +148,47 @@ else:
         if seg is None:
             return
         ida_segment.set_segment_cmt(seg, cmt, repeatable)
+
+
+if hasattr(ida_segment, 'get_last_segment_ea'):
+    def get_last_segment_end_ea() -> Optional[ea_t]:
+        start_ea = ida_segment.get_last_segment_ea()
+        if start_ea == BADADDR:
+            return None
+        info = ida_segment.segment_info_t()
+        if not ida_segment.get_segment_info(info, start_ea):
+            return None
+        return info.end_ea
+else:
+    def get_last_segment_end_ea() -> Optional[ea_t]:
+        seg = ida_segment.get_last_seg()
+        return None if seg is None else seg.end_ea
+
+
+if hasattr(ida_segment, 'get_segment_info'):
+    def get_segment_permissions(ea: ea_t) -> Optional[int]:
+        info = ida_segment.segment_info_t()
+        if not ida_segment.get_segment_info(info, ea):
+            return None
+        return info.get_perm()
+
+    def set_segment_permissions(ea: ea_t, perm: int) -> bool:
+        info = ida_segment.segment_info_t()
+        if not ida_segment.get_segment_info(info, ea):
+            return False
+        info.set_perm(perm)
+        return ida_segment.set_segment_info(info)
+else:
+    def get_segment_permissions(ea: ea_t) -> Optional[int]:
+        seg = ida_segment.getseg(ea)
+        return None if seg is None else seg.perm
+
+    def set_segment_permissions(ea: ea_t, perm: int) -> bool:
+        seg = ida_segment.getseg(ea)
+        if seg is None:
+            return False
+        seg.perm = perm
+        return True
 
 
 # --- ida_hexrays ------------------------------------------------------------
