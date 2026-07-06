@@ -273,11 +273,11 @@ class IdaCommandOptions:
         if self.jit_debugger is not None:
             args.append(f'-I{int(self.jit_debugger)}')
         if self.log_file:
-            args.append(f'-L{self.log_file}')
+            args.append(f'-L"{self.log_file}"')
         if self.disable_mouse:
             args.append('-M')
         if self.output_database:
-            args.append(f'-o{self.output_database}')
+            args.append(f'-o"{self.output_database}"')
         if self.plugin_options:
             args.append(f'-O{self.plugin_options}')
         if self.processor:
@@ -300,16 +300,16 @@ class IdaCommandOptions:
             if self.script_args:
                 args.append(f'-S"{full}"')
             else:
-                args.append(f'-S{self.script_file}')
+                args.append(f'-S"{self.script_file}"')
         if self.empty_database:
             args.append('-t')
         if self.file_type:
-            type_spec = f'-T{self.file_type}'
+            type_spec = self.file_type
             if self.file_member:
                 type_spec += f':{self.file_member}'
-            args.append(type_spec)
+            args.append(f'-T"{type_spec}"')
         if self.windows_dir:
-            args.append(f'-W{self.windows_dir}')
+            args.append(f'-W"{self.windows_dir}"')
         if self.no_segmentation:
             args.append('-x')
         if self.debug_flags:

@@ -1,3 +1,5 @@
+import os
+
 import conftest
 
 import ida_domain  # isort: skip
@@ -103,6 +105,70 @@ def test_database(test_env):
     db3.close(False)
 
 
+def test_file_type_with_spaces():
+    """file_type values with spaces must reach IDA as a single -T argument."""
+    opts = IdaCommandOptions(new_database=True, file_type='ELF64 for x86-64 (Relocatable)')
+    db = ida_domain.Database.open(path=conftest.idb_path, args=opts, save_on_close=False)
+    try:
+        assert db.is_open()
+        assert db.format == 'ELF64 for x86-64 (Relocatable)'
+    finally:
+        db.close(False)
+
+
+def test_log_file_with_spaces():
+    """log_file paths with spaces must reach IDA as a single -L argument."""
+    log_file = os.path.join(os.path.dirname(conftest.idb_path), 'log with spaces.txt')
+
+    opts = IdaCommandOptions(new_database=True, log_file=log_file)
+    db = ida_domain.Database.open(path=conftest.idb_path, args=opts, save_on_close=False)
+    try:
+        assert db.is_open()
+    finally:
+        db.close(False)
+    assert os.path.exists(log_file)
+
+
+def test_output_database_with_spaces():
+    """output_database paths with spaces must reach IDA as a single -o argument."""
+    output_database = os.path.join(os.path.dirname(conftest.idb_path), 'out db with spaces.i64')
+
+    opts = IdaCommandOptions(output_database=output_database)
+    db = ida_domain.Database.open(path=conftest.idb_path, args=opts, save_on_close=False)
+    try:
+        assert db.is_open()
+    finally:
+        db.close(True)
+    assert os.path.exists(output_database)
+
+
+def test_windows_dir_with_spaces():
+    """windows_dir paths with spaces must reach IDA as a single -W argument."""
+    opts = IdaCommandOptions(new_database=True, windows_dir='C:\\Program Files')
+    db = ida_domain.Database.open(path=conftest.idb_path, args=opts, save_on_close=False)
+    try:
+        assert db.is_open()
+    finally:
+        db.close(False)
+
+
+def test_script_file_with_spaces():
+    """script_file paths with spaces must reach IDA as a single -S argument."""
+    work_dir = os.path.dirname(conftest.idb_path)
+    script = os.path.join(work_dir, 'script with spaces.py')
+    marker = os.path.join(work_dir, 'script_marker.txt')
+    with open(script, 'w') as f:
+        f.write(f'open(r"{marker}", "w").write("ok")\n')
+
+    opts = IdaCommandOptions(new_database=True, script_file=script)
+    db = ida_domain.Database.open(path=conftest.idb_path, args=opts, save_on_close=False)
+    try:
+        assert db.is_open()
+    finally:
+        db.close(False)
+    assert os.path.exists(marker)
+
+
 def test_ida_command_options():
     # Test default state produces empty args
     opts = IdaCommandOptions()
@@ -159,7 +225,7 @@ def test_ida_command_options():
 
     # Test log file option
     opts = IdaCommandOptions(log_file='debug.log')
-    assert opts.build_args() == '-Ldebug.log'
+    assert opts.build_args() == '-L"debug.log"'
 
     # Test disable mouse option
     opts = IdaCommandOptions(disable_mouse=True)
@@ -171,7 +237,7 @@ def test_ida_command_options():
 
     # Test output database option (should also set -c flag)
     opts = IdaCommandOptions(output_database='output.idb')
-    assert opts.build_args() == '-c -ooutput.idb'
+    assert opts.build_args() == '-c -o"output.idb"'
 
     # Test processor option
     opts = IdaCommandOptions(processor='arm')
@@ -200,7 +266,7 @@ def test_ida_command_options():
 
     # Test run script option
     opts = IdaCommandOptions(script_file='analyze.py')
-    assert opts.build_args() == '-Sanalyze.py'
+    assert opts.build_args() == '-S"analyze.py"'
 
     args = ['arg1', 'arg with spaces', '--flag=value']
     opts = IdaCommandOptions(script_file='script.py', script_args=args)
@@ -208,10 +274,10 @@ def test_ida_command_options():
 
     # Test file type option
     opts = IdaCommandOptions(file_type='PE')
-    assert opts.build_args() == '-TPE'
+    assert opts.build_args() == '-T"PE"'
 
     opts = IdaCommandOptions(file_type='ZIP', file_member='classes.dex')
-    assert opts.build_args() == '-TZIP:classes.dex'
+    assert opts.build_args() == '-T"ZIP:classes.dex"'
 
     # Test empty database option
     opts = IdaCommandOptions(empty_database=True)
@@ -219,7 +285,7 @@ def test_ida_command_options():
 
     # Test Windows directory option
     opts = IdaCommandOptions(windows_dir='C:\\Windows')
-    assert opts.build_args() == '-WC:\\Windows'
+    assert opts.build_args() == '-W"C:\\Windows"'
 
     # Test no segmentation option
     opts = IdaCommandOptions(no_segmentation=True)
@@ -238,7 +304,7 @@ def test_ida_command_options():
     # Test combined options (no chaining, just set fields)
     opts = IdaCommandOptions(auto_analysis=False, log_file='analysis.log', processor='arm')
     args = opts.build_args()
-    assert args == '-a -Lanalysis.log -parm'
+    assert args == '-a -L"analysis.log" -parm'
 
     # Test complex scenario
     opts = IdaCommandOptions(
@@ -260,7 +326,7 @@ def test_ida_command_options():
         debug_flags=0x10004,  # debugger + flirt
     )
     args = opts.build_args()
-    assert args == '-c -oproject.idb -P+ -TZIP:classes.dex -z10004'
+    assert args == '-c -o"project.idb" -P+ -T"ZIP:classes.dex" -z10004'
 
     # Test default for auto_analysis is True
     opts = IdaCommandOptions()
