@@ -61,7 +61,7 @@ def pytest_terminal_summary(terminalreporter):
 def min_ida_version(v: str) -> pytest.MarkDecorator:
     return pytest.mark.skipif(
         ida_domain.__ida_version__ < Version(v),
-        reason=f'requires IDA {v}+',
+        reason=f"requires IDA {v}+",
     )
 
 
