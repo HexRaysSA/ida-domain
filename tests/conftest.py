@@ -22,6 +22,10 @@ def _annotation_escape(s: str) -> str:
     return s.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
 
 
+def _property_escape(s: str) -> str:
+    return _annotation_escape(s).replace(':', '%3A').replace(',', '%2C')
+
+
 def pytest_warning_recorded(warning_message: warnings.WarningMessage, when, nodeid, location):
     """Collect deprecation warnings so they can be surfaced as GitHub Actions annotations."""
     if os.environ.get('GITHUB_ACTIONS') != 'true':
@@ -46,9 +50,9 @@ def pytest_terminal_summary(terminalreporter):
     while tests run; the runner only picks up commands written to the real stdout.
     """
     for (path, lineno, message), (category, nodeid) in _deprecation_warnings.items():
-        props = [f'title={category}']
-        if not path.startswith('..'):
-            props = [f'file={path}', f'line={lineno}'] + props
+        props = [f'title={_property_escape(category)}']
+        if not path.startswith('..') and not os.path.isabs(path):
+            props = [f'file={_property_escape(path)}', f'line={lineno}'] + props
         text = _annotation_escape(f'{message} (triggered by {nodeid})')
         terminalreporter.write_line(f'::warning {",".join(props)}::{text}')
 
