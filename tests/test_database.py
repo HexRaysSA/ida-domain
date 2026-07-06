@@ -1,6 +1,7 @@
 import os
 
 import conftest
+from conftest import min_ida_version
 
 import ida_domain  # isort: skip
 
@@ -105,7 +106,7 @@ def test_database(test_env):
     db3.close(False)
 
 
-@conftest.min_ida_version('9.2')
+@min_ida_version('9.2')
 def test_file_type_with_spaces():
     """file_type values with spaces must reach IDA as a single -T argument."""
     opts = IdaCommandOptions(new_database=True, file_type='ELF64 for x86-64 (Relocatable)')
@@ -143,6 +144,7 @@ def test_output_database_with_spaces():
     assert os.path.exists(output_database)
 
 
+@min_ida_version('9.2')
 def test_windows_dir_with_spaces():
     """windows_dir paths with spaces must reach IDA as a single -W argument."""
     opts = IdaCommandOptions(new_database=True, windows_dir='C:\\Program Files')
