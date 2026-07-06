@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: read
+  checks: write
 
 jobs:
   lint:
@@ -101,9 +102,32 @@ jobs:
         run: uv pip install idapro
 
       - name: Run tests and generate coverage
+        id: tests
         run: uv run coverage run --source=ida_domain -m pytest -v --junitxml=test-results.xml
         env:
           IDALOG: ida.log
+
+      - name: Flag deprecation warnings
+        if: ${{ always() && steps.tests.outputs.deprecation_warning_count }}
+        uses: actions/github-script@v8
+        env:
+          COUNT: ${{ steps.tests.outputs.deprecation_warning_count }}
+          CHECK_NAME: "⚠️ Deprecation warnings (IDA ${{ matrix.ida_version.version }})"
+        with:
+          script: |
+            await github.rest.checks.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              name: process.env.CHECK_NAME,
+              head_sha: context.payload.pull_request?.head?.sha ?? context.sha,
+              status: 'completed',
+              conclusion: 'neutral',
+              output: {
+                title: `${process.env.COUNT} unique deprecation warning(s)`,
+                summary: `The test run emitted ${process.env.COUNT} unique deprecation warning(s). ` +
+                  'See the annotations of the "Run tests and generate coverage" step for details.',
+              },
+            });
 
       - name: Generate coverage reports
         run: |
