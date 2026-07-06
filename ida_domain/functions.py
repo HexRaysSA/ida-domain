@@ -137,6 +137,16 @@ class FunctionInfo:
     """Function attribute flags"""
     name: str
     """Function name"""
+    frsize: int
+    """Size of local variables part of the frame in bytes"""
+    frregs: int
+    """Size of saved registers in the frame"""
+    argsize: int
+    """Number of bytes purged from the stack upon returning"""
+    fpd: int
+    """Frame pointer delta"""
+    color: int
+    """User-defined function color"""
 
     def __contains__(self, ea: ea_t) -> bool:
         """Check if an address lies within the function main chunk."""
@@ -176,8 +186,18 @@ def _func_info_at(ea: ea_t) -> Optional[FunctionInfo]:
     info = _ida_compat.func_entry_info_at(ea)
     if info is None:
         return None
-    start_ea, end_ea, flags, name = info
-    return FunctionInfo(start_ea=start_ea, end_ea=end_ea, flags=FunctionFlags(flags), name=name)
+    start_ea, end_ea, flags, name, frsize, frregs, argsize, fpd, color = info
+    return FunctionInfo(
+        start_ea=start_ea,
+        end_ea=end_ea,
+        flags=FunctionFlags(flags),
+        name=name,
+        frsize=frsize,
+        frregs=frregs,
+        argsize=argsize,
+        fpd=fpd,
+        color=color,
+    )
 
 
 @decorate_all_methods(check_db_open)

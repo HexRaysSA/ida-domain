@@ -147,21 +147,43 @@ else:
 
 if hasattr(ida_funcs, 'get_func_entry_info'):
 
-    def func_entry_info_at(ea: ea_t) -> Optional[Tuple[ea_t, ea_t, int, str]]:
-        """Return ``(start_ea, end_ea, flags, name)`` of the function at ``ea``."""
+    def func_entry_info_at(ea: ea_t) -> Optional[Tuple]:
+        """Return ``(start_ea, end_ea, flags, name, frsize, frregs, argsize,
+        fpd, color)`` of the function at ``ea``."""
         info = ida_funcs.func_entry_info_t()
         if not ida_funcs.get_func_entry_info(info, ea, ida_funcs.GFI_NAME):
             return None
-        return info.start_ea, info.end_ea, info.get_flags(), info.get_name() or ''
+        return (
+            info.start_ea,
+            info.end_ea,
+            info.get_flags(),
+            info.get_name() or '',
+            info.get_frsize(),
+            info.get_frregs(),
+            info.get_argsize(),
+            info.get_fpd(),
+            info.get_color(),
+        )
 else:
 
-    def func_entry_info_at(ea: ea_t) -> Optional[Tuple[ea_t, ea_t, int, str]]:
-        """Return ``(start_ea, end_ea, flags, name)`` of the function at ``ea``."""
+    def func_entry_info_at(ea: ea_t) -> Optional[Tuple]:
+        """Return ``(start_ea, end_ea, flags, name, frsize, frregs, argsize,
+        fpd, color)`` of the function at ``ea``."""
         func = ida_funcs.get_func(ea)
         if func is None:
             return None
         name = ida_funcs.get_func_name(func.start_ea) or ''
-        return func.start_ea, func.end_ea, func.flags, name
+        return (
+            func.start_ea,
+            func.end_ea,
+            func.flags,
+            name,
+            func.frsize,
+            func.frregs,
+            func.argsize,
+            func.fpd,
+            func.color,
+        )
 
 
 def iter_func_tail_ranges(func_ea: ea_t) -> Iterator[Tuple[ea_t, ea_t]]:
