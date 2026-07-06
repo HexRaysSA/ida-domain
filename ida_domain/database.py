@@ -273,11 +273,11 @@ class IdaCommandOptions:
         if self.jit_debugger is not None:
             args.append(f'-I{int(self.jit_debugger)}')
         if self.log_file:
-            args.append(f'-L"{self.log_file}"')
+            args.append(f'-L{self._quote(self.log_file)}')
         if self.disable_mouse:
             args.append('-M')
         if self.output_database:
-            args.append(f'-o"{self.output_database}"')
+            args.append(f'-o{self._quote(self.output_database)}')
         if self.plugin_options:
             args.append(f'-O{self.plugin_options}')
         if self.processor:
@@ -298,18 +298,18 @@ class IdaCommandOptions:
                 f' {self._quote_if_needed(arg)}' for arg in self.script_args
             )
             if self.script_args:
-                args.append(f'-S"{full}"')
+                args.append(f'-S{self._quote(full)}')
             else:
-                args.append(f'-S"{self.script_file}"')
+                args.append(f'-S{self._quote(self.script_file)}')
         if self.empty_database:
             args.append('-t')
         if self.file_type:
             type_spec = self.file_type
             if self.file_member:
                 type_spec += f':{self.file_member}'
-            args.append(f'-T"{type_spec}"')
+            args.append(f'-T{self._quote(type_spec)}')
         if self.windows_dir:
-            args.append(f'-W"{self.windows_dir}"')
+            args.append(f'-W{self._quote(self.windows_dir)}')
         if self.no_segmentation:
             args.append('-x')
         if self.debug_flags:
@@ -320,9 +320,17 @@ class IdaCommandOptions:
         return ' '.join(args)
 
     @staticmethod
+    def _quote(s: str) -> str:
+        """Quote a string, escaping quotes and trailing backslashes."""
+        s = s.replace('"', r'\"')
+        if s.endswith('\\'):
+            s += '\\'
+        return f'"{s}"'
+
+    @staticmethod
     def _quote_if_needed(s: str) -> str:
         """Quote a string if it contains spaces."""
-        return f'"{s}"' if ' ' in s else s
+        return IdaCommandOptions._quote(s) if ' ' in s else s
 
     @staticmethod
     def _parse_debug_flags(flags: Union[int, List[str]]) -> int:

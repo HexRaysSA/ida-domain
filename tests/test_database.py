@@ -109,11 +109,12 @@ def test_database(test_env):
 @min_ida_version('9.2')
 def test_file_type_with_spaces():
     """file_type values with spaces must reach IDA as a single -T argument."""
-    opts = IdaCommandOptions(new_database=True, file_type='ELF64 for x86-64 (Relocatable)')
+    # 'Binary file' differs from the auto-detected ELF format, proving -T was applied
+    opts = IdaCommandOptions(new_database=True, file_type='Binary file')
     db = ida_domain.Database.open(path=conftest.idb_path, args=opts, save_on_close=False)
     try:
         assert db.is_open()
-        assert db.format == 'ELF64 for x86-64 (Relocatable)'
+        assert db.format == 'Binary file'
     finally:
         db.close(False)
 
@@ -147,7 +148,9 @@ def test_output_database_with_spaces():
 @min_ida_version('9.2')
 def test_windows_dir_with_spaces():
     """windows_dir paths with spaces must reach IDA as a single -W argument."""
-    opts = IdaCommandOptions(new_database=True, windows_dir='C:\\Program Files')
+    opts = IdaCommandOptions(new_database=True, windows_dir='C:\\Program Files\\')
+    # trailing backslashes must be doubled, otherwise \" is parsed as a literal quote
+    assert opts.build_args() == '-c -W"C:\\Program Files\\\\"'
     db = ida_domain.Database.open(path=conftest.idb_path, args=opts, save_on_close=False)
     try:
         assert db.is_open()
@@ -230,6 +233,9 @@ def test_ida_command_options():
     opts = IdaCommandOptions(log_file='debug.log')
     assert opts.build_args() == '-L"debug.log"'
 
+    opts = IdaCommandOptions(log_file='we"ird log.txt')
+    assert opts.build_args() == '-L"we\\"ird log.txt"'
+
     # Test disable mouse option
     opts = IdaCommandOptions(disable_mouse=True)
     assert opts.build_args() == '-M'
@@ -273,7 +279,7 @@ def test_ida_command_options():
 
     args = ['arg1', 'arg with spaces', '--flag=value']
     opts = IdaCommandOptions(script_file='script.py', script_args=args)
-    assert opts.build_args() == '-S"script.py arg1 "arg with spaces" --flag=value"'
+    assert opts.build_args() == '-S"script.py arg1 \\"arg with spaces\\" --flag=value"'
 
     # Test file type option
     opts = IdaCommandOptions(file_type='PE')
