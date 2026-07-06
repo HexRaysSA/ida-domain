@@ -105,6 +105,7 @@ def test_database(test_env):
     db3.close(False)
 
 
+@conftest.min_ida_version('9.2')
 def test_file_type_with_spaces():
     """file_type values with spaces must reach IDA as a single -T argument."""
     opts = IdaCommandOptions(new_database=True, file_type='ELF64 for x86-64 (Relocatable)')
