@@ -7,16 +7,15 @@ from enum import Enum, IntEnum, IntFlag
 
 import ida_bytes
 import ida_frame
-import ida_funcs
 import ida_kernwin
 import ida_lines
 import ida_nalt
 import ida_typeinf
 import ida_xref
-from ida_funcs import func_t
 from ida_idaapi import BADADDR, ea_t
 from typing_extensions import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, Set, Tuple, Union
 
+from . import _ida_compat
 from .base import DatabaseEntity, InvalidEAError, check_db_open, decorate_all_methods
 
 if TYPE_CHECKING:
@@ -345,13 +344,13 @@ class Xrefs(DatabaseEntity):
 
         for xref in self.to_ea(func_ea):
             if xref.is_call:
-                caller_func = ida_funcs.get_func(xref.from_ea)
+                caller_start_ea = _ida_compat.get_func_start(xref.from_ea)
                 caller_name: Optional[str] = None
                 caller_func_ea = None
 
-                if caller_func:
-                    caller_name = self.database.functions.get_name(caller_func)
-                    caller_func_ea = caller_func.start_ea
+                if caller_start_ea != BADADDR:
+                    caller_name = self.database.names.get_at(caller_start_ea) or ''
+                    caller_func_ea = caller_start_ea
                 else:
                     caller_name = self.database.names.get_at(xref.from_ea)
                     if not caller_name:

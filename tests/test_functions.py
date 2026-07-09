@@ -34,9 +34,11 @@ def test_function(test_env):
     assert func is not None
     assert func.start_ea == 0x2A3
     assert db.functions.set_name(func, 'testing_function_rename')
-    assert func.name == 'testing_function_rename'
-    assert db.functions.set_name(func, 'add_numbers')
+    # func is a value snapshot - re-query to observe the rename
     assert func.name == 'add_numbers'
+    assert db.functions.get_name(func) == 'testing_function_rename'
+    assert db.functions.set_name(func, 'add_numbers')
+    assert db.functions.get_name(func) == 'add_numbers'
 
     blocks = db.functions.get_flowchart(func)
     assert blocks.size == 1

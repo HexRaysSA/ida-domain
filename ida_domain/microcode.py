@@ -19,7 +19,7 @@ from ida_hexrays import (
     mlist_t,
     mop_t,
 )
-from typing_extensions import TYPE_CHECKING, Any, Iterator, List, Optional, Tuple
+from typing_extensions import TYPE_CHECKING, Any, Iterator, List, Optional, Tuple, Union
 
 from . import _ida_compat
 from .base import (
@@ -39,6 +39,7 @@ if TYPE_CHECKING:
     from ida_typeinf import argloc_t, tinfo_t
 
     from .database import Database
+    from .functions import FunctionLike
 
 logger = logging.getLogger(__name__)
 
@@ -4349,7 +4350,7 @@ class Microcode(DatabaseEntity):
 
     def generate(
         self,
-        func: func_t,
+        func: FunctionLike,
         maturity: MicroMaturity = MicroMaturity.GENERATED,
         flags: DecompilationFlags = DecompilationFlags.WARNINGS,
         build_graph: bool = True,
@@ -4357,7 +4358,7 @@ class Microcode(DatabaseEntity):
         """Generate microcode for a function.
 
         Args:
-            func: An IDA ``func_t`` object (e.g. from ``db.functions.get_at()``).
+            func: The function (FunctionInfo, any address inside it, or func_t).
             maturity: The desired maturity level.
             flags: Decompilation flags (default: ``DecompilationFlags.WARNINGS``).
             build_graph: Whether to build the CFG graph after generation.
@@ -4368,13 +4369,14 @@ class Microcode(DatabaseEntity):
         Raises:
             MicrocodeError: If microcode generation fails.
         """
-        mbr = _ida_compat.make_decomp_ranges(func)
+        ea = _ida_compat.func_ea(func)
+        mbr = _ida_compat.make_decomp_ranges(ea)
         hf = ida_hexrays.hexrays_failure_t()
         ml = ida_hexrays.mlist_t()
         mba = ida_hexrays.gen_microcode(mbr, hf, ml, int(flags), int(maturity))
 
         if not mba:
-            raise _microcode_error_from(hf, f'0x{func.start_ea:x}')
+            raise _microcode_error_from(hf, f'0x{ea:x}')
 
         if build_graph:
             mba.build_graph()
