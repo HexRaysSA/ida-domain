@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import warnings
 from dataclasses import dataclass
-from enum import Flag
+from enum import Flag, IntEnum
 
 import ida_bytes
 import ida_funcs
@@ -35,6 +35,7 @@ from .pseudocode import (
     LocalVariableReference,
     PseudocodeFunction,
 )
+from .types import TypeApplyFlags
 
 if TYPE_CHECKING:
     from .database import Database
@@ -86,6 +87,21 @@ class FunctionFlags(Flag):
     """Function is an exception unwind handler"""
     CATCH = ida_funcs.FUNC_CATCH
     """Function is an exception catch handler"""
+
+
+class MoveFunctionResult(IntEnum):
+    """Result codes for moving a function chunk's start address."""
+
+    OK = ida_funcs.MOVE_FUNC_OK
+    """Successfully moved the function"""
+    NOCODE = ida_funcs.MOVE_FUNC_NOCODE
+    """No instruction at the new start address"""
+    BADSTART = ida_funcs.MOVE_FUNC_BADSTART
+    """Bad new start address"""
+    NOFUNC = ida_funcs.MOVE_FUNC_NOFUNC
+    """No function at the given address"""
+    REFUSED = ida_funcs.MOVE_FUNC_REFUSED
+    """A plugin refused the operation"""
 
 
 @dataclass
@@ -782,3 +798,118 @@ class Functions(DatabaseEntity):
             if lvar.name == name:
                 return lvar
         raise KeyError(f'Variable {name} could not be located')
+
+    def set_start(self, func: func_t, new_start: ea_t) -> MoveFunctionResult:
+        """
+        Change the start address of a function.
+
+        Args:
+            func: The function instance.
+            new_start: The new start address. Must be an instruction boundary
+                within the function.
+
+        Returns:
+            A :class:`MoveFunctionResult` describing the outcome
+            (``MoveFunctionResult.OK`` on success).
+
+        Raises:
+            InvalidEAError: If new_start is not a valid address.
+        """
+        if not self.database.is_valid_ea(new_start):
+            raise InvalidEAError(new_start)
+        return MoveFunctionResult(ida_funcs.set_func_start(func.start_ea, new_start))
+
+    def set_end(self, func: func_t, new_end: ea_t) -> bool:
+        """
+        Change the end address of a function.
+
+        Args:
+            func: The function instance.
+            new_end: The new end address.
+
+        Returns:
+            True if the end was successfully changed, False otherwise.
+
+        Raises:
+            InvalidEAError: If new_end is outside the database range.
+        """
+        if not self.database.is_valid_ea(new_end, strict_check=False):
+            raise InvalidEAError(new_end)
+        return ida_funcs.set_func_end(func.start_ea, new_end)
+
+    def update(self, func: func_t) -> bool:
+        """
+        Persist in-place changes made to a function object back to the database.
+
+        Use this after modifying attributes on a ``func_t``. Function boundaries
+        must not be changed this way; use :meth:`set_start` / :meth:`set_end`
+        instead.
+
+        Args:
+            func: The function instance to update.
+
+        Returns:
+            True if the function was successfully updated, False otherwise.
+        """
+        return ida_funcs.update_func(func)
+
+    def reanalyze(self, func: func_t) -> None:
+        """
+        Force re-analysis of a function.
+
+        Schedules re-analysis of all chunks of the function.
+
+        Args:
+            func: The function instance.
+        """
+        ida_funcs.reanalyze_function(func)
+
+    def is_outlined(self, func: func_t) -> bool:
+        """
+        Check whether a function is outlined code.
+
+        Args:
+            func: The function instance.
+
+        Returns:
+            True if the function carries the outlined flag, False otherwise.
+        """
+        return FunctionFlags.OUTLINE in self.get_flags(func)
+
+    def set_outlined(self, func: func_t, outlined: bool = True) -> bool:
+        """
+        Set or clear the outlined flag on a function.
+
+        Args:
+            func: The function instance.
+            outlined: True to mark the function as outlined, False to clear it.
+
+        Returns:
+            True if the flag was successfully updated, False otherwise.
+        """
+        if outlined:
+            func.flags |= ida_funcs.FUNC_OUTLINE
+        else:
+            func.flags &= ~ida_funcs.FUNC_OUTLINE
+        return ida_funcs.update_func(func)
+
+    def apply_declaration(
+        self, func: func_t, decl: str, flags: TypeApplyFlags = TypeApplyFlags.DEFINITE
+    ) -> bool:
+        """
+        Apply a C-style prototype to a function.
+
+        Parses a C declaration and applies it as the function's type.
+
+        Args:
+            func: The function instance.
+            decl: C prototype string (e.g. ``"int __fastcall foo(int x)"``).
+            flags: Type apply flags. Defaults to ``DEFINITE``.
+        Returns:
+            True if the prototype was parsed and applied successfully, False otherwise.
+
+        Raises:
+            InvalidEAError: If the function start address is invalid.
+            InvalidParameterError: If the declaration cannot be parsed.
+        """
+        return self.database.types.apply_declaration_at(func.start_ea, decl, flags)

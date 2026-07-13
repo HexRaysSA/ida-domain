@@ -153,6 +153,7 @@ def test_function(test_env):
     # assignment_rhs_lvar resolves the RHS directly to a LocalVariable
     rhs_lvar = write_ref.assignment_rhs_lvar
     from ida_domain.pseudocode import LocalVariable
+
     assert isinstance(rhs_lvar, LocalVariable)
     assert rhs_lvar.name == 'v3'
     # This write is not inside a call, so containing_call_args_lvars is None
@@ -213,7 +214,6 @@ def test_function(test_env):
     assert next_func.name == 'add_numbers'
     assert next_func.start_ea == 0x2A3
 
-
     with pytest.raises(InvalidEAError):
         db.functions.get_next(0xFFFFFFFF)
 
@@ -258,7 +258,6 @@ def test_function(test_env):
 
     data_items = list(db.functions.get_data_items(func))
     assert len(data_items) == 0
-
 
     with pytest.raises(InvalidEAError):
         db.functions.get_at(0xFFFFFFFF)
@@ -323,6 +322,58 @@ def test_function(test_env):
         '3.13 call   !sys_write <spec:"unsigned int fd" edi.4,'
         '"const char *buf" rsi.8,"size_t count" rdx.8> => "signed __int64" rax.8'
     )
+
+
+def test_function_boundaries_flags_and_decl(test_env):
+    """Boundary edits (set_start/set_end), refresh (update/reanalyze),
+    the outlined flag, and applying a C prototype (apply_declaration)."""
+    db = test_env
+    from ida_domain.functions import MoveFunctionResult
+
+    # Set and clear the outlined flag
+    func = db.functions.get_at(0x2A3)
+    assert db.functions.is_outlined(func) is False
+    assert db.functions.set_outlined(func, True) is True
+    func = db.functions.get_at(0x2A3)
+    assert db.functions.is_outlined(func) is True
+    assert db.functions.set_outlined(func, False) is True
+    func = db.functions.get_at(0x2A3)
+    assert db.functions.is_outlined(func) is False
+
+    # Update the function in place
+    assert db.functions.update(func) is True
+
+    # Apply a C prototype and read it back
+    assert db.functions.apply_declaration(func, 'int __fastcall add_numbers(int a, int b)') is True
+    func = db.functions.get_at(0x2A3)
+    assert db.functions.get_signature(func) == 'int __fastcall(int a, int b)'
+    with pytest.raises(InvalidParameterError):
+        db.functions.apply_declaration(func, 'not a valid decl @#$')
+
+    # Reanalyze the function
+    assert db.functions.reanalyze(func) is None
+    func = db.functions.get_at(0x2A3)
+    assert func is not None
+
+    # Move the function start to the next instruction
+    result = db.functions.set_start(func, 0x2A4)
+    assert result is MoveFunctionResult.OK
+    func = db.functions.get_at(0x2A4)
+    assert func is not None
+    assert func.start_ea == 0x2A4
+    # A mid-instruction address cannot start a function
+    result = db.functions.set_start(func, 0x2A8)
+    assert result is MoveFunctionResult.NOCODE
+    with pytest.raises(InvalidEAError):
+        db.functions.set_start(func, 0xFFFFFFFF)
+
+    # Move the function end back past the last instruction
+    func = db.functions.get_at(0x2A4)
+    assert db.functions.set_end(func, 0x2AE) is True
+    func = db.functions.get_at(0x2A4)
+    assert func.end_ea == 0x2AE
+    with pytest.raises(InvalidEAError):
+        db.functions.set_end(func, 0xFFFFFFFF)
 
 
 def test_get_signature_returns_optional_str(test_env):
