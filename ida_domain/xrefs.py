@@ -17,7 +17,13 @@ from ida_funcs import func_t
 from ida_idaapi import BADADDR, ea_t
 from typing_extensions import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, Set, Tuple, Union
 
-from .base import DatabaseEntity, InvalidEAError, check_db_open, decorate_all_methods
+from .base import (
+    DatabaseEntity,
+    InvalidEAError,
+    InvalidParameterError,
+    check_db_open,
+    decorate_all_methods,
+)
 
 if TYPE_CHECKING:
     from .database import Database
@@ -465,3 +471,109 @@ class Xrefs(DatabaseEntity):
         for xref in self.to_ea(data_ea, XrefsFlags.DATA):
             if xref.is_write:
                 yield xref.from_ea
+
+    def add_code_ref(self, from_ea: ea_t, to_ea: ea_t, type: XrefType, user: bool = True) -> bool:
+        """
+        Add a code cross-reference.
+
+        Args:
+            from_ea: Source address; must be the head of a defined item
+            to_ea: Target address
+            type: Code reference type (e.g. XrefType.CALL_NEAR, XrefType.JUMP_NEAR)
+            user: Mark the xref as user-specified (default: True). User xrefs survive
+                reanalysis; without this mark the kernel deletes the xref the next time
+                the source item is reanalyzed. Non-user xrefs also cannot replace an
+                existing user-specified xref for the same address pair.
+
+        Returns:
+            True if the cross-reference was added
+
+        Raises:
+            InvalidEAError: If either effective address is invalid
+            InvalidParameterError: If type is not a code reference type
+        """
+        if not self.database.is_valid_ea(from_ea):
+            raise InvalidEAError(from_ea)
+        if not self.database.is_valid_ea(to_ea):
+            raise InvalidEAError(to_ea)
+        if not type.is_code_ref():
+            raise InvalidParameterError('type', type, 'not a code reference type')
+
+        ida_type = int(type)
+        if user:
+            ida_type |= ida_xref.XREF_USER
+        return ida_xref.add_cref(from_ea, to_ea, ida_type)
+
+    def remove_code_ref(self, from_ea: ea_t, to_ea: ea_t, expand: bool = False) -> bool:
+        """
+        Remove a code cross-reference.
+
+        Args:
+            from_ea: Source address
+            to_ea: Target address
+            expand: If True, plan to delete the referenced instruction when it no
+                longer has any references (default: False)
+
+        Returns:
+            True if the referenced instruction was scheduled for deletion
+            (only possible when expand is True), False otherwise
+
+        Raises:
+            InvalidEAError: If either effective address is invalid
+        """
+        if not self.database.is_valid_ea(from_ea):
+            raise InvalidEAError(from_ea)
+        if not self.database.is_valid_ea(to_ea):
+            raise InvalidEAError(to_ea)
+
+        return ida_xref.del_cref(from_ea, to_ea, expand)
+
+    def add_data_ref(self, from_ea: ea_t, to_ea: ea_t, type: XrefType, user: bool = True) -> bool:
+        """
+        Add a data cross-reference.
+
+        Args:
+            from_ea: Source address; must be the head of a defined item
+            to_ea: Target address
+            type: Data reference type (e.g. XrefType.READ, XrefType.WRITE, XrefType.OFFSET)
+            user: Mark the xref as user-specified (default: True). User xrefs survive
+                reanalysis; without this mark the kernel deletes the xref the next time
+                the source item is reanalyzed. Non-user xrefs also cannot replace an
+                existing user-specified xref for the same address pair.
+
+        Returns:
+            True if the cross-reference was added
+
+        Raises:
+            InvalidEAError: If either effective address is invalid
+            InvalidParameterError: If type is not a data reference type
+        """
+        if not self.database.is_valid_ea(from_ea):
+            raise InvalidEAError(from_ea)
+        if not self.database.is_valid_ea(to_ea):
+            raise InvalidEAError(to_ea)
+        if not type.is_data_ref():
+            raise InvalidParameterError('type', type, 'not a data reference type')
+
+        ida_type = int(type)
+        if user:
+            ida_type |= ida_xref.XREF_USER
+        return ida_xref.add_dref(from_ea, to_ea, ida_type)
+
+    def remove_data_ref(self, from_ea: ea_t, to_ea: ea_t) -> None:
+        """
+        Remove a data cross-reference.
+
+        Args:
+            from_ea: Source address
+            to_ea: Target address
+
+        Raises:
+            InvalidEAError: If either effective address is invalid
+        """
+        if not self.database.is_valid_ea(from_ea):
+            raise InvalidEAError(from_ea)
+        if not self.database.is_valid_ea(to_ea):
+            raise InvalidEAError(to_ea)
+
+        ida_xref.del_dref(from_ea, to_ea)
