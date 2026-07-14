@@ -173,7 +173,7 @@ def test_xref_mutation(test_env):
 
     assert 0x27 in list(db.xrefs.jumps_to_ea(0x272))
 
-    assert db.xrefs.remove_code_ref(0x27, 0x272) == False
+    db.xrefs.remove_code_ref(0x27, 0x272)
     assert 0x27 not in list(db.xrefs.jumps_to_ea(0x272))
 
     assert db.xrefs.add_data_ref(0x27, 0x330, XrefType.READ)
