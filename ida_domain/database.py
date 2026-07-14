@@ -622,6 +622,19 @@ class Database:
         else:
             return self.minimum_ea <= ea <= self.maximum_ea
 
+    def is_private_ea(self, ea: ea_t) -> bool:
+        """
+        Check if the specified address belongs to IDA's private range,
+        a reserved address space used internally by IDA.
+
+        Args:
+            ea: The effective address to check.
+
+        Returns:
+            True if the address is inside the private range.
+        """
+        return ida_ida.inf_get_privrange().contains(ea)
+
     def hook(self) -> None:
         """
         Activate (hook) all registered event handler instances.
