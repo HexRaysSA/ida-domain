@@ -198,7 +198,8 @@ class Xrefs(DatabaseEntity):
         Get all cross-references to an address.
 
         Args:
-            ea: Target effective address
+            ea: Target effective address; addresses in IDA's private range
+                (e.g. structure/enum members) are also accepted
             flags: Filter flags (default: all xrefs)
 
         Yields:
@@ -207,7 +208,7 @@ class Xrefs(DatabaseEntity):
         Raises:
             InvalidEAError: If the effective address is invalid
         """
-        if not self.database.is_valid_ea(ea):
+        if not (self.database.is_valid_ea(ea) or self.database.is_private_ea(ea)):
             raise InvalidEAError(ea)
 
         xb = ida_xref.xrefblk_t()
@@ -232,7 +233,8 @@ class Xrefs(DatabaseEntity):
         Note: Method named 'from_' because 'from' is a Python keyword.
 
         Args:
-            ea: Source effective address
+            ea: Source effective address; addresses in IDA's private range
+                (e.g. structure/enum members) are also accepted
             flags: Filter flags (default: all xrefs)
 
         Yields:
@@ -241,7 +243,7 @@ class Xrefs(DatabaseEntity):
         Raises:
             InvalidEAError: If the effective address is invalid
         """
-        if not self.database.is_valid_ea(ea):
+        if not (self.database.is_valid_ea(ea) or self.database.is_private_ea(ea)):
             raise InvalidEAError(ea)
 
         xb = ida_xref.xrefblk_t()
