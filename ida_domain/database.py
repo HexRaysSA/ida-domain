@@ -605,6 +605,7 @@ class Database:
         if compiler_error is not None:
             raise DatabaseError(f'script execution {file_path} failed with error {compiler_error}')
 
+    @check_db_open
     def is_valid_ea(self, ea: ea_t, strict_check: bool = True) -> bool:
         """
         Check if the specified address is valid.
@@ -621,6 +622,20 @@ class Database:
             return ida_bytes.is_mapped(ea)
         else:
             return self.minimum_ea <= ea <= self.maximum_ea
+
+    @check_db_open
+    def is_private_ea(self, ea: ea_t) -> bool:
+        """
+        Check if the specified address belongs to IDA's private range,
+        a reserved address space used internally by IDA.
+
+        Args:
+            ea: The effective address to check.
+
+        Returns:
+            True if the address is inside the private range.
+        """
+        return ida_ida.inf_get_privrange().contains(ea)
 
     def hook(self) -> None:
         """
