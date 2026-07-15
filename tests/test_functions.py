@@ -1,9 +1,12 @@
+import ida_auto
 import pytest
 
 import ida_domain  # isort: skip
 from ida_idaapi import BADADDR
 
+from ida_domain import hooks
 from ida_domain.base import InvalidEAError, InvalidParameterError
+from ida_domain.functions import FunctionFlags, FunctionMoveError, MoveFunctionResult
 
 
 def _mc_insn(line: str) -> str:
@@ -328,7 +331,6 @@ def test_function_boundaries_flags_and_decl(test_env):
     """Boundary edits (set_start/set_end), refresh (update/reanalyze),
     the outlined flag, and applying a C prototype (apply_declaration)."""
     db = test_env
-    from ida_domain.functions import MoveFunctionResult
 
     # Set and clear the outlined flag
     func = db.functions.get_at(0x2A3)
@@ -340,40 +342,60 @@ def test_function_boundaries_flags_and_decl(test_env):
     func = db.functions.get_at(0x2A3)
     assert db.functions.is_outlined(func) is False
 
-    # Update the function in place
-    assert db.functions.update(func) is True
+    # Update emits func_updated AND persists an in-place edit to the func_t
+    class _UpdateHook(hooks.DatabaseHooks):
+        def __init__(self):
+            super().__init__()
+            self.updated_eas = []
 
-    # Apply a C prototype and read it back
-    assert db.functions.apply_declaration(func, 'int __fastcall add_numbers(int a, int b)') is True
+        def func_updated(self, pfn):
+            self.updated_eas.append(pfn.start_ea)
+
+    func = db.functions.get_at(0x2A3)
+    assert FunctionFlags.LIB not in db.functions.get_flags(func)
+    func.flags |= FunctionFlags.LIB.value
+    update_hook = _UpdateHook()
+    update_hook.hook()
+    try:
+        assert db.functions.update(func) is True
+        assert 0x2A3 in update_hook.updated_eas
+    finally:
+        update_hook.unhook()
+    # the in-place edit was persisted
+    assert FunctionFlags.LIB in db.functions.get_flags(db.functions.get_at(0x2A3))
+
+    assert db.functions.apply_declaration(func, 'int __fastcall f(int a, int b)') is True
     func = db.functions.get_at(0x2A3)
     assert db.functions.get_signature(func) == 'int __fastcall(int a, int b)'
     with pytest.raises(InvalidParameterError):
         db.functions.apply_declaration(func, 'not a valid decl @#$')
 
-    # Reanalyze the function
-    assert db.functions.reanalyze(func) is None
-    func = db.functions.get_at(0x2A3)
-    assert func is not None
+    # reanalyze plants the function's chunks in the AU_USED ("reanalyze") queue
+    ida_auto.auto_wait()
+    assert ida_auto.peek_auto_queue(0x2A3, ida_auto.AU_USED) == BADADDR
+    db.functions.reanalyze(db.functions.get_at(0x2A3))
+    assert ida_auto.peek_auto_queue(0x2A3, ida_auto.AU_USED) == 0x2A3
+    ida_auto.auto_wait()
+    assert ida_auto.peek_auto_queue(0x2A3, ida_auto.AU_USED) == BADADDR
 
-    # Move the function start to the next instruction
-    result = db.functions.set_start(func, 0x2A4)
-    assert result is MoveFunctionResult.OK
-    func = db.functions.get_at(0x2A4)
-    assert func is not None
-    assert func.start_ea == 0x2A4
-    # A mid-instruction address cannot start a function
-    result = db.functions.set_start(func, 0x2A8)
-    assert result is MoveFunctionResult.NOCODE
+    # Move the start forward to the next instruction (shrink)
+    assert db.functions.set_start(db.functions.get_at(0x2A3), 0x2A4) is True
+    assert db.functions.get_at(0x2A4).start_ea == 0x2A4
+    # new_start may be below the current start to extend, when that code is unowned
+    assert db.functions.set_start(db.functions.get_at(0x2A4), 0x2A3) is True
+    assert db.functions.get_at(0x2A3).start_ea == 0x2A3
+    # a mid-instruction address is not a valid start (the reason code is carried)
+    with pytest.raises(FunctionMoveError) as exc_info:
+        db.functions.set_start(db.functions.get_at(0x2A3), 0x2A8)
+    assert exc_info.value.code is MoveFunctionResult.NOCODE
     with pytest.raises(InvalidEAError):
-        db.functions.set_start(func, 0xFFFFFFFF)
+        db.functions.set_start(db.functions.get_at(0x2A3), 0xFFFFFFFF)
 
-    # Move the function end back past the last instruction
-    func = db.functions.get_at(0x2A4)
-    assert db.functions.set_end(func, 0x2AE) is True
-    func = db.functions.get_at(0x2A4)
-    assert func.end_ea == 0x2AE
+    # Move the end back past the last instruction
+    assert db.functions.set_end(db.functions.get_at(0x2A3), 0x2AE) is True
+    assert db.functions.get_at(0x2A3).end_ea == 0x2AE
     with pytest.raises(InvalidEAError):
-        db.functions.set_end(func, 0xFFFFFFFF)
+        db.functions.set_end(db.functions.get_at(0x2A3), 0xFFFFFFFF)
 
 
 def test_get_signature_returns_optional_str(test_env):
