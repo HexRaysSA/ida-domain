@@ -19,7 +19,7 @@ classifiers = [
 ]
 
 dependencies = [
-    "idapro>=0.0.5",
+    "idapro>=0.0.10",
     "packaging",
     "typing-extensions>=4.14.0",
 ]
