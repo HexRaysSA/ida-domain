@@ -472,14 +472,16 @@ class Xrefs(DatabaseEntity):
             if xref.is_write:
                 yield xref.from_ea
 
-    def add_code_ref(self, from_ea: ea_t, to_ea: ea_t, type: XrefType, user: bool = True) -> bool:
+    def add_code_ref(
+        self, from_ea: ea_t, to_ea: ea_t, xref_type: XrefType, user: bool = True
+    ) -> bool:
         """
         Add a code cross-reference.
 
         Args:
             from_ea: Source address; must be the head of a defined item
             to_ea: Target address
-            type: Code reference type (e.g. XrefType.CALL_NEAR, XrefType.JUMP_NEAR)
+            xref_type: Code reference type (e.g. XrefType.CALL_NEAR, XrefType.JUMP_NEAR)
             user: Mark the xref as user-specified (default: True). User xrefs survive
                 reanalysis; without this mark the kernel deletes the xref the next time
                 the source item is reanalyzed. Non-user xrefs also cannot replace an
@@ -490,16 +492,16 @@ class Xrefs(DatabaseEntity):
 
         Raises:
             InvalidEAError: If either effective address is invalid
-            InvalidParameterError: If type is not a code reference type
+            InvalidParameterError: If xref_type is not a code reference type
         """
-        if not self.database.is_valid_ea(from_ea):
+        if not (self.database.is_valid_ea(from_ea) or self.database.is_private_ea(from_ea)):
             raise InvalidEAError(from_ea)
-        if not self.database.is_valid_ea(to_ea):
+        if not (self.database.is_valid_ea(to_ea) or self.database.is_private_ea(to_ea)):
             raise InvalidEAError(to_ea)
-        if not type.is_code_ref():
-            raise InvalidParameterError('type', type, 'not a code reference type')
+        if not xref_type.is_code_ref():
+            raise InvalidParameterError('xref_type', xref_type, 'not a code reference type')
 
-        ida_type = int(type)
+        ida_type = int(xref_type)
         if user:
             ida_type |= ida_xref.XREF_USER
         return ida_xref.add_cref(from_ea, to_ea, ida_type)
@@ -521,21 +523,23 @@ class Xrefs(DatabaseEntity):
         Raises:
             InvalidEAError: If either effective address is invalid
         """
-        if not self.database.is_valid_ea(from_ea):
+        if not (self.database.is_valid_ea(from_ea) or self.database.is_private_ea(from_ea)):
             raise InvalidEAError(from_ea)
-        if not self.database.is_valid_ea(to_ea):
+        if not (self.database.is_valid_ea(to_ea) or self.database.is_private_ea(to_ea)):
             raise InvalidEAError(to_ea)
 
         return ida_xref.del_cref(from_ea, to_ea, expand)
 
-    def add_data_ref(self, from_ea: ea_t, to_ea: ea_t, type: XrefType, user: bool = True) -> bool:
+    def add_data_ref(
+        self, from_ea: ea_t, to_ea: ea_t, xref_type: XrefType, user: bool = True
+    ) -> bool:
         """
         Add a data cross-reference.
 
         Args:
             from_ea: Source address; must be the head of a defined item
             to_ea: Target address
-            type: Data reference type (e.g. XrefType.READ, XrefType.WRITE, XrefType.OFFSET)
+            xref_type: Data reference type (e.g. XrefType.READ, XrefType.WRITE, XrefType.OFFSET)
             user: Mark the xref as user-specified (default: True). User xrefs survive
                 reanalysis; without this mark the kernel deletes the xref the next time
                 the source item is reanalyzed. Non-user xrefs also cannot replace an
@@ -546,16 +550,16 @@ class Xrefs(DatabaseEntity):
 
         Raises:
             InvalidEAError: If either effective address is invalid
-            InvalidParameterError: If type is not a data reference type
+            InvalidParameterError: If xref_type is not a data reference type
         """
-        if not self.database.is_valid_ea(from_ea):
+        if not (self.database.is_valid_ea(from_ea) or self.database.is_private_ea(from_ea)):
             raise InvalidEAError(from_ea)
-        if not self.database.is_valid_ea(to_ea):
+        if not (self.database.is_valid_ea(to_ea) or self.database.is_private_ea(to_ea)):
             raise InvalidEAError(to_ea)
-        if not type.is_data_ref():
-            raise InvalidParameterError('type', type, 'not a data reference type')
+        if not xref_type.is_data_ref():
+            raise InvalidParameterError('xref_type', xref_type, 'not a data reference type')
 
-        ida_type = int(type)
+        ida_type = int(xref_type)
         if user:
             ida_type |= ida_xref.XREF_USER
         return ida_xref.add_dref(from_ea, to_ea, ida_type)
@@ -571,9 +575,9 @@ class Xrefs(DatabaseEntity):
         Raises:
             InvalidEAError: If either effective address is invalid
         """
-        if not self.database.is_valid_ea(from_ea):
+        if not (self.database.is_valid_ea(from_ea) or self.database.is_private_ea(from_ea)):
             raise InvalidEAError(from_ea)
-        if not self.database.is_valid_ea(to_ea):
+        if not (self.database.is_valid_ea(to_ea) or self.database.is_private_ea(to_ea)):
             raise InvalidEAError(to_ea)
 
         ida_xref.del_dref(from_ea, to_ea)

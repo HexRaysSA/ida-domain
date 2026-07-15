@@ -95,11 +95,11 @@ def test_xrefs(test_env):
     xrefs_info = list(db.xrefs.to_ea(0x2A3))
     assert len(xrefs_info) == 1
     assert xrefs_info[0].from_ea == 39
-    assert xrefs_info[0].is_code == True
+    assert xrefs_info[0].is_code is True
     assert xrefs_info[0].type == XrefType.CALL_NEAR
-    assert xrefs_info[0].user == False
+    assert xrefs_info[0].user is False
     assert xrefs_info[0].to_ea == 0x2A3
-    assert xrefs_info[0].is_call == True
+    assert xrefs_info[0].is_call is True
 
     # Test with custom flags
     xrefs_custom = list(db.xrefs.to_ea(0x2A3, flags=XrefsFlags.CODE))
@@ -191,7 +191,7 @@ def test_xref_mutation(test_env):
     assert db.xrefs.add_data_ref(0x27, 0x330, XrefType.OFFSET, user=False)
     added = [x for x in db.xrefs.from_ea(0x27, XrefsFlags.DATA) if x.to_ea == 0x330]
     assert len(added) == 1
-    assert added[0].user == False
+    assert added[0].user is False
     db.xrefs.remove_data_ref(0x27, 0x330)
 
     with pytest.raises(InvalidParameterError):
@@ -200,8 +200,8 @@ def test_xref_mutation(test_env):
     with pytest.raises(InvalidParameterError):
         db.xrefs.add_data_ref(0x27, 0x330, XrefType.CALL_NEAR)
 
-    assert db.xrefs.add_code_ref(0x28, 0x272, XrefType.JUMP_NEAR) == False
-    assert db.xrefs.add_data_ref(0x28, 0x330, XrefType.READ) == False
+    assert db.xrefs.add_code_ref(0x28, 0x272, XrefType.JUMP_NEAR) is False
+    assert db.xrefs.add_data_ref(0x28, 0x330, XrefType.READ) is False
 
     invalid_ea = 0xFFFFFFFF
     with pytest.raises(InvalidEAError):
@@ -224,34 +224,33 @@ def test_xref_addition_data_happy_path(test_env):
 
     FROM_EA = 0x27
     TO_EA = 0x330
-    data_refs_from = len(list(db.xrefs.from_ea(FROM_EA)))
-    data_refs_to = len(list(db.xrefs.to_ea(TO_EA)))
+    refs_from_count = len(list(db.xrefs.from_ea(FROM_EA)))
+    refs_to_count = len(list(db.xrefs.to_ea(TO_EA)))
 
     assert db.xrefs.add_data_ref(FROM_EA, TO_EA, XrefType.READ, True)
 
-    assert data_refs_from + 1 == len(list(db.xrefs.from_ea(FROM_EA)))
-    assert data_refs_to + 1 == len(list(db.xrefs.to_ea(TO_EA)))
+    assert refs_from_count + 1 == len(list(db.xrefs.from_ea(FROM_EA)))
+    assert refs_to_count + 1 == len(list(db.xrefs.to_ea(TO_EA)))
 
     db.xrefs.remove_data_ref(FROM_EA, TO_EA)
 
-    assert data_refs_from == len(list(db.xrefs.from_ea(FROM_EA)))
-    assert data_refs_to == len(list(db.xrefs.to_ea(TO_EA)))
+    assert refs_from_count == len(list(db.xrefs.from_ea(FROM_EA)))
+    assert refs_to_count == len(list(db.xrefs.to_ea(TO_EA)))
 
 def test_xref_addition_code_happy_path(test_env):
     db = test_env
 
     FROM_EA = 0x18
     TO_EA = 0x31C
-    code_refs_from = len(list(db.xrefs.from_ea(FROM_EA)))
-    code_refs_to = len(list(db.xrefs.to_ea(TO_EA)))
+    refs_from_count = len(list(db.xrefs.from_ea(FROM_EA)))
+    refs_to_count = len(list(db.xrefs.to_ea(TO_EA)))
 
     assert db.xrefs.add_code_ref(FROM_EA, TO_EA, XrefType.JUMP_NEAR, True)
 
-    assert code_refs_from + 1 == len(list(db.xrefs.from_ea(FROM_EA)))
-    assert code_refs_to + 1 == len(list(db.xrefs.to_ea(TO_EA)))
+    assert refs_from_count + 1 == len(list(db.xrefs.from_ea(FROM_EA)))
+    assert refs_to_count + 1 == len(list(db.xrefs.to_ea(TO_EA)))
 
     db.xrefs.remove_code_ref(FROM_EA, TO_EA)
 
-    assert code_refs_from == len(list(db.xrefs.from_ea(FROM_EA)))
-    assert code_refs_to == len(list(db.xrefs.to_ea(TO_EA)))
-
+    assert refs_from_count == len(list(db.xrefs.from_ea(FROM_EA)))
+    assert refs_to_count == len(list(db.xrefs.to_ea(TO_EA)))
