@@ -21,6 +21,9 @@ def test_database(test_env):
     assert db.minimum_ea == 0x0
     assert db.maximum_ea == 0x420
 
+    assert db.is_private_ea(0xFF00000000000000) is True
+    assert db.is_private_ea(0x50) is False
+
     assert db.base_address == 0x0
     assert db.module == 'tiny_asm.bin'
     assert db.filesize == 3680
