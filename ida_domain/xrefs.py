@@ -163,6 +163,40 @@ class XrefsFlags(IntFlag):
         return ida_flags
 
 
+def _make_xref_info(xb: ida_xref.xrefblk_t) -> XrefInfo:
+    try:
+        xref_type = XrefType(xb.type)
+    except ValueError:
+        xref_type = XrefType.UNKNOWN
+    return XrefInfo(from_ea=xb.frm, to_ea=xb.to, is_code=xb.iscode, type=xref_type, user=xb.user)
+
+
+def _iter_xrefs_to(ea: ea_t, flags: XrefsFlags) -> Iterator[XrefInfo]:
+    """Iterate xrefs to ``ea`` without address validation.
+
+    ``ea`` may also be a type id (privrange address); public entry points
+    are responsible for validating their input.
+    """
+    xb = ida_xref.xrefblk_t()
+    ok = xb.first_to(ea, flags.to_ida_flags())
+    while ok:
+        yield _make_xref_info(xb)
+        ok = xb.next_to()
+
+
+def _iter_xrefs_from(ea: ea_t, flags: XrefsFlags) -> Iterator[XrefInfo]:
+    """Iterate xrefs from ``ea`` without address validation.
+
+    ``ea`` may also be a type id (privrange address); public entry points
+    are responsible for validating their input.
+    """
+    xb = ida_xref.xrefblk_t()
+    ok = xb.first_from(ea, flags.to_ida_flags())
+    while ok:
+        yield _make_xref_info(xb)
+        ok = xb.next_from()
+
+
 @decorate_all_methods(check_db_open)
 class Xrefs(DatabaseEntity):
     """
@@ -197,9 +231,11 @@ class Xrefs(DatabaseEntity):
         """
         Get all cross-references to an address.
 
+        Note: To get cross-references to a type or type member (struct, union,
+        enum), use ``db.types.get_xrefs_to()`` / ``db.types.get_member_xrefs_to()``.
+
         Args:
-            ea: Target effective address; addresses in IDA's private range
-                (e.g. structure/enum members) are also accepted
+            ea: Target effective address
             flags: Filter flags (default: all xrefs)
 
         Yields:
@@ -208,23 +244,10 @@ class Xrefs(DatabaseEntity):
         Raises:
             InvalidEAError: If the effective address is invalid
         """
-        if not (self.database.is_valid_ea(ea) or self.database.is_private_ea(ea)):
+        if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        xb = ida_xref.xrefblk_t()
-        ida_flags = flags.to_ida_flags()
-
-        ok = xb.first_to(ea, ida_flags)
-        while ok:
-            try:
-                xref_type = XrefType(xb.type)
-            except ValueError:
-                xref_type = XrefType.UNKNOWN
-
-            yield XrefInfo(
-                from_ea=xb.frm, to_ea=xb.to, is_code=xb.iscode, type=xref_type, user=xb.user
-            )
-            ok = xb.next_to()
+        yield from _iter_xrefs_to(ea, flags)
 
     def from_ea(self, ea: ea_t, flags: XrefsFlags = XrefsFlags.ALL) -> Iterator[XrefInfo]:
         """
@@ -232,9 +255,11 @@ class Xrefs(DatabaseEntity):
 
         Note: Method named 'from_' because 'from' is a Python keyword.
 
+        Note: To get cross-references from a type or type member (struct, union,
+        enum), use ``db.types.get_xrefs_from()`` / ``db.types.get_member_xrefs_from()``.
+
         Args:
-            ea: Source effective address; addresses in IDA's private range
-                (e.g. structure/enum members) are also accepted
+            ea: Source effective address
             flags: Filter flags (default: all xrefs)
 
         Yields:
@@ -243,23 +268,10 @@ class Xrefs(DatabaseEntity):
         Raises:
             InvalidEAError: If the effective address is invalid
         """
-        if not (self.database.is_valid_ea(ea) or self.database.is_private_ea(ea)):
+        if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        xb = ida_xref.xrefblk_t()
-        ida_flags = flags.to_ida_flags()
-
-        ok = xb.first_from(ea, ida_flags)
-        while ok:
-            try:
-                xref_type = XrefType(xb.type)
-            except ValueError:
-                xref_type = XrefType.UNKNOWN
-
-            yield XrefInfo(
-                from_ea=xb.frm, to_ea=xb.to, is_code=xb.iscode, type=xref_type, user=xb.user
-            )
-            ok = xb.next_from()
+        yield from _iter_xrefs_from(ea, flags)
 
     def code_refs_to_ea(self, ea: ea_t, flow: bool = True) -> Iterator[ea_t]:
         """

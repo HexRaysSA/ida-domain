@@ -1,7 +1,9 @@
 import logging
 from pathlib import Path
 
+import ida_auto
 import ida_typeinf
+import idc
 import pytest
 from ida_idaapi import BADADDR
 
@@ -15,6 +17,7 @@ from ida_domain.types import (
     TypeKind,
     UdtAttr,
 )
+from ida_domain.xrefs import XrefType
 
 logger = logging.getLogger(__name__)
 
@@ -166,6 +169,118 @@ def test_types(test_env):
 
     types_list = list(db.types.get_all(library=None, type_kind=TypeKind.NUMBERED))
     assert len(types_list) == 6
+
+
+def test_type_xrefs(tiny_struct_env):
+    db = tiny_struct_env
+
+    decls = """
+    enum PacketStatus { STATUS_READY = 42, STATUS_ERROR = 99 };
+    struct Packet { char *text; unsigned int length; enum PacketStatus status; };
+    """
+    assert db.types.parse_declarations(None, decls, 0) == 0
+    packet = db.types.get_by_name('Packet')
+    status_enum = db.types.get_by_name('PacketStatus')
+    assert packet is not None
+    assert status_enum is not None
+
+    g_packet = idc.get_name_ea_simple('g_packet')
+    assert g_packet != BADADDR
+    assert db.types.apply_at(packet, g_packet)
+    assert ida_auto.auto_wait()
+
+    def xref_pairs(xrefs):
+        return {(xref.from_ea, xref.type) for xref in xrefs}
+
+    assert xref_pairs(db.types.get_xrefs_to(packet)) == {(g_packet, XrefType.READ)}
+
+    assert xref_pairs(db.types.get_member_xrefs_to(packet, 'text')) == {(0x04, XrefType.WRITE)}
+    length_xrefs = xref_pairs(db.types.get_member_xrefs_to(packet, 'length'))
+    assert length_xrefs == {(0x0F, XrefType.WRITE), (0x2A, XrefType.READ)}
+    assert xref_pairs(db.types.get_member_xrefs_to(packet, 1)) == length_xrefs
+
+    # Add the Packet.status annotation that cannot be inferred through Packet*.
+    assert idc.op_stroff(0x44, 0, packet.get_tid(), 0)
+    ida_auto.plan_ea(0x44)
+    assert ida_auto.auto_wait()
+
+    assert xref_pairs(db.types.get_member_xrefs_to(packet, 'status')) == {
+        (0x19, XrefType.WRITE),
+        (0x44, XrefType.WRITE),
+    }
+
+    # Mark the immediate assigned to Packet.status as STATUS_READY.
+    assert idc.op_enum(0x19, 1, status_enum.get_tid(), 0)
+    ida_auto.plan_ea(0x19)
+    assert ida_auto.auto_wait()
+
+    assert xref_pairs(db.types.get_member_xrefs_to(status_enum, 'STATUS_READY')) == {
+        (0x19, XrefType.SYMBOLIC)
+    }
+    assert xref_pairs(db.types.get_member_xrefs_to(status_enum, 'STATUS_ERROR')) == {
+        (g_packet, XrefType.SYMBOLIC)
+    }
+
+    assert {x.from_ea for x in db.types.get_xrefs_to(packet, include_members=True)} == {
+        g_packet,
+        0x04,
+        0x0F,
+        0x19,
+        0x2A,
+        0x44,
+    }
+
+    # Packet.status depends on the named PacketStatus type.
+    from_xrefs = list(db.types.get_xrefs_from(packet, include_members=True))
+    assert len(from_xrefs) == 1
+    source = db.types.resolve_tid(from_xrefs[0].from_ea)
+    assert source is not None
+    assert source.member is not None
+    assert source.member.name == 'status'
+    dependency = db.types.resolve_tid(from_xrefs[0].to_ea)
+    assert dependency is not None
+    assert dependency.member is None
+    assert dependency.type.get_type_name() == 'PacketStatus'
+    assert list(db.types.get_member_xrefs_from(packet, 'status')) == from_xrefs
+
+    # Resolve a member TID obtained through the generic xref API.
+    member_ref = next(x for x in db.xrefs.from_ea(0x2A) if db.is_private_ea(x.to_ea))
+    resolved = db.types.resolve_tid(member_ref.to_ea)
+    assert resolved is not None
+    assert resolved.type.get_type_name() == 'Packet'
+    assert resolved.member is not None
+    assert resolved.member.name == 'length'
+    assert resolved.member.offset == 8
+
+    resolutions = set()
+    for xref in db.xrefs.from_ea(0x19):
+        if db.is_private_ea(xref.to_ea):
+            resolved = db.types.resolve_tid(xref.to_ea)
+            resolutions.add((resolved.type.get_type_name(), resolved.member.name))
+    assert resolutions == {('Packet', 'status'), ('PacketStatus', 'STATUS_READY')}
+
+    # Function addresses resolve to their frame type.
+    resolved = db.types.resolve_tid(0x04)
+    assert resolved is not None
+    assert resolved.member is None
+    assert resolved.type.is_udt()
+
+    assert db.types.resolve_tid(0x54) is None
+
+    with pytest.raises(InvalidParameterError):
+        db.types.get_xrefs_to(db.types.create_primitive(4))  # transient type, no tid
+    with pytest.raises(InvalidParameterError):
+        db.types.get_member_xrefs_to(packet, 'no_such_member')
+    with pytest.raises(InvalidParameterError):
+        db.types.get_member_xrefs_to(packet, 3)  # index out of range
+    with pytest.raises(InvalidParameterError):
+        db.types.get_member_xrefs_to(db.types.create_primitive(4), 0)  # not a udt/enum
+
+    transient = (
+        db.types.create_struct('Transient').add_member('x', db.types.create_primitive(4)).build()
+    )
+    with pytest.raises(InvalidParameterError):
+        db.types.get_member_xrefs_to(transient, 'x')
 
 
 # =============================================================================

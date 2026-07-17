@@ -7,6 +7,7 @@ from pathlib import Path
 
 import ida_nalt
 import ida_typeinf
+from ida_idaapi import BADADDR
 from ida_typeinf import (
     BT_FLOAT,
     BT_INT8,
@@ -25,6 +26,7 @@ from ida_typeinf import (
     PIO_NOATTR_FAIL,
     array_type_data_t,
     bitfield_type_data_t,
+    edm_t,
     enum_type_data_t,
     func_type_data_t,
     funcarg_t,
@@ -58,6 +60,7 @@ from .base import (
     check_db_open,
     decorate_all_methods,
 )
+from .xrefs import XrefInfo, XrefsFlags, _iter_xrefs_from, _iter_xrefs_to
 
 if TYPE_CHECKING:
     from ida_idaapi import ea_t, object_t
@@ -940,6 +943,38 @@ class FuncArgumentInfo:
     """Argument type information."""
 
 
+@dataclass
+class TidInfo:
+    """Resolution of a type id to the type or member it identifies."""
+
+    type: tinfo_t
+    """The identified type, or the containing type for a member tid."""
+
+    member: Optional[Union[UdtMemberInfo, EnumMemberInfo]] = None
+    """The identified member, if the tid names a struct/union/enum member."""
+
+
+def _udt_member_info(m: udm_t) -> UdtMemberInfo:
+    byte_offset = int(m.offset) // 8  # Offsets are in bits
+    is_bitfield = m.type.is_bitfield()
+
+    bit_offset = None
+    bit_size = None
+    if is_bitfield:
+        bit_offset = int(m.offset) % 8
+        bit_size = m.size
+
+    return UdtMemberInfo(
+        name=m.name,
+        type=m.type,
+        offset=byte_offset,
+        size=m.type.get_size(),
+        is_bitfield=is_bitfield,
+        bit_offset=bit_offset,
+        bit_size=bit_size,
+    )
+
+
 # =============================================================================
 # Type Member Lookup Mode
 # =============================================================================
@@ -1800,25 +1835,7 @@ class Types(DatabaseEntity):
             return
 
         for member in udt_data:
-            m: udm_t = member
-            byte_offset = int(m.offset) // 8  # Offsets are in bits
-            is_bitfield = m.type.is_bitfield()
-
-            bit_offset = None
-            bit_size = None
-            if is_bitfield:
-                bit_offset = int(m.offset) % 8
-                bit_size = m.size
-
-            yield UdtMemberInfo(
-                name=m.name,
-                type=m.type,
-                offset=byte_offset,
-                size=m.type.get_size(),
-                is_bitfield=is_bitfield,
-                bit_offset=bit_offset,
-                bit_size=bit_size,
-            )
+            yield _udt_member_info(member)
 
     def get_udt_member_by_name(self, type_info: tinfo_t, name: str) -> Optional[UdtMemberInfo]:
         """
@@ -2350,6 +2367,231 @@ class Types(DatabaseEntity):
             yield from self.get_enum_members(type_info)
         elif type_info.is_func():
             yield from self.get_func_arguments(type_info)
+
+    # =========================================================================
+    # Type Cross-References
+    # =========================================================================
+
+    def _get_tid(self, type_info: tinfo_t) -> ea_t:
+        """Get the type id of a type stored in the database."""
+        tid = type_info.get_tid()
+        if tid == BADADDR:
+            raise InvalidParameterError(
+                'type_info',
+                type_info.get_type_name() or str(type_info),
+                'type is not stored in the database',
+            )
+        return tid
+
+    def _get_member_tid(self, type_info: tinfo_t, member: Union[str, int]) -> ea_t:
+        """Get the type id of a struct/union/enum member, by name or index."""
+        if type_info.is_udt():
+            index, _ = type_info.get_udm(member)
+            member_tid = type_info.get_udm_tid
+        elif type_info.is_enum():
+            index, _ = type_info.get_edm(member)
+            member_tid = type_info.get_edm_tid
+        else:
+            raise InvalidParameterError(
+                'type_info',
+                type_info.get_type_name() or str(type_info),
+                'must be a struct, union or enum',
+            )
+
+        if index is None or index < 0:
+            raise InvalidParameterError('member', member, 'member not found')
+
+        tid = member_tid(index)
+        if tid == BADADDR:
+            raise InvalidParameterError(
+                'type_info',
+                type_info.get_type_name() or str(type_info),
+                'type is not stored in the database',
+            )
+        return tid
+
+    def _member_tids(self, type_info: tinfo_t) -> Iterator[ea_t]:
+        """Iterate the type ids of all struct/union/enum members of a type."""
+        if type_info.is_udt():
+            count = type_info.get_udt_nmembers()
+            member_tid = type_info.get_udm_tid
+        elif type_info.is_enum():
+            count = self.get_enum_member_count(type_info)
+            member_tid = type_info.get_edm_tid
+        else:
+            return
+        for index in range(count):
+            tid = member_tid(index)
+            if tid != BADADDR:
+                yield tid
+
+    def get_xrefs_to(
+        self,
+        type_info: tinfo_t,
+        flags: XrefsFlags = XrefsFlags.ALL,
+        include_members: bool = False,
+    ) -> Iterator[XrefInfo]:
+        """
+        Get cross-references to a type stored in the database.
+
+        Covers references to the type itself (e.g. data items the type is
+        applied to). Pass ``include_members=True`` to also include references
+        to its struct/union/enum members (e.g. instruction operands using a
+        member); for those xrefs ``to_ea`` identifies the member and can be
+        resolved with ``resolve_tid()``.
+
+        Args:
+            type_info: A type saved in the database (struct, union or enum).
+            flags: Filter flags (default: all xrefs).
+            include_members: Also yield xrefs to every member of the type.
+
+        Returns:
+            Iterator of XrefInfo objects.
+
+        Raises:
+            InvalidParameterError: If the type is not stored in the database.
+
+        Example:
+            >>> struct_type = db.types.get_by_name("MyStruct")
+            >>> for xref in db.types.get_xrefs_to(struct_type, include_members=True):
+            ...     print(f"used at {xref.from_ea:x}")
+        """
+        tids = [self._get_tid(type_info)]
+        if include_members:
+            tids.extend(self._member_tids(type_info))
+
+        def _iter() -> Iterator[XrefInfo]:
+            for tid in tids:
+                yield from _iter_xrefs_to(tid, flags)
+
+        return _iter()
+
+    def get_xrefs_from(
+        self,
+        type_info: tinfo_t,
+        flags: XrefsFlags = XrefsFlags.ALL,
+        include_members: bool = False,
+    ) -> Iterator[XrefInfo]:
+        """
+        Get cross-references from a type stored in the database.
+
+        Pass ``include_members=True`` to also include references originating
+        from its struct/union/enum members (e.g. an offset member pointing at
+        an address).
+
+        Args:
+            type_info: A type saved in the database (struct, union or enum).
+            flags: Filter flags (default: all xrefs).
+            include_members: Also yield xrefs from every member of the type.
+
+        Returns:
+            Iterator of XrefInfo objects.
+
+        Raises:
+            InvalidParameterError: If the type is not stored in the database.
+        """
+        tids = [self._get_tid(type_info)]
+        if include_members:
+            tids.extend(self._member_tids(type_info))
+
+        def _iter() -> Iterator[XrefInfo]:
+            for tid in tids:
+                yield from _iter_xrefs_from(tid, flags)
+
+        return _iter()
+
+    def get_member_xrefs_to(
+        self, type_info: tinfo_t, member: Union[str, int], flags: XrefsFlags = XrefsFlags.ALL
+    ) -> Iterator[XrefInfo]:
+        """
+        Get cross-references to a single struct/union/enum member.
+
+        Args:
+            type_info: A type saved in the database (struct, union or enum).
+            member: Member name or 0-based member index.
+            flags: Filter flags (default: all xrefs).
+
+        Returns:
+            Iterator of XrefInfo objects.
+
+        Raises:
+            InvalidParameterError: If the type is not a struct/union/enum,
+                is not stored in the database, or the member does not exist.
+
+        Example:
+            >>> struct_type = db.types.get_by_name("MyStruct")
+            >>> for xref in db.types.get_member_xrefs_to(struct_type, "field_a"):
+            ...     print(f"field_a used at {xref.from_ea:x}")
+        """
+        return _iter_xrefs_to(self._get_member_tid(type_info, member), flags)
+
+    def get_member_xrefs_from(
+        self, type_info: tinfo_t, member: Union[str, int], flags: XrefsFlags = XrefsFlags.ALL
+    ) -> Iterator[XrefInfo]:
+        """
+        Get cross-references from a single struct/union/enum member.
+
+        Args:
+            type_info: A type saved in the database (struct, union or enum).
+            member: Member name or 0-based member index.
+            flags: Filter flags (default: all xrefs).
+
+        Returns:
+            Iterator of XrefInfo objects.
+
+        Raises:
+            InvalidParameterError: If the type is not a struct/union/enum,
+                is not stored in the database, or the member does not exist.
+        """
+        return _iter_xrefs_from(self._get_member_tid(type_info, member), flags)
+
+    def resolve_tid(self, tid: ea_t) -> Optional[TidInfo]:
+        """
+        Resolve a type id back to the type or member it identifies.
+
+        Xref queries may yield addresses inside IDA's private range; such an
+        address is a type id naming a type or one of its members. This method
+        turns it back into domain-level objects.
+
+        Args:
+            tid: The type id to resolve (e.g. ``XrefInfo.to_ea`` of a member
+                reference).
+
+        Returns:
+            A TidInfo carrying the resolved type and, for member tids, the
+            member details. None if the tid does not identify a type or member.
+
+        Note:
+            Type ids of named types and their members lie in IDA's private
+            range. Function stack frames are types as well, but they are
+            identified by ordinary addresses: passing an address that lies
+            inside a function resolves to that function's frame type, not
+            to None.
+
+        Example:
+            >>> for xref in db.xrefs.from_ea(ea):
+            ...     if db.is_private_ea(xref.to_ea):
+            ...         info = db.types.resolve_tid(xref.to_ea)
+            ...         if info and info.member:
+            ...             print(f"references {info.type.get_type_name()}.{info.member.name}")
+        """
+        # Member lookups must come first: get_type_by_tid also accepts member
+        # tids and resolves them to the containing type
+        udm = udm_t()
+        type_info = tinfo_t()
+        if type_info.get_udm_by_tid(udm, tid) != -1:
+            return TidInfo(type=type_info, member=_udt_member_info(udm))
+
+        edm = edm_t()
+        type_info = tinfo_t()
+        if type_info.get_edm_by_tid(edm, tid) != -1:
+            return TidInfo(type=type_info, member=EnumMemberInfo(name=edm.name, value=edm.value))
+
+        type_info = tinfo_t()
+        if type_info.get_type_by_tid(tid):
+            return TidInfo(type=type_info)
+
+        return None
 
     # =========================================================================
     # Object Serialization / Deserialization

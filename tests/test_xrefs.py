@@ -114,11 +114,14 @@ def test_xrefs(test_env):
     assert callers[0].xref_type == XrefType.CALL_NEAR
     assert callers[0].function_ea is None
 
-    # Private range EAs are accepted (used by IDA for struct/enum member xrefs)
+    # Private range EAs (type ids) are not valid xref targets here;
+    # type/member xrefs are exposed via db.types.get_xrefs_to() and friends
     private_ea = 0xFF00000000000000
     assert db.is_private_ea(private_ea)
-    assert isinstance(list(db.xrefs.to_ea(private_ea)), list)
-    assert isinstance(list(db.xrefs.from_ea(private_ea)), list)
+    with pytest.raises(InvalidEAError):
+        list(db.xrefs.to_ea(private_ea))
+    with pytest.raises(InvalidEAError):
+        list(db.xrefs.from_ea(private_ea))
 
     invalid_ea = 0xFFFFFFFF
 

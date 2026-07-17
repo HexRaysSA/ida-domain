@@ -48,3 +48,19 @@ This binary links against libc and imports:
 - `exit` - process termination
 
 After rebuilding, replace `tiny_imports.bin` in this folder and update any tests as needed.
+
+---
+
+## Struct Test Binary (tiny_struct)
+
+The `tiny_struct.c` file contains real structure and enum usage: a global
+`struct Packet` accessed by member (directly and through a pointer) and an
+`enum PacketStatus` constant used as an immediate.
+
+To rebuild:
+```bash
+gcc -O0 -c tiny_struct.c -o tiny_struct.bin
+```
+
+The tests use instruction addresses from this object. After rebuilding, replace
+`tiny_struct.bin` and update those addresses if the generated code changed.

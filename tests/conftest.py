@@ -14,6 +14,7 @@ idb_path: str = ''
 tiny_c_idb_path: str = ''
 tiny_imports_idb_path: str = ''
 tiny_pseudocode_idb_path: str = ''
+tiny_struct_idb_path: str = ''
 
 _deprecation_warnings: dict = {}
 
@@ -65,7 +66,7 @@ def pytest_terminal_summary(terminalreporter):
 def min_ida_version(v: str) -> pytest.MarkDecorator:
     return pytest.mark.skipif(
         ida_domain.__ida_version__ < Version(v),
-        reason=f"requires IDA {v}+",
+        reason=f'requires IDA {v}+',
     )
 
 
@@ -141,6 +142,28 @@ def tiny_pseudocode_env(tiny_pseudocode_setup):
     db = ida_domain.Database.open(
         path=tiny_pseudocode_idb_path, args=ida_options, save_on_close=False
     )
+    yield db
+    if db.is_open():
+        db.close(False)
+
+
+@pytest.fixture(scope='session')
+def tiny_struct_setup(global_setup):
+    """Setup for struct binary tests - copies tiny_struct.bin to work directory."""
+    global tiny_struct_idb_path
+    tiny_struct_idb_path = os.path.join(
+        tempfile.gettempdir(), 'api_tests_work_dir', 'tiny_struct.bin'
+    )
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    src_path = os.path.join(current_dir, 'resources', 'tiny_struct.bin')
+    shutil.copy(src_path, tiny_struct_idb_path)
+
+
+@pytest.fixture(scope='function')
+def tiny_struct_env(tiny_struct_setup):
+    """Opens tiny_struct database for each test."""
+    ida_options = IdaCommandOptions(new_database=True, auto_analysis=True)
+    db = ida_domain.Database.open(path=tiny_struct_idb_path, args=ida_options, save_on_close=False)
     yield db
     if db.is_open():
         db.close(False)
