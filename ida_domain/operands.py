@@ -4,7 +4,7 @@ import logging
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from enum import Enum, IntEnum
+from enum import Enum, IntEnum, auto
 from typing import Any, Optional
 
 import ida_idp
@@ -71,6 +71,19 @@ class AccessType(Enum):
     READ = 'read'
     WRITE = 'write'
     READ_WRITE = 'read_write'
+
+
+class OperandFormat(Enum):
+    """Enumeration of operand display representations."""
+
+    HEX = auto()
+    DECIMAL = auto()
+    OCTAL = auto()
+    BINARY = auto()
+    CHARACTER = auto()
+    FLOAT = auto()
+    NUMBER = auto()
+    OFFSET = auto()
 
 
 @dataclass(frozen=True)
