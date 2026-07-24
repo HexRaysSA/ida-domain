@@ -7,12 +7,17 @@ from dataclasses import dataclass
 from enum import Enum, IntEnum, auto
 from typing import Any, Optional
 
+import ida_bytes
 import ida_idp
 import ida_lines
 import ida_name
+import ida_offset
+import ida_typeinf
 import ida_ua
 from ida_idaapi import ea_t
 from typing_extensions import TYPE_CHECKING
+
+from .base import InvalidParameterError
 
 if TYPE_CHECKING:
     from .database import Database
@@ -197,6 +202,168 @@ class Operand(ABC):
             is_hidden=not self.is_shown,
             is_floating_point=self.is_floating_point(),
         )
+
+    def display_hex(self) -> bool:
+        """Render this operand in hexadecimal."""
+        return self.display_as(OperandFormat.HEX)
+
+    def display_decimal(self) -> bool:
+        """Render this operand in decimal."""
+        return self.display_as(OperandFormat.DECIMAL)
+
+    def display_octal(self) -> bool:
+        """Render this operand in octal."""
+        return self.display_as(OperandFormat.OCTAL)
+
+    def display_binary(self) -> bool:
+        """Render this operand in binary."""
+        return self.display_as(OperandFormat.BINARY)
+
+    def display_char(self) -> bool:
+        """Render this operand as a character literal."""
+        return self.display_as(OperandFormat.CHARACTER)
+
+    def display_float(self) -> bool:
+        """Render this operand as a floating point number."""
+        return self.display_as(OperandFormat.FLOAT)
+
+    def display_as(self, format: OperandFormat, base: int = 0) -> bool:
+        """
+        Render this operand using the given format.
+
+        Args:
+            format: The representation to apply.
+            base: Base address, only used for `OperandFormat.OFFSET`.
+
+        Returns:
+            True if the representation was applied, False otherwise.
+
+        Raises:
+            InvalidParameterError: If the format is unknown.
+        """
+        if format == OperandFormat.OFFSET:
+            return ida_offset.op_plain_offset(self._instruction_ea, self.number, base)
+        setters = {
+            OperandFormat.HEX: ida_bytes.op_hex,
+            OperandFormat.DECIMAL: ida_bytes.op_dec,
+            OperandFormat.OCTAL: ida_bytes.op_oct,
+            OperandFormat.BINARY: ida_bytes.op_bin,
+            OperandFormat.CHARACTER: ida_bytes.op_chr,
+            OperandFormat.FLOAT: ida_bytes.op_flt,
+            OperandFormat.NUMBER: ida_bytes.op_num,
+        }
+        setter = setters.get(format)
+        if setter is None:
+            raise InvalidParameterError('format', format, 'unknown operand format')
+        return setter(self._instruction_ea, self.number)
+
+    def display_offset(self, base: int = 0) -> bool:
+        """
+        Render this operand as an offset from `base`.
+
+        Args:
+            base: Base address the offset is relative to.
+
+        Returns:
+            True if the representation was applied, False otherwise.
+        """
+        return ida_offset.op_plain_offset(self._instruction_ea, self.number, base)
+
+    def display_struct_offset(self, path: int | list[int], delta: int = 0) -> bool:
+        """
+        Render this operand as a structure member offset.
+
+        Args:
+            path: A structure type id, or a list of ids for nested members.
+            delta: Difference between the operand value and the member offset.
+
+        Returns:
+            True if the representation was applied, False otherwise.
+        """
+        insn = self.m_database.instructions.get_at(self._instruction_ea)
+        if insn is None:
+            return False
+        tids = list(path) if isinstance(path, (list, tuple)) else [path]
+        return ida_bytes.op_stroff(insn, self.number, tids, delta)
+
+    def display_based_struct_offset(self, opval: int, base: ea_t) -> bool:
+        """
+        Render this operand as a structure member offset based at `base`.
+
+        Args:
+            opval: The operand value to resolve (usually its value or address).
+            base: Address the structure is based at.
+
+        Returns:
+            True if the representation was applied, False otherwise.
+        """
+        insn = self.m_database.instructions.get_at(self._instruction_ea)
+        if insn is None:
+            return False
+        return ida_bytes.op_based_stroff(insn, self.number, opval, base)
+
+    def display_stack_var(self) -> bool:
+        """Link this operand to a stack variable."""
+        return ida_bytes.op_stkvar(self._instruction_ea, self.number)
+
+    def clear_representation(self) -> bool:
+        """Reset this operand to its default rendering."""
+        return ida_bytes.clr_op_type(self._instruction_ea, self.number)
+
+    def set_forced_text(self, text: str) -> bool:
+        """
+        Override the display text of this operand.
+
+        Args:
+            text: The text to display; an empty string removes the override.
+
+        Returns:
+            True if the override was applied, False otherwise.
+        """
+        return ida_bytes.set_forced_operand(self._instruction_ea, self.number, text)
+
+    def get_forced_text(self) -> Optional[str]:
+        """
+        Get the display-text override, or None if there is none.
+
+        Returns:
+            The override text, or None if the operand has no override.
+        """
+        return ida_bytes.get_forced_operand(self._instruction_ea, self.number)
+
+    def toggle_sign(self) -> bool:
+        """Flip the sign rendering of this operand."""
+        return ida_bytes.toggle_sign(self._instruction_ea, self.number)
+
+    def toggle_negate(self) -> bool:
+        """Toggle the bitwise-negation rendering of this operand."""
+        return ida_bytes.toggle_bnot(self._instruction_ea, self.number)
+
+    def struct_offset_path(self) -> Optional[tuple[list[int], int]]:
+        """
+        Read the structure offset path as type ids.
+
+        Returns:
+            A tuple of (path of type ids, delta), or None if the operand is not
+            represented as a structure offset.
+        """
+        path, delta = ida_bytes.get_stroff_path(self._instruction_ea, self.number)
+        if path is None:
+            return None
+        return path, delta
+
+    def struct_offset_path_names(self) -> list[str]:
+        """
+        Read the struct-offset path as type names, empty if not applicable.
+
+        Returns:
+            The path as a list of type names. An unnamed type appears as its hex tid.
+        """
+        result = self.struct_offset_path()
+        if result is None:
+            return []
+        path, _ = result
+        return [ida_typeinf.get_tid_name(tid) or f'{tid:#x}' for tid in path]
 
     @abstractmethod
     def get_value(self) -> Any:

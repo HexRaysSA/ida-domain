@@ -6,11 +6,9 @@ import ida_bytes
 import ida_idaapi
 import ida_idp
 import ida_lines
-import ida_offset
-import ida_typeinf
 import ida_ua
 from ida_ua import insn_t
-from typing_extensions import TYPE_CHECKING, Iterator, List, Optional, Tuple
+from typing_extensions import TYPE_CHECKING, Iterator, List, Optional
 
 from .base import (
     DatabaseEntity,
@@ -19,7 +17,7 @@ from .base import (
     check_db_open,
     decorate_all_methods,
 )
-from .operands import Operand, OperandFactory, OperandFormat
+from .operands import Operand, OperandFactory
 
 if TYPE_CHECKING:
     from ida_idaapi import ea_t
@@ -58,7 +56,7 @@ class Instructions(DatabaseEntity):
         """
         return insn and insn.itype != 0
 
-    def is_valid_operand(self, insn: insn_t, index: int) -> bool:
+    def has_operand(self, insn: insn_t, index: int) -> bool:
         """
         Checks whether operand `index` exists on the given instruction.
 
@@ -210,7 +208,7 @@ class Instructions(DatabaseEntity):
             An Operand instance of the appropriate type, or None
             if the index is invalid or operand is void.
         """
-        if not self.is_valid_operand(insn, index):
+        if not self.has_operand(insn, index):
             return None
 
         return OperandFactory.create(self.database, insn.ops[index], insn.ea)
@@ -281,308 +279,6 @@ class Instructions(DatabaseEntity):
         # Get canonical feature flags for the instruction
         feature = insn.get_canon_feature()
         return bool(feature & ida_idp.CF_STOP)
-
-    def set_operand_hex(self, insn: insn_t, index: int) -> bool:
-        """
-        Renders operand `index` in hexadecimal.
-
-        Args:
-            insn: The instruction.
-            index: The operand index.
-
-        Returns:
-            True if the representation was applied, False otherwise.
-        """
-        return self.set_operand_format(insn, index, OperandFormat.HEX)
-
-    def set_operand_decimal(self, insn: insn_t, index: int) -> bool:
-        """
-        Renders operand `index` in decimal.
-
-        Args:
-            insn: The instruction.
-            index: The operand index.
-
-        Returns:
-            True if the representation was applied, False otherwise.
-        """
-        return self.set_operand_format(insn, index, OperandFormat.DECIMAL)
-
-    def set_operand_octal(self, insn: insn_t, index: int) -> bool:
-        """
-        Renders operand `index` in octal.
-
-        Args:
-            insn: The instruction.
-            index: The operand index.
-
-        Returns:
-            True if the representation was applied, False otherwise.
-        """
-        return self.set_operand_format(insn, index, OperandFormat.OCTAL)
-
-    def set_operand_binary(self, insn: insn_t, index: int) -> bool:
-        """
-        Renders operand `index` in binary.
-
-        Args:
-            insn: The instruction.
-            index: The operand index.
-
-        Returns:
-            True if the representation was applied, False otherwise.
-        """
-        return self.set_operand_format(insn, index, OperandFormat.BINARY)
-
-    def set_operand_char(self, insn: insn_t, index: int) -> bool:
-        """
-        Renders operand `index` as a character literal.
-
-        Args:
-            insn: The instruction.
-            index: The operand index.
-
-        Returns:
-            True if the representation was applied, False otherwise.
-        """
-        return self.set_operand_format(insn, index, OperandFormat.CHARACTER)
-
-    def set_operand_float(self, insn: insn_t, index: int) -> bool:
-        """
-        Renders operand `index` as a floating point number.
-
-        Args:
-            insn: The instruction.
-            index: The operand index.
-
-        Returns:
-            True if the representation was applied, False otherwise.
-        """
-        return self.set_operand_format(insn, index, OperandFormat.FLOAT)
-
-    def set_operand_format(
-        self, insn: insn_t, index: int, format: OperandFormat, base: int = 0
-    ) -> bool:
-        """
-        Renders operand `index` using the given format.
-
-        Args:
-            insn: The instruction.
-            index: The operand index.
-            format: The representation to apply.
-            base: Base address, only used for `OperandFormat.OFFSET`.
-
-        Returns:
-            True if the representation was applied, False otherwise.
-
-        Raises:
-            InvalidParameterError: If the format is unknown.
-        """
-        if not self.is_valid_operand(insn, index):
-            return False
-
-        if format == OperandFormat.OFFSET:
-            return ida_offset.op_plain_offset(insn.ea, index, base)
-
-        setters = {
-            OperandFormat.HEX: ida_bytes.op_hex,
-            OperandFormat.DECIMAL: ida_bytes.op_dec,
-            OperandFormat.OCTAL: ida_bytes.op_oct,
-            OperandFormat.BINARY: ida_bytes.op_bin,
-            OperandFormat.CHARACTER: ida_bytes.op_chr,
-            OperandFormat.FLOAT: ida_bytes.op_flt,
-            OperandFormat.NUMBER: ida_bytes.op_num,
-        }
-        setter = setters.get(format)
-        if setter is None:
-            raise InvalidParameterError('format', format, 'unknown operand format')
-        return setter(insn.ea, index)
-
-    def set_operand_offset(self, insn: insn_t, index: int, base: int = 0) -> bool:
-        """
-        Renders operand `index` as an offset from `base`.
-
-        Args:
-            insn: The instruction.
-            index: The operand index.
-            base: Base address the offset is relative to.
-
-        Returns:
-            True if the representation was applied, False otherwise.
-        """
-        if not self.is_valid_operand(insn, index):
-            return False
-        return ida_offset.op_plain_offset(insn.ea, index, base)
-
-    def set_operand_struct_offset(
-        self, insn: insn_t, index: int, path: int | List[int], delta: int = 0
-    ) -> bool:
-        """
-        Renders operand `index` as a structure member offset.
-
-        Args:
-            insn: The instruction.
-            index: The operand index.
-            path: A structure type id, or a path of ids for nested members.
-            delta: Difference between the operand value and the member offset.
-
-        Returns:
-            True if the representation was applied, False otherwise.
-        """
-        if not self.is_valid_operand(insn, index):
-            return False
-        tids = list(path) if isinstance(path, (list, tuple)) else [path]
-        return ida_bytes.op_stroff(insn, index, tids, delta)
-
-    def set_operand_based_struct_offset(
-        self, insn: insn_t, index: int, opval: int, base: ea_t
-    ) -> bool:
-        """
-        Renders operand `index` as a structure member offset based at `base`.
-
-        Args:
-            insn: The instruction.
-            index: The operand index.
-            opval: The operand value to resolve (usually its value or address).
-            base: Address the structure is based at.
-
-        Returns:
-            True if the representation was applied, False otherwise.
-        """
-        if not self.is_valid_operand(insn, index):
-            return False
-        return ida_bytes.op_based_stroff(insn, index, opval, base)
-
-    def operand_struct_offset_path(
-        self, insn: insn_t, index: int
-    ) -> Optional[Tuple[List[int], int]]:
-        """
-        Reads the structure offset path for operand `index`.
-
-        Args:
-            insn: The instruction.
-            index: The operand index.
-
-        Returns:
-            A tuple of (path of type ids, delta), or None if the operand is not
-            represented as a structure offset.
-        """
-        if not self.is_valid_operand(insn, index):
-            return None
-        path, delta = ida_bytes.get_stroff_path(insn.ea, index)
-        if path is None:
-            return None
-        return path, delta
-
-    def operand_struct_offset_path_names(self, insn: insn_t, index: int) -> List[str]:
-        """
-        Reads the structure offset path for operand `index` as type names.
-
-        Args:
-            insn: The instruction.
-            index: The operand index.
-
-        Returns:
-            The path as a list of type names, empty if the operand is not
-            represented as a structure offset. An unnamed type appears as its
-            hex tid.
-        """
-        result = self.operand_struct_offset_path(insn, index)
-        if result is None:
-            return []
-        path, _ = result
-        return [ida_typeinf.get_tid_name(tid) or f'{tid:#x}' for tid in path]
-
-    def set_operand_stack_var(self, insn: insn_t, index: int) -> bool:
-        """
-        Links operand `index` to a stack variable.
-
-        Args:
-            insn: The instruction.
-            index: The operand index.
-
-        Returns:
-            True if the representation was applied, False otherwise.
-        """
-        if not self.is_valid_operand(insn, index):
-            return False
-        return ida_bytes.op_stkvar(insn.ea, index)
-
-    def clear_operand_representation(self, insn: insn_t, index: int) -> bool:
-        """
-        Resets operand `index` to its default rendering.
-
-        Args:
-            insn: The instruction.
-            index: The operand index.
-
-        Returns:
-            True if the representation was cleared, False otherwise.
-        """
-        if not self.is_valid_operand(insn, index):
-            return False
-        return ida_bytes.clr_op_type(insn.ea, index)
-
-    def set_forced_operand(self, insn: insn_t, index: int, text: str) -> bool:
-        """
-        Overrides the display text of operand `index`.
-
-        Args:
-            insn: The instruction.
-            index: The operand index.
-            text: The text to display; an empty string removes the override.
-
-        Returns:
-            True if the override was applied, False otherwise.
-        """
-        if not self.is_valid_operand(insn, index):
-            return False
-        return ida_bytes.set_forced_operand(insn.ea, index, text)
-
-    def get_forced_operand(self, insn: insn_t, index: int) -> Optional[str]:
-        """
-        Reads the display text override of operand `index`.
-
-        Args:
-            insn: The instruction.
-            index: The operand index.
-
-        Returns:
-            The override text, or None if the operand has no override.
-        """
-        if not self.is_valid_operand(insn, index):
-            return None
-        return ida_bytes.get_forced_operand(insn.ea, index)
-
-    def toggle_operand_sign(self, insn: insn_t, index: int) -> bool:
-        """
-        Flips the sign rendering of operand `index`.
-
-        Args:
-            insn: The instruction.
-            index: The operand index.
-
-        Returns:
-            True if the sign was toggled, False otherwise.
-        """
-        if not self.is_valid_operand(insn, index):
-            return False
-        return ida_bytes.toggle_sign(insn.ea, index)
-
-    def toggle_operand_negate(self, insn: insn_t, index: int) -> bool:
-        """
-        Toggles the bitwise-negation rendering of operand `index`.
-
-        Args:
-            insn: The instruction.
-            index: The operand index.
-
-        Returns:
-            True if the negation was toggled, False otherwise.
-        """
-        if not self.is_valid_operand(insn, index):
-            return False
-        return ida_bytes.toggle_bnot(insn.ea, index)
 
     def text(self, insn: insn_t) -> Optional[str]:
         """

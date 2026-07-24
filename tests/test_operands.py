@@ -1,5 +1,11 @@
+import ida_bytes
+import ida_typeinf
+import pytest
+
 import ida_domain  # isort: skip
 import ida_domain.operands
+from ida_domain.base import InvalidParameterError
+from ida_domain.operands import OperandFormat
 
 
 def test_operands(test_env):
@@ -140,3 +146,99 @@ def test_operands(test_env):
 
     mem_str = str(mem_op)
     assert 'Memory' in mem_str
+
+
+def test_operand_display(test_env):
+    db = test_env
+    insn = db.instructions.get_at(0xBA)
+    op = db.instructions.get_operand(insn, 1)
+    assert db.instructions.get_disassembly(insn) == "mov     eax, 3Ch ; '<'"
+
+    # Test number representations
+    assert op.display_hex() is True
+    assert db.instructions.get_disassembly(insn) == 'mov     eax, 3Ch'
+    assert op.display_decimal() is True
+    assert db.instructions.get_disassembly(insn) == 'mov     eax, 60'
+    assert op.display_octal() is True
+    assert db.instructions.get_disassembly(insn) == 'mov     eax, 74o'
+    assert op.display_binary() is True
+    assert db.instructions.get_disassembly(insn) == 'mov     eax, 111100b'
+    assert op.display_char() is True
+    assert db.instructions.get_disassembly(insn) == "mov     eax, '<'"
+    assert op.display_float() is True
+    assert 'floating' in db.instructions.get_disassembly(insn)
+
+    # Test the generic format setter
+    assert op.display_as(OperandFormat.NUMBER) is True
+    assert db.instructions.get_disassembly(insn) == 'mov     eax, 3Ch'
+    assert op.display_as(OperandFormat.OFFSET, 0) is True
+    assert 'offset' in db.instructions.get_disassembly(insn)
+    with pytest.raises(InvalidParameterError):
+        op.display_as('bogus')
+
+    # Test the offset setter
+    assert op.display_offset(0) is True
+    assert 'offset' in db.instructions.get_disassembly(insn)
+
+    # Test sign and negate toggles
+    op.display_decimal()
+    assert op.toggle_sign() is True
+    assert db.instructions.get_disassembly(insn) == 'mov     eax, -4294967236'
+    op.clear_representation()
+    op.display_hex()
+    assert op.toggle_negate() is True
+    assert db.instructions.get_disassembly(insn) == 'mov     eax, not 0FFFFFFC3h'
+
+    # Test clear reverts to the default rendering
+    assert op.clear_representation() is True
+    assert db.instructions.get_disassembly(insn) == "mov     eax, 3Ch ; '<'"
+
+    # Test forced operand override
+    assert op.get_forced_text() is None
+    assert op.set_forced_text('MYNAME') is True
+    assert op.get_forced_text() == 'MYNAME'
+    assert db.instructions.get_disassembly(insn) == 'mov     eax, MYNAME'
+    assert op.set_forced_text('') is True
+    assert op.get_forced_text() is None
+
+    # Test struct offset with a nested type path
+    ida_typeinf.parse_decls(
+        ida_typeinf.get_idati(),
+        'struct InnerStruct { int inner_field1; int inner_field2; };'
+        ' struct OuterStruct { int leading_field; struct InnerStruct nested; };',
+        None,
+        ida_typeinf.HTI_DCL,
+    )
+    outer = ida_typeinf.get_named_type_tid('OuterStruct')
+    inner = ida_typeinf.get_named_type_tid('InnerStruct')
+    assert op.display_struct_offset([outer, inner], 0) is True
+    assert 'OuterStruct.' in db.instructions.get_disassembly(insn)
+    assert op.struct_offset_path() == ([outer, inner], 0)
+    assert op.struct_offset_path_names() == ['OuterStruct', 'InnerStruct']
+    # A register operand has no struct-offset path
+    reg = db.instructions.get_operand(insn, 0)
+    assert reg.struct_offset_path() is None
+    assert reg.struct_offset_path_names() == []
+
+    # Test based struct offset
+    base = db.maximum_ea - 8
+    ida_bytes.del_items(base, ida_bytes.DELIT_SIMPLE, 8)
+    assert ida_bytes.create_struct(base, 8, inner) is True
+    op.clear_representation()
+    assert op.display_based_struct_offset(0, base) is True
+    assert 'InnerStruct.' in db.instructions.get_disassembly(insn)
+    assert op.struct_offset_path() == ([inner], 0)
+    op.clear_representation()
+    assert op.display_based_struct_offset(0, 0x0) is False
+
+    # Test stack-variable link
+    sv_insn = db.instructions.get_at(0x135)
+    sv = db.instructions.get_operand(sv_insn, 1)
+    assert ida_bytes.is_stkvar(ida_bytes.get_flags(0x135), 1) is True
+    assert db.instructions.get_disassembly(sv_insn) == 'mov     rax, [rsp+28h+var_18]'
+    assert sv.clear_representation() is True
+    assert ida_bytes.is_stkvar(ida_bytes.get_flags(0x135), 1) is False
+    assert db.instructions.get_disassembly(sv_insn) == 'mov     rax, [rsp+10h]'
+    assert sv.display_stack_var() is True
+    assert ida_bytes.is_stkvar(ida_bytes.get_flags(0x135), 1) is True
+    assert db.instructions.get_disassembly(sv_insn) == 'mov     rax, [rsp+28h+var_18]'
