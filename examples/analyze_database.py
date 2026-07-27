@@ -93,7 +93,7 @@ def traverse_functions(db: ida_domain.Database) -> None:
             f'  [{i:2d}] {func.name:30} | '
             f'Start: 0x{func.start_ea:08x} | '
             f'End: 0x{func.end_ea:08x} | '
-            f'Size: {func.size}'
+            f'Size: 0x{func.size():08x}'
         )
 
     if display_count < len(functions):

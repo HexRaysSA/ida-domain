@@ -26,7 +26,8 @@ def main():
         return
 
     print(
-        f"Functions in segment '{segment.name}' (0x{segment.start_ea:x} - 0x{segment.end_ea:x}):"
+        f"Functions in segment '{db.segments.get_name(segment)}' "
+        f'(0x{segment.start_ea:x} - 0x{segment.end_ea:x}):'
     )
 
     # Get all functions in the segment
