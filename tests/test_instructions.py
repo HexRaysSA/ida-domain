@@ -147,13 +147,16 @@ def test_instruction(test_env):
     assert list(db.instructions.call_targets(mov)) == []
     assert list(db.instructions.jump_targets(mov)) == []
 
-    # Test next
-    following = db.instructions.next(0x0)
-    assert following is not None
-    assert following.ea == 0x5
-    assert db.instructions.next(0x322) is None
+    # Test get_next follows execution flow
+    assert db.instructions.get_next(0x0) is not None # mov: fall-through to the next instruction
+    assert db.instructions.get_next(0x0).ea == 0x5
+    assert db.instructions.get_next(0x18).ea == 0x1D # call: fall through
+    assert db.instructions.get_next(0x2DE).ea == 0x2E0  # conditional jmp: fall through
+    assert db.instructions.get_next(0x260).ea == 0x272  # unconditional jmp: jump target
+    assert db.instructions.get_next(0x2A2) is None  # ret: flow ends
+    assert db.instructions.get_next(0x322) is None  # last instruction
     with pytest.raises(InvalidEAError):
-        db.instructions.next(0xFFFFFFFF)
+        db.instructions.get_next(0xFFFFFFFF)
 
     # Test create
     size = db.instructions.get_at(0x0).size

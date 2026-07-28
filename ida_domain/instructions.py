@@ -7,6 +7,7 @@ import ida_idaapi
 import ida_idp
 import ida_lines
 import ida_ua
+import ida_xref
 from ida_ua import insn_t
 from typing_extensions import TYPE_CHECKING, Iterator, List, Optional
 
@@ -313,7 +314,7 @@ class Instructions(DatabaseEntity):
             raise InvalidEAError(ea)
         return ida_ua.create_insn(ea)
 
-    def next(self, ea: ea_t) -> Optional[insn_t]:
+    def get_next(self, ea: ea_t) -> Optional[insn_t]:
         """
         Decodes the instruction following the one at the specified address.
 
@@ -328,12 +329,13 @@ class Instructions(DatabaseEntity):
         """
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
-        next_ea = ida_bytes.get_item_end(ea)
-        if not self.database.is_valid_ea(next_ea):
+
+        next_ea = ida_xref.get_first_cref_from(ea)
+
+        if self.database.is_valid_ea(next_ea):
+            return self.get_at(next_ea)
+        else:
             return None
-        if not ida_bytes.is_code(ida_bytes.get_flags(next_ea)):
-            return None
-        return self.get_at(next_ea)
 
     def has_fall_through(self, insn: insn_t) -> bool:
         """
@@ -371,7 +373,7 @@ class Instructions(DatabaseEntity):
         """
         if ida_idp.is_indirect_jump_insn(insn):
             return True
-        return any(True for _ in self.database.xrefs.jumps_from_ea(insn.ea))
+        return next(self.database.xrefs.jumps_from_ea(insn.ea), None) is not None
 
     def is_conditional_jump(self, insn: insn_t) -> bool:
         """

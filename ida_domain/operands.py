@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum, IntEnum, auto
@@ -267,15 +266,16 @@ class Operand(ABC):
         Returns:
             True if the representation was applied, False otherwise.
         """
-        return ida_offset.op_plain_offset(self._instruction_ea, self.number, base)
+        return self.display_as(OperandFormat.OFFSET, base)
 
     def display_struct_offset(self, path: int | list[int], delta: int = 0) -> bool:
         """
         Render this operand as a structure member offset.
 
         Args:
-            path: A structure type id, or a list of ids for nested members.
-            delta: Difference between the operand value and the member offset.
+            path: A structure type id. Pass a list of ids to select particular
+                union members in the chain; nested structs are resolved automatically.
+            delta: Additional offset to be applied to the member after path resolution.
 
         Returns:
             True if the representation was applied, False otherwise.
@@ -284,15 +284,17 @@ class Operand(ABC):
         if insn is None:
             return False
         tids = list(path) if isinstance(path, (list, tuple)) else [path]
+        if not tids or any(ida_typeinf.get_tid_ordinal(t) == 0 for t in tids):
+            return False
         return ida_bytes.op_stroff(insn, self.number, tids, delta)
 
-    def display_based_struct_offset(self, opval: int, base: ea_t) -> bool:
+    def display_based_struct_offset(self, base: ea_t) -> bool:
         """
         Render this operand as a structure member offset based at `base`.
 
         Args:
-            opval: The operand value to resolve (usually its value or address).
-            base: Address the structure is based at.
+            base: Address of a structure instance laid out in the database; its type
+                supplies the member layout.
 
         Returns:
             True if the representation was applied, False otherwise.
@@ -300,13 +302,14 @@ class Operand(ABC):
         insn = self.m_database.instructions.get_at(self._instruction_ea)
         if insn is None:
             return False
+        opval = self._op.value if self._op.type == ida_ua.o_imm else self._op.addr
         return ida_bytes.op_based_stroff(insn, self.number, opval, base)
 
     def display_stack_var(self) -> bool:
         """Link this operand to a stack variable."""
         return ida_bytes.op_stkvar(self._instruction_ea, self.number)
 
-    def clear_representation(self) -> bool:
+    def display_reset(self) -> bool:
         """Reset this operand to its default rendering."""
         return ida_bytes.clr_op_type(self._instruction_ea, self.number)
 
@@ -345,7 +348,8 @@ class Operand(ABC):
 
         Returns:
             A tuple of (path of type ids, delta), or None if the operand is not
-            represented as a structure offset.
+            represented as a structure offset. The path is the root structure type
+            id, consecutive elements are ids of used union members (if any).
         """
         path, delta = ida_bytes.get_stroff_path(self._instruction_ea, self.number)
         if path is None:
@@ -364,6 +368,24 @@ class Operand(ABC):
             return []
         path, _ = result
         return [ida_typeinf.get_tid_name(tid) or f'{tid:#x}' for tid in path]
+
+    def struct_offset_field_names(self) -> list[str]:
+        """
+        Read the struct-offset path as the field names.
+
+        Returns:
+            The member chain, or an empty list if the operand is not represented as
+            a structure offset.
+        """
+        result = self.struct_offset_path()
+        if result is None:
+            return []
+        path, delta = result
+        root = ida_typeinf.get_tid_name(path[0]) or f'{path[0]:#x}'
+        disp = self._op.value if self._op.type == ida_ua.o_imm else self._op.addr
+        fields = ida_name.append_struct_fields(disp, self.number, path, 0, delta, True)
+        suffix = fields[0] if isinstance(fields, tuple) else fields
+        return (root + (suffix or '')).split('.')
 
     @abstractmethod
     def get_value(self) -> Any:
