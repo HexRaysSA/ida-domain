@@ -282,6 +282,34 @@ def requires_ida(min_version: str) -> Callable[[Callable[P, R]], Callable[P, R]]
     return decorator
 
 
+class ExperimentalWarning(FutureWarning):
+    """Warning emitted when an experimental API is used."""
+
+    pass
+
+
+def experimental(fn: Callable[P, R]) -> Callable[P, R]:
+    """
+    Decorator marking an API as experimental.
+
+    Experimental APIs are usable but their signature or behavior may change
+    in future releases without a deprecation period. Calling one emits an
+    ``ExperimentalWarning``.
+    """
+
+    @functools.wraps(fn)
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+        warnings.warn(
+            f'{fn.__qualname__} is experimental and may change in future releases',
+            ExperimentalWarning,
+            stacklevel=2,
+        )
+        return fn(*args, **kwargs)
+
+    wrapper.__experimental__ = True  # type: ignore[attr-defined]
+    return wrapper
+
+
 def check_db_open(fn: Callable[P, R]) -> Callable[P, R]:
     """
     Decorator that checks that a database is open.

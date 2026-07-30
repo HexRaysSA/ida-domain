@@ -112,6 +112,7 @@ plugins:
           options:
             extensions:
               - docs/_extensions/requires_ida.py:RequiresIdaExtension
+              - docs/_extensions/experimental.py:ExperimentalExtension
             docstring_style: google
             # Shows links to other members in signatures
             signature_crossrefs: true
