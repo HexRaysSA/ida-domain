@@ -1,6 +1,6 @@
 import pytest
 
-from ida_domain.base import InvalidEAError
+from ida_domain.base import InvalidEAError, InvalidParameterError
 from ida_domain.xrefs import CallerInfo, XrefsFlags, XrefType
 
 
@@ -92,11 +92,11 @@ def test_xrefs(test_env):
     xrefs_info = list(db.xrefs.to_ea(0x2A3))
     assert len(xrefs_info) == 1
     assert xrefs_info[0].from_ea == 39
-    assert xrefs_info[0].is_code == True
+    assert xrefs_info[0].is_code is True
     assert xrefs_info[0].type == XrefType.CALL_NEAR
-    assert xrefs_info[0].user == False
+    assert xrefs_info[0].user is False
     assert xrefs_info[0].to_ea == 0x2A3
-    assert xrefs_info[0].is_call == True
+    assert xrefs_info[0].is_call is True
 
     # Test with custom flags
     xrefs_custom = list(db.xrefs.to_ea(0x2A3, flags=XrefsFlags.CODE))
@@ -164,3 +164,98 @@ def test_xrefs(test_env):
 
     with pytest.raises(InvalidEAError):
         list(db.xrefs.get_callers(invalid_ea))
+
+
+def test_xref_mutation(test_env):
+    db = test_env
+
+    assert db.xrefs.add_code_ref(0x27, 0x272, XrefType.JUMP_NEAR)
+    added = [x for x in db.xrefs.from_ea(0x27) if x.to_ea == 0x272]
+    assert len(added) == 1
+    assert added[0].type == XrefType.JUMP_NEAR
+    assert added[0].is_code
+    assert added[0].user
+
+    assert 0x27 in list(db.xrefs.jumps_to_ea(0x272))
+
+    db.xrefs.remove_code_ref(0x27, 0x272)
+    assert 0x27 not in list(db.xrefs.jumps_to_ea(0x272))
+
+    assert db.xrefs.add_data_ref(0x27, 0x330, XrefType.READ)
+    added = [x for x in db.xrefs.from_ea(0x27, XrefsFlags.DATA) if x.to_ea == 0x330]
+    assert len(added) == 1
+    assert added[0].type == XrefType.READ
+    assert not added[0].is_code
+    assert added[0].user
+
+    assert 0x27 in list(db.xrefs.reads_of_ea(0x330))
+
+    db.xrefs.remove_data_ref(0x27, 0x330)
+    assert 0x27 not in list(db.xrefs.reads_of_ea(0x330))
+
+    assert db.xrefs.add_data_ref(0x27, 0x330, XrefType.OFFSET, user=False)
+    added = [x for x in db.xrefs.from_ea(0x27, XrefsFlags.DATA) if x.to_ea == 0x330]
+    assert len(added) == 1
+    assert added[0].user is False
+    db.xrefs.remove_data_ref(0x27, 0x330)
+
+    with pytest.raises(InvalidParameterError):
+        db.xrefs.add_code_ref(0x27, 0x272, XrefType.READ)
+
+    with pytest.raises(InvalidParameterError):
+        db.xrefs.add_data_ref(0x27, 0x330, XrefType.CALL_NEAR)
+
+    assert db.xrefs.add_code_ref(0x28, 0x272, XrefType.JUMP_NEAR) is False
+    assert db.xrefs.add_data_ref(0x28, 0x330, XrefType.READ) is False
+
+    invalid_ea = 0xFFFFFFFF
+    with pytest.raises(InvalidEAError):
+        db.xrefs.add_code_ref(invalid_ea, 0x272, XrefType.JUMP_NEAR)
+
+    with pytest.raises(InvalidEAError):
+        db.xrefs.add_code_ref(0x27, invalid_ea, XrefType.JUMP_NEAR)
+
+    with pytest.raises(InvalidEAError):
+        db.xrefs.remove_code_ref(invalid_ea, 0x272)
+
+    with pytest.raises(InvalidEAError):
+        db.xrefs.add_data_ref(invalid_ea, 0x330, XrefType.READ)
+
+    with pytest.raises(InvalidEAError):
+        db.xrefs.remove_data_ref(invalid_ea, 0x330)
+
+def test_xref_addition_data_happy_path(test_env):
+    db = test_env
+
+    FROM_EA = 0x27
+    TO_EA = 0x330
+    refs_from_count = len(list(db.xrefs.from_ea(FROM_EA)))
+    refs_to_count = len(list(db.xrefs.to_ea(TO_EA)))
+
+    assert db.xrefs.add_data_ref(FROM_EA, TO_EA, XrefType.READ, True)
+
+    assert refs_from_count + 1 == len(list(db.xrefs.from_ea(FROM_EA)))
+    assert refs_to_count + 1 == len(list(db.xrefs.to_ea(TO_EA)))
+
+    db.xrefs.remove_data_ref(FROM_EA, TO_EA)
+
+    assert refs_from_count == len(list(db.xrefs.from_ea(FROM_EA)))
+    assert refs_to_count == len(list(db.xrefs.to_ea(TO_EA)))
+
+def test_xref_addition_code_happy_path(test_env):
+    db = test_env
+
+    FROM_EA = 0x18
+    TO_EA = 0x31C
+    refs_from_count = len(list(db.xrefs.from_ea(FROM_EA)))
+    refs_to_count = len(list(db.xrefs.to_ea(TO_EA)))
+
+    assert db.xrefs.add_code_ref(FROM_EA, TO_EA, XrefType.JUMP_NEAR, True)
+
+    assert refs_from_count + 1 == len(list(db.xrefs.from_ea(FROM_EA)))
+    assert refs_to_count + 1 == len(list(db.xrefs.to_ea(TO_EA)))
+
+    db.xrefs.remove_code_ref(FROM_EA, TO_EA)
+
+    assert refs_from_count == len(list(db.xrefs.from_ea(FROM_EA)))
+    assert refs_to_count == len(list(db.xrefs.to_ea(TO_EA)))
