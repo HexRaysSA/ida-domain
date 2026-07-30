@@ -217,9 +217,13 @@ def test_operand_display(test_env):
     assert op.struct_offset_path() == ([outer], 4)
     assert op.struct_offset_path_names() == ['OuterStruct']
     assert op.struct_offset_field_names() == ['OuterStruct', 'nested', 'inner_field2']
+    assert op.display_struct_offset(outer, -52) is True
+    assert op.struct_offset_path() == ([outer], -52)
+    assert op.struct_offset_field_names() == ['OuterStruct', 'nested', 'inner_field2']
     # Test tid validation
     assert op.display_struct_offset(0xDEADBEEF) is False
     assert op.display_struct_offset([outer, 0xDEADBEEF]) is False
+    assert op.display_struct_offset([]) is False
     # A register operand has no struct-offset path
     reg = db.instructions.get_operand(insn, 0)
     assert reg.struct_offset_path() is None
@@ -249,6 +253,13 @@ def test_operand_display(test_env):
     assert op.display_based_struct_offset(base) is False
     op.display_reset()
     assert op.display_based_struct_offset(0x0) is False
+
+    # Test a negative displacement
+    neg_op = db.instructions.get_operand(db.instructions.get_at(0x131), 1)
+    assert neg_op.display_struct_offset(outer) is True
+    assert neg_op.struct_offset_field_names() == ['OuterStruct']
+    assert neg_op.display_based_struct_offset(base) is False
+    neg_op.display_reset()
 
     # Test stack-variable link
     sv_insn = db.instructions.get_at(0x135)

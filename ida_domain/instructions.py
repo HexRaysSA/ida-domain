@@ -108,13 +108,18 @@ class Instructions(DatabaseEntity):
 
     def get_previous(self, ea: ea_t) -> Optional[insn_t]:
         """
-        Decodes previous instruction of the one at specified address.
+        Decodes the instruction that precedes the one at `ea` in execution flow.
+
+        This is the instruction that passes execution to `ea`, either by
+        falling through into it or by jumping to or calling it.
 
         Args:
             ea: The effective address of the instruction.
 
         Returns:
-            An insn_t instance, if fails returns None.
+            An insn_t instance, or None when no instruction passes execution
+            to `ea`, e.g. at the program entry point, or a function with no
+            direct callers.
 
         Raises:
             InvalidEAError: If the effective address is invalid.
@@ -316,13 +321,17 @@ class Instructions(DatabaseEntity):
 
     def get_next(self, ea: ea_t) -> Optional[insn_t]:
         """
-        Decodes the instruction following the one at the specified address.
+        Decodes the instruction that follows the one at `ea` in execution flow.
+
+        This is the instruction the one at `ea` passes execution to, either by
+        falling through into it or by jumping to or calling it.
 
         Args:
             ea: The effective address of the instruction.
 
         Returns:
-            An insn_t instance, or None if there is no following instruction.
+            An insn_t instance, or None when no successor is known,
+            e.g. after a return or an unresolved indirect jump.
 
         Raises:
             InvalidEAError: If the effective address is invalid.

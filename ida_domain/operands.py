@@ -13,7 +13,7 @@ import ida_name
 import ida_offset
 import ida_typeinf
 import ida_ua
-from ida_idaapi import ea_t
+from ida_idaapi import as_signed, ea_t
 from typing_extensions import TYPE_CHECKING
 
 from .base import InvalidParameterError
@@ -302,7 +302,7 @@ class Operand(ABC):
         insn = self.m_database.instructions.get_at(self._instruction_ea)
         if insn is None:
             return False
-        opval = self._op.value if self._op.type == ida_ua.o_imm else self._op.addr
+        opval = as_signed(self._op.value if self._op.type == ida_ua.o_imm else self._op.addr, 64)
         return ida_bytes.op_based_stroff(insn, self.number, opval, base)
 
     def display_stack_var(self) -> bool:
@@ -354,14 +354,21 @@ class Operand(ABC):
         path, delta = ida_bytes.get_stroff_path(self._instruction_ea, self.number)
         if path is None:
             return None
-        return path, delta
+        return path, as_signed(delta, 64)
 
     def struct_offset_path_names(self) -> list[str]:
         """
-        Read the struct-offset path as type names, empty if not applicable.
+        Read the struct-offset path as type names.
+
+        The path holds the root structure plus any union members chosen along
+        the chain (plain nested structs add no entries), so an operand rendered
+        as `OuterStruct.nested.inner_field2` yields just `['OuterStruct']`.
+        Use `struct_offset_field_names` to get the member chain.
 
         Returns:
-            The path as a list of type names. An unnamed type appears as its hex tid.
+            The path as a list of type names, or an empty list if the operand is
+            not represented as a structure offset. An unnamed type appears as its
+            hex tid.
         """
         result = self.struct_offset_path()
         if result is None:
@@ -373,6 +380,10 @@ class Operand(ABC):
         """
         Read the struct-offset path as the field names.
 
+        For an operand rendered as `OuterStruct.nested.inner_field2` this returns
+        `['OuterStruct', 'nested', 'inner_field2']`. Use `struct_offset_path_names`
+        to get the type name path.
+
         Returns:
             The member chain, or an empty list if the operand is not represented as
             a structure offset.
@@ -382,7 +393,7 @@ class Operand(ABC):
             return []
         path, delta = result
         root = ida_typeinf.get_tid_name(path[0]) or f'{path[0]:#x}'
-        disp = self._op.value if self._op.type == ida_ua.o_imm else self._op.addr
+        disp = as_signed(self._op.value if self._op.type == ida_ua.o_imm else self._op.addr, 64)
         fields = ida_name.append_struct_fields(disp, self.number, path, 0, delta, True)
         suffix = fields[0] if isinstance(fields, tuple) else fields
         return (root + (suffix or '')).split('.')
