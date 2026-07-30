@@ -237,9 +237,6 @@ class Xrefs(DatabaseEntity):
         """
         Get all cross-references to an address.
 
-        Note: To get cross-references to a type or type member (struct, union,
-        enum), use ``db.types.get_xrefs_to()`` / ``db.types.get_member_xrefs_to()``.
-
         Args:
             ea: Target effective address
             flags: Filter flags (default: all xrefs)
@@ -258,11 +255,6 @@ class Xrefs(DatabaseEntity):
     def from_ea(self, ea: ea_t, flags: XrefsFlags = XrefsFlags.ALL) -> Iterator[XrefInfo]:
         """
         Get all cross-references from an address.
-
-        Note: Method named 'from_' because 'from' is a Python keyword.
-
-        Note: To get cross-references from a type or type member (struct, union,
-        enum), use ``db.types.get_xrefs_from()`` / ``db.types.get_member_xrefs_from()``.
 
         Args:
             ea: Source effective address
@@ -585,8 +577,7 @@ class Xrefs(DatabaseEntity):
 
         Args:
             from_ea: Source address
-            to_ea: Target address; addresses in IDA's private range are also
-                accepted (e.g. type and member ids)
+            to_ea: Target address
 
         Raises:
             InvalidEAError: If either effective address is invalid

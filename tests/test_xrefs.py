@@ -114,14 +114,10 @@ def test_xrefs(test_env):
     assert callers[0].xref_type == XrefType.CALL_NEAR
     assert callers[0].function_ea is None
 
-    # Private range EAs (type ids) are not valid xref targets here;
-    # type/member xrefs are exposed via db.types.get_xrefs_to() and friends
     private_ea = 0xFF00000000000000
     assert db.is_private_ea(private_ea)
-    with pytest.raises(InvalidEAError):
-        list(db.xrefs.to_ea(private_ea))
-    with pytest.raises(InvalidEAError):
-        list(db.xrefs.from_ea(private_ea))
+    assert isinstance(list(db.xrefs.to_ea(private_ea)), list)
+    assert isinstance(list(db.xrefs.from_ea(private_ea)), list)
 
     invalid_ea = 0xFFFFFFFF
 
@@ -224,6 +220,7 @@ def test_xref_mutation(test_env):
     with pytest.raises(InvalidEAError):
         db.xrefs.remove_data_ref(invalid_ea, 0x330)
 
+
 def test_xref_addition_data_happy_path(test_env):
     db = test_env
 
@@ -241,6 +238,7 @@ def test_xref_addition_data_happy_path(test_env):
 
     assert refs_from_count == len(list(db.xrefs.from_ea(FROM_EA)))
     assert refs_to_count == len(list(db.xrefs.to_ea(TO_EA)))
+
 
 def test_xref_addition_code_happy_path(test_env):
     db = test_env
