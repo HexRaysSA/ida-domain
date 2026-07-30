@@ -14,7 +14,7 @@ import ida_loader
 import ida_nalt
 import ida_typeinf
 from ida_idaapi import ea_t
-from typing_extensions import TYPE_CHECKING, List, Literal, Optional, Tuple, Type, Union
+from typing_extensions import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple, Type, Union
 
 from .base import DatabaseError, check_db_open
 from .bytes import Bytes
@@ -836,7 +836,7 @@ class Database:
         """
         from dataclasses import fields
 
-        metadata_values = {}
+        metadata_values: Dict[str, Any] = {}
 
         # Use the dataclass fields as the source of truth for what properties to collect
         for field in fields(DatabaseMetadata):

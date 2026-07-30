@@ -64,6 +64,28 @@ else:
         return ida_funcs.set_func_cmt(func, cmt, repeatable)
 
 
+if hasattr(ida_funcs, 'reanalyze_function_ea'):
+    def reanalyze_function_ea(ea: ea_t) -> None:
+        ida_funcs.reanalyze_function_ea(ea)
+else:
+    def reanalyze_function_ea(ea: ea_t) -> None:
+        func = ida_funcs.get_func(ea)
+        if func is not None:
+            ida_funcs.reanalyze_function(func)
+
+
+if hasattr(ida_funcs, 'set_func_flags'):
+    def set_func_flags(ea: ea_t, flags: int) -> bool:
+        return ida_funcs.set_func_flags(ea, flags)
+else:
+    def set_func_flags(ea: ea_t, flags: int) -> bool:
+        func = ida_funcs.get_func(ea)
+        if func is None:
+            return False
+        func.flags = flags
+        return ida_funcs.update_func(func)
+
+
 def iter_func_tail_ranges(func: func_t) -> Iterator[Tuple[ea_t, ea_t]]:
     """Yield ``(start_ea, end_ea)`` for each tail chunk of ``func``.
 

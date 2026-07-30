@@ -2,6 +2,27 @@ from __future__ import annotations
 
 import logging
 from logging import NullHandler
+from pathlib import Path
+
+
+def examples_path() -> Path:
+    """Return the directory containing the IDA Domain examples.
+
+    Packaged installations use the examples included in the distribution. Source
+    and editable installations fall back to the repository's ``examples`` directory.
+
+    Raises:
+        FileNotFoundError: If the examples are unavailable.
+    """
+    packaged_examples = Path(__file__).resolve().parent / '_examples'
+    if packaged_examples.is_dir():
+        return packaged_examples
+
+    checkout_examples = Path(__file__).resolve().parents[1] / 'examples'
+    if checkout_examples.is_dir():
+        return checkout_examples
+
+    raise FileNotFoundError('The IDA Domain examples could not be located')
 
 
 def _load_dependencies() -> None:

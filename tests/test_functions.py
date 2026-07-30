@@ -1,9 +1,12 @@
+import ida_auto
 import pytest
 
 import ida_domain  # isort: skip
 from ida_idaapi import BADADDR
 
+from ida_domain import hooks
 from ida_domain.base import InvalidEAError, InvalidParameterError
+from ida_domain.functions import FunctionFlags, FunctionMoveError, MoveFunctionResult
 
 
 def _mc_insn(line: str) -> str:
@@ -153,6 +156,7 @@ def test_function(test_env):
     # assignment_rhs_lvar resolves the RHS directly to a LocalVariable
     rhs_lvar = write_ref.assignment_rhs_lvar
     from ida_domain.pseudocode import LocalVariable
+
     assert isinstance(rhs_lvar, LocalVariable)
     assert rhs_lvar.name == 'v3'
     # This write is not inside a call, so containing_call_args_lvars is None
@@ -213,7 +217,6 @@ def test_function(test_env):
     assert next_func.name == 'add_numbers'
     assert next_func.start_ea == 0x2A3
 
-
     with pytest.raises(InvalidEAError):
         db.functions.get_next(0xFFFFFFFF)
 
@@ -258,7 +261,6 @@ def test_function(test_env):
 
     data_items = list(db.functions.get_data_items(func))
     assert len(data_items) == 0
-
 
     with pytest.raises(InvalidEAError):
         db.functions.get_at(0xFFFFFFFF)
@@ -323,6 +325,77 @@ def test_function(test_env):
         '3.13 call   !sys_write <spec:"unsigned int fd" edi.4,'
         '"const char *buf" rsi.8,"size_t count" rdx.8> => "signed __int64" rax.8'
     )
+
+
+def test_function_boundaries_flags_and_decl(test_env):
+    """Boundary edits (set_start/set_end), refresh (update/reanalyze),
+    the outlined flag, and applying a C prototype (apply_declaration)."""
+    db = test_env
+
+    # Set and clear the outlined flag
+    func = db.functions.get_at(0x2A3)
+    assert db.functions.is_outlined(func) is False
+    assert db.functions.set_outlined(func, True) is True
+    func = db.functions.get_at(0x2A3)
+    assert db.functions.is_outlined(func) is True
+    assert db.functions.set_outlined(func, False) is True
+    func = db.functions.get_at(0x2A3)
+    assert db.functions.is_outlined(func) is False
+
+    # Update emits func_updated AND persists an in-place edit to the func_t
+    class _UpdateHook(hooks.DatabaseHooks):
+        def __init__(self):
+            super().__init__()
+            self.updated_eas = []
+
+        def func_updated(self, pfn):
+            self.updated_eas.append(pfn.start_ea)
+
+    func = db.functions.get_at(0x2A3)
+    assert FunctionFlags.LIB not in db.functions.get_flags(func)
+    func.flags |= FunctionFlags.LIB.value
+    update_hook = _UpdateHook()
+    update_hook.hook()
+    try:
+        assert db.functions.update(func) is True
+        assert 0x2A3 in update_hook.updated_eas
+    finally:
+        update_hook.unhook()
+    # the in-place edit was persisted
+    assert FunctionFlags.LIB in db.functions.get_flags(db.functions.get_at(0x2A3))
+
+    assert db.functions.apply_declaration(func, 'int __fastcall f(int a, int b)') is True
+    func = db.functions.get_at(0x2A3)
+    assert db.functions.get_signature(func) == 'int __fastcall(int a, int b)'
+    with pytest.raises(InvalidParameterError):
+        db.functions.apply_declaration(func, 'not a valid decl @#$')
+
+    # reanalyze plants the function's chunks in the AU_USED ("reanalyze") queue
+    ida_auto.auto_wait()
+    assert ida_auto.peek_auto_queue(0x2A3, ida_auto.AU_USED) == BADADDR
+    db.functions.reanalyze(db.functions.get_at(0x2A3))
+    assert ida_auto.peek_auto_queue(0x2A3, ida_auto.AU_USED) == 0x2A3
+    ida_auto.auto_wait()
+    assert ida_auto.peek_auto_queue(0x2A3, ida_auto.AU_USED) == BADADDR
+
+    # Move the start forward to the next instruction (shrink)
+    assert db.functions.set_start(db.functions.get_at(0x2A3), 0x2A4) is True
+    assert db.functions.get_at(0x2A4).start_ea == 0x2A4
+    # new_start may be below the current start to extend, when that code is unowned
+    assert db.functions.set_start(db.functions.get_at(0x2A4), 0x2A3) is True
+    assert db.functions.get_at(0x2A3).start_ea == 0x2A3
+    # a mid-instruction address is not a valid start (the reason code is carried)
+    with pytest.raises(FunctionMoveError) as exc_info:
+        db.functions.set_start(db.functions.get_at(0x2A3), 0x2A8)
+    assert exc_info.value.code is MoveFunctionResult.NOCODE
+    with pytest.raises(InvalidEAError):
+        db.functions.set_start(db.functions.get_at(0x2A3), 0xFFFFFFFF)
+
+    # Move the end back past the last instruction
+    assert db.functions.set_end(db.functions.get_at(0x2A3), 0x2AE) is True
+    assert db.functions.get_at(0x2A3).end_ea == 0x2AE
+    with pytest.raises(InvalidEAError):
+        db.functions.set_end(db.functions.get_at(0x2A3), 0xFFFFFFFF)
 
 
 def test_get_signature_returns_optional_str(test_env):

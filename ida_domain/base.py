@@ -282,6 +282,17 @@ def requires_ida(min_version: str) -> Callable[[Callable[P, R]], Callable[P, R]]
     return decorator
 
 
+def experimental(fn: Callable[P, R]) -> Callable[P, R]:
+    """
+    Decorator marking an API as experimental.
+
+    Experimental APIs are usable but their signature or behavior may change
+    in future releases without a deprecation period.
+    """
+    fn.__experimental__ = True  # type: ignore[attr-defined]
+    return fn
+
+
 def check_db_open(fn: Callable[P, R]) -> Callable[P, R]:
     """
     Decorator that checks that a database is open.
