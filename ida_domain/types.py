@@ -59,6 +59,7 @@ from .base import (
     _since_ida,
     check_db_open,
     decorate_all_methods,
+    experimental,
 )
 from .xrefs import XrefInfo, XrefsFlags, _iter_xrefs_from, _iter_xrefs_to
 
@@ -2425,6 +2426,7 @@ class Types(DatabaseEntity):
             if tid != BADADDR:
                 yield tid
 
+    @experimental
     def get_xrefs_to(
         self,
         type_info: tinfo_t,
@@ -2466,6 +2468,7 @@ class Types(DatabaseEntity):
 
         return _iter()
 
+    @experimental
     def get_xrefs_from(
         self,
         type_info: tinfo_t,
@@ -2500,6 +2503,7 @@ class Types(DatabaseEntity):
 
         return _iter()
 
+    @experimental
     def get_member_xrefs_to(
         self, type_info: tinfo_t, member: Union[str, int], flags: XrefsFlags = XrefsFlags.ALL
     ) -> Iterator[XrefInfo]:
@@ -2525,6 +2529,7 @@ class Types(DatabaseEntity):
         """
         return _iter_xrefs_to(self._get_member_tid(type_info, member), flags)
 
+    @experimental
     def get_member_xrefs_from(
         self, type_info: tinfo_t, member: Union[str, int], flags: XrefsFlags = XrefsFlags.ALL
     ) -> Iterator[XrefInfo]:
@@ -2545,6 +2550,7 @@ class Types(DatabaseEntity):
         """
         return _iter_xrefs_from(self._get_member_tid(type_info, member), flags)
 
+    @experimental
     def resolve_tid(self, tid: ea_t) -> Optional[TidInfo]:
         """
         Resolve a type id back to the type or member it identifies.
