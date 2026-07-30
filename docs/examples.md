@@ -76,6 +76,14 @@ This example demonstrates a complete traversal of a database:
 
 ## Running the Examples
 
+Installed and editable packages can locate the examples programmatically:
+
+```python
+from ida_domain import examples_path
+
+examples = examples_path()
+```
+
 To run these examples, save them to Python files and execute them with your IDA database path:
 
 ```bash

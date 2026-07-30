@@ -63,10 +63,10 @@ def traverse_segments(db: ida_domain.Database) -> None:
 
     for i, segment in enumerate(segments, 1):
         print(
-            f'  [{i:2d}] {segment.name:20} | '
+            f'  [{i:2d}] {db.segments.get_name(segment):10} | '
             f'Start: 0x{segment.start_ea:08x} | '
             f'End: 0x{segment.end_ea:08x} | '
-            f'Size: {segment.size} | '
+            f'Size: 0x{db.segments.get_size(segment):08x} | '
             f'Type: {segment.type}'
         )
 

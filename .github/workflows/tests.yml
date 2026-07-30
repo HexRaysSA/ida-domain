@@ -48,6 +48,34 @@ jobs:
       - name: Type checking
         run: uv run mypy ida_domain
 
+      - name: Build and verify package
+        run: |
+          rm -rf dist
+          uv build
+          uv run python - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile
+
+          expected = {
+              path.relative_to('examples').as_posix()
+              for path in Path('examples').rglob('*')
+              if path.is_file()
+          }
+          wheel = next(Path('dist').glob('*.whl'))
+          with ZipFile(wheel) as archive:
+              prefix = 'ida_domain/_examples/'
+              packaged = {
+                  name.removeprefix(prefix)
+                  for name in archive.namelist()
+                  if name.startswith(prefix) and not name.endswith('/')
+              }
+
+          assert packaged == expected, (
+              f'Packaged examples differ: missing={expected - packaged}, '
+              f'unexpected={packaged - expected}'
+          )
+          PY
+
       - name: Tests skipped notification
         if: env.HAS_IDA_CREDS != 'true'
         run: |
