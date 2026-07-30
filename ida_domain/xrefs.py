@@ -213,7 +213,7 @@ class Xrefs(DatabaseEntity):
         Raises:
             InvalidEAError: If the effective address is invalid
         """
-        if not self.database.is_valid_ea(ea):
+        if not (self.database.is_valid_ea(ea) or self.database.is_private_ea(ea)):
             raise InvalidEAError(ea)
 
         xb = ida_xref.xrefblk_t()
@@ -247,7 +247,7 @@ class Xrefs(DatabaseEntity):
         Raises:
             InvalidEAError: If the effective address is invalid
         """
-        if not self.database.is_valid_ea(ea):
+        if not (self.database.is_valid_ea(ea) or self.database.is_private_ea(ea)):
             raise InvalidEAError(ea)
 
         xb = ida_xref.xrefblk_t()
@@ -494,9 +494,9 @@ class Xrefs(DatabaseEntity):
             InvalidEAError: If either effective address is invalid
             InvalidParameterError: If xref_type is not a code reference type
         """
-        if not (self.database.is_valid_ea(from_ea) or self.database.is_private_ea(from_ea)):
+        if not self.database.is_valid_ea(from_ea):
             raise InvalidEAError(from_ea)
-        if not (self.database.is_valid_ea(to_ea) or self.database.is_private_ea(to_ea)):
+        if not self.database.is_valid_ea(to_ea):
             raise InvalidEAError(to_ea)
         if not xref_type.is_code_ref():
             raise InvalidParameterError('xref_type', xref_type, 'not a code reference type')
@@ -523,9 +523,9 @@ class Xrefs(DatabaseEntity):
         Raises:
             InvalidEAError: If either effective address is invalid
         """
-        if not (self.database.is_valid_ea(from_ea) or self.database.is_private_ea(from_ea)):
+        if not self.database.is_valid_ea(from_ea):
             raise InvalidEAError(from_ea)
-        if not (self.database.is_valid_ea(to_ea) or self.database.is_private_ea(to_ea)):
+        if not self.database.is_valid_ea(to_ea):
             raise InvalidEAError(to_ea)
 
         return ida_xref.del_cref(from_ea, to_ea, expand)
@@ -538,7 +538,8 @@ class Xrefs(DatabaseEntity):
 
         Args:
             from_ea: Source address; must be the head of a defined item
-            to_ea: Target address
+            to_ea: Target address; addresses in IDA's private range are also
+                accepted (e.g. type and member ids)
             xref_type: Data reference type (e.g. XrefType.READ, XrefType.WRITE, XrefType.OFFSET)
             user: Mark the xref as user-specified (default: True). User xrefs survive
                 reanalysis; without this mark the kernel deletes the xref the next time
@@ -570,7 +571,8 @@ class Xrefs(DatabaseEntity):
 
         Args:
             from_ea: Source address
-            to_ea: Target address
+            to_ea: Target address; addresses in IDA's private range are also
+                accepted (e.g. type and member ids)
 
         Raises:
             InvalidEAError: If either effective address is invalid
