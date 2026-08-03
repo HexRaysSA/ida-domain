@@ -110,16 +110,26 @@ class Instructions(DatabaseEntity):
         """
         Decodes the instruction that precedes the one at `ea` in execution flow.
 
-        This is the instruction that passes execution to `ea`, either by
-        falling through into it or by jumping to or calling it.
+        Usually just the previous instruction by address, falling through into
+        `ea`. The special cases:
+
+        - a jump or call from a lower address targets `ea`: that instruction is
+          returned instead, the first one by address when several do. A jump or
+          call from a higher address, like a loop jumping back, doesn't count.
+          Use `db.xrefs.jumps_to_ea` and `db.xrefs.calls_to_ea` to list them all.
+        - nothing falls through into `ea` and no jump or call from a lower
+          address targets it, e.g. the program entry point or code only
+          reached from higher addresses: None.
+
+        Flow is many-to-many, so `get_next` on the result won't always lead
+        back to `ea`. Use `db.heads.get_previous` to walk addresses instead of
+        flow.
 
         Args:
             ea: The effective address of the instruction.
 
         Returns:
-            An insn_t instance, or None when no instruction passes execution
-            to `ea`, e.g. at the program entry point, or a function with no
-            direct callers.
+            An insn_t instance, or None when `ea` has no known predecessor.
 
         Raises:
             InvalidEAError: If the effective address is invalid.
@@ -323,15 +333,26 @@ class Instructions(DatabaseEntity):
         """
         Decodes the instruction that follows the one at `ea` in execution flow.
 
-        This is the instruction the one at `ea` passes execution to, either by
-        falling through into it or by jumping to or calling it.
+        Usually just the next instruction by address - nearly everything falls
+        through, calls and conditional jumps included. The special cases:
+
+        - `ea` never falls through, e.g. an unconditional jump, a switch
+          dispatch resolved by analysis, or a call that never returns: its jump
+          or call target is returned, the first one by address when there are
+          several. Use `db.xrefs.jumps_from_ea` and `db.xrefs.calls_from_ea` to
+          list them all.
+        - `ea` breaks execution flow (e.g. return) or no target is known (an
+          unresolved indirect jump): None.
+
+        Flow is many-to-many, so `get_previous` on the result won't always
+        lead back to `ea`. Use `db.heads.get_next` to walk addresses instead
+        of flow.
 
         Args:
             ea: The effective address of the instruction.
 
         Returns:
-            An insn_t instance, or None when no successor is known,
-            e.g. after a return or an unresolved indirect jump.
+            An insn_t instance, or None when `ea` has no known successor.
 
         Raises:
             InvalidEAError: If the effective address is invalid.
