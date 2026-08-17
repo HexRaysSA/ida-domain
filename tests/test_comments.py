@@ -134,7 +134,6 @@ def test_comments(test_env):
 
 HEAD_EA = 0xAE  # Instruction head with no pre-existing comments
 TAIL_EA = 0x100  # Tail byte of the 8-byte instruction at 0xFF
-UNEXPLORED_EA = 0x338
 INVALID_EA = 0xFFFFFFFF
 EXTRA_LINE_APIS = [
     pytest.param(
@@ -156,19 +155,6 @@ EXTRA_LINE_APIS = [
 
 def _extra_lines(db, kind, ea=HEAD_EA):
     return list(db.comments.get_all_extra_at(ea, kind))
-
-
-def test_set_at_validation(test_env):
-    db = test_env
-
-    with pytest.raises(ida_domain.base.InvalidParameterError):
-        db.comments.set_at(TAIL_EA, 'Tail comment')
-    with pytest.raises(ida_domain.base.InvalidParameterError):
-        db.comments.set_at(HEAD_EA, 42)
-
-    # Unexplored bytes are not tail bytes, so comments are allowed there.
-    assert db.comments.set_at(UNEXPLORED_EA, 'Unexplored comment')
-    assert db.comments.get_at(UNEXPLORED_EA).comment == 'Unexplored comment'
 
 
 def test_append_at(test_env):

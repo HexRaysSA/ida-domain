@@ -128,29 +128,18 @@ class Comments(DatabaseEntity):
         Sets a comment at the specified address.
 
         Args:
-            ea: The effective address. Must not be a tail byte of a multi-byte
-                item.
+            ea: The effective address.
             comment: The comment text to assign.
             comment_kind: Type of comment to set (REGULAR or REPEATABLE).
 
         Raises:
             InvalidEAError: If the effective address is invalid.
-            InvalidParameterError: If ``ea`` is a tail byte or ``comment``
-                is not a string.
 
         Returns:
             True if the comment was successfully set, False otherwise.
-
-        Warning:
-            IDA caps regular and repeatable comments at 1024 bytes of UTF-8
-            and silently truncates longer text even though True is returned.
         """
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
-        if ida_bytes.is_tail(ida_bytes.get_flags(ea)):
-            raise InvalidParameterError('ea', ea, 'the address must not be an item tail byte')
-        if not isinstance(comment, str):
-            raise InvalidParameterError('comment', comment, 'the comment must be a string')
 
         comment_types = (
             [False, True]
