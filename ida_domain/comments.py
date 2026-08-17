@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import Enum
 from itertools import repeat
@@ -17,7 +18,13 @@ from ida_segment import segment_t
 from ida_typeinf import tinfo_t
 from typing_extensions import TYPE_CHECKING, Iterator, Optional
 
-from .base import DatabaseEntity, InvalidEAError, check_db_open, decorate_all_methods
+from .base import (
+    DatabaseEntity,
+    InvalidEAError,
+    InvalidParameterError,
+    check_db_open,
+    decorate_all_methods,
+)
 
 if TYPE_CHECKING:
     from .database import Database
@@ -42,6 +49,12 @@ class ExtraCommentKind(Enum):
 
     ANTERIOR = 'anterior'  # Comments before the line (E_PREV)
     POSTERIOR = 'posterior'  # Comments after the line (E_NEXT)
+
+
+_EXTRA_COMMENT_SLOT_COUNTS = {
+    ExtraCommentKind.ANTERIOR: ida_lines.E_NEXT - ida_lines.E_PREV - 1,
+    ExtraCommentKind.POSTERIOR: ida_lines.E_NEXT - ida_lines.E_PREV,
+}
 
 
 @dataclass(frozen=True)
@@ -115,18 +128,29 @@ class Comments(DatabaseEntity):
         Sets a comment at the specified address.
 
         Args:
-            ea: The effective address.
+            ea: The effective address. Must not be a tail byte of a multi-byte
+                item.
             comment: The comment text to assign.
             comment_kind: Type of comment to set (REGULAR or REPEATABLE).
 
         Raises:
             InvalidEAError: If the effective address is invalid.
+            InvalidParameterError: If ``ea`` is a tail byte or ``comment``
+                is not a string.
 
         Returns:
             True if the comment was successfully set, False otherwise.
+
+        Warning:
+            IDA caps regular and repeatable comments at 1024 bytes of UTF-8
+            and silently truncates longer text even though True is returned.
         """
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
+        if ida_bytes.is_tail(ida_bytes.get_flags(ea)):
+            raise InvalidParameterError('ea', ea, 'the address must not be an item tail byte')
+        if not isinstance(comment, str):
+            raise InvalidParameterError('comment', comment, 'the comment must be a string')
 
         comment_types = (
             [False, True]
@@ -159,6 +183,52 @@ class Comments(DatabaseEntity):
         )
         for is_repeatable in comment_types:
             ida_bytes.set_cmt(ea, '', is_repeatable)
+
+    def append_at(
+        self, ea: ea_t, comment: str, comment_kind: CommentKind = CommentKind.REGULAR
+    ) -> bool:
+        """
+        Appends text to a comment at the specified address.
+
+        If the selected comment does not exist, it is created with the given
+        text. Otherwise, a newline followed by the supplied text is appended.
+        Appending an empty string is a no-op and returns False.
+
+        Args:
+            ea: The effective address. Must not be a tail byte of a multi-byte
+                item.
+            comment: The comment text to append.
+            comment_kind: Type of comment to append to (REGULAR or REPEATABLE).
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+            InvalidParameterError: If ``ea`` is a tail byte, ``comment``
+                is not a string, or ``comment_kind`` is ``ALL``.
+
+        Returns:
+            True if the comment was successfully appended, False otherwise.
+
+        Warning:
+            IDA caps regular and repeatable comments at 1024 bytes of UTF-8
+            and silently truncates longer text, so appending to a comment
+            near that limit drops the excess even though True is returned.
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+        if ida_bytes.is_tail(ida_bytes.get_flags(ea)):
+            raise InvalidParameterError('ea', ea, 'the address must not be an item tail byte')
+        if comment_kind == CommentKind.ALL:
+            raise InvalidParameterError(
+                'comment_kind',
+                comment_kind,
+                'appending to both comment kinds at once is not supported',
+            )
+        if not isinstance(comment, str):
+            raise InvalidParameterError('comment', comment, 'the comment must be a string')
+        if not comment:
+            return False
+
+        return ida_bytes.append_cmt(ea, comment, comment_kind == CommentKind.REPEATABLE)
 
     def get_all(self, comment_kind: CommentKind = CommentKind.REGULAR) -> Iterator[CommentInfo]:
         """
@@ -216,6 +286,155 @@ class Comments(DatabaseEntity):
         base_idx = ida_lines.E_PREV if kind == ExtraCommentKind.ANTERIOR else ida_lines.E_NEXT
         return ida_lines.update_extra_cmt(ea, base_idx + index, comment)
 
+    def _set_extra_lines_at(self, ea: ea_t, lines: Iterable[str], kind: ExtraCommentKind) -> bool:
+        """Replace all extra comment lines of one kind."""
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+        if isinstance(lines, str):
+            raise InvalidParameterError(
+                'lines', lines, 'must be an iterable of strings, not a single string'
+            )
+
+        materialized_lines: list[str] = []
+        for line in lines:
+            if not isinstance(line, str):
+                raise InvalidParameterError('lines', line, 'every comment line must be a string')
+            materialized_lines.extend(line.replace('\r\n', '\n').replace('\r', '\n').split('\n'))
+
+        slot_count = _EXTRA_COMMENT_SLOT_COUNTS[kind]
+        if len(materialized_lines) > slot_count:
+            raise InvalidParameterError(
+                'lines',
+                len(materialized_lines),
+                f'at most {slot_count} {kind.value} comment lines are supported '
+                f'(counted after splitting embedded line breaks)',
+            )
+
+        if not self._clear_extra_lines_at(ea, kind):
+            return False
+        for index, comment in enumerate(materialized_lines):
+            if not self.set_extra_at(ea, index, comment, kind):
+                return False
+        return True
+
+    def _clear_extra_lines_at(self, ea: ea_t, kind: ExtraCommentKind) -> bool:
+        """Delete all extra comment lines of one kind, including lines after gaps."""
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        base_idx = ida_lines.E_PREV if kind == ExtraCommentKind.ANTERIOR else ida_lines.E_NEXT
+        success = True
+        for index in range(base_idx, base_idx + _EXTRA_COMMENT_SLOT_COUNTS[kind]):
+            if ida_lines.get_extra_cmt(ea, index) is not None:
+                success = ida_lines.del_extra_cmt(ea, index) and success
+        return success
+
+    def set_anterior_lines_at(self, ea: ea_t, lines: Iterable[str]) -> bool:
+        """
+        Replaces all anterior comment lines at the specified address.
+
+        Passing an empty iterable clears all anterior comment lines. The input
+        iterable is consumed before the existing comments are changed. A line
+        containing line breaks is split into separate comment lines.
+
+        Args:
+            ea: The effective address.
+            lines: Comment lines in display order, at most 999.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+            InvalidParameterError: If ``lines`` is a single string instead of
+                an iterable of strings, contains a non-string element, or
+                exceeds the supported line count. The existing comment lines
+                are left unchanged in this case.
+
+        Returns:
+            True if the existing lines were cleared and every new line was
+            successfully set, False otherwise.
+
+        Note:
+            IDA does not provide a transactional bulk update. The existing
+            lines are cleared before the new ones are written, so if setting
+            a line fails, the original lines are already lost and only a
+            partial replacement remains stored.
+
+        Warning:
+            IDA caps each line at 1024 bytes of UTF-8 and silently truncates
+            longer lines even though True is returned.
+        """
+        return self._set_extra_lines_at(ea, lines, ExtraCommentKind.ANTERIOR)
+
+    def set_posterior_lines_at(self, ea: ea_t, lines: Iterable[str]) -> bool:
+        """
+        Replaces all posterior comment lines at the specified address.
+
+        Passing an empty iterable clears all posterior comment lines. The input
+        iterable is consumed before the existing comments are changed. A line
+        containing line breaks is split into separate comment lines.
+
+        Args:
+            ea: The effective address.
+            lines: Comment lines in display order, at most 1000.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+            InvalidParameterError: If ``lines`` is a single string instead of
+                an iterable of strings, contains a non-string element, or
+                exceeds the supported line count. The existing comment lines
+                are left unchanged in this case.
+
+        Returns:
+            True if the existing lines were cleared and every new line was
+            successfully set, False otherwise.
+
+        Note:
+            IDA does not provide a transactional bulk update. The existing
+            lines are cleared before the new ones are written, so if setting
+            a line fails, the original lines are already lost and only a
+            partial replacement remains stored.
+
+        Warning:
+            IDA caps each line at 1024 bytes of UTF-8 and silently truncates
+            longer lines even though True is returned.
+        """
+        return self._set_extra_lines_at(ea, lines, ExtraCommentKind.POSTERIOR)
+
+    def clear_anterior_at(self, ea: ea_t) -> bool:
+        """
+        Deletes all anterior comment lines at the specified address.
+
+        Args:
+            ea: The effective address.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+
+        Returns:
+            True if every line was successfully deleted, False otherwise.
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        return self._clear_extra_lines_at(ea, ExtraCommentKind.ANTERIOR)
+
+    def clear_posterior_at(self, ea: ea_t) -> bool:
+        """
+        Deletes all posterior comment lines at the specified address.
+
+        Args:
+            ea: The effective address.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+
+        Returns:
+            True if every line was successfully deleted, False otherwise.
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        return self._clear_extra_lines_at(ea, ExtraCommentKind.POSTERIOR)
+
     def get_extra_at(self, ea: int, index: int, kind: ExtraCommentKind) -> Optional[str]:
         """
         Gets a specific extra comment.
@@ -262,6 +481,59 @@ class Comments(DatabaseEntity):
                 break
             yield comment
             index += 1
+
+    def get_combined_at(
+        self,
+        ea: ea_t,
+        *,
+        include_regular: bool = True,
+        include_repeatable: bool = True,
+        include_anterior: bool = True,
+        include_posterior: bool = True,
+    ) -> Optional[str]:
+        """
+        Combines the selected comments at an address into one text block.
+
+        Lines are returned in logical listing order: anterior comments, the
+        regular comment, the repeatable comment, and posterior comments. This
+        method returns stored comment text only. Extra comment lines stored
+        after a missing index are omitted. On a tail byte, the regular and
+        repeatable comments are read from the item head.
+
+        Args:
+            ea: The effective address.
+            include_regular: Include the regular comment.
+            include_repeatable: Include the repeatable comment.
+            include_anterior: Include anterior comment lines.
+            include_posterior: Include posterior comment lines.
+
+        Raises:
+            InvalidEAError: If the effective address is invalid.
+
+        Returns:
+            The selected comments joined by newlines, or None if none exist.
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        comments: list[str] = []
+        if include_anterior:
+            comments.extend(self.get_all_extra_at(ea, ExtraCommentKind.ANTERIOR))
+
+        if include_regular:
+            regular = self.get_at(ea, CommentKind.REGULAR)
+            if regular is not None:
+                comments.append(regular.comment)
+
+        if include_repeatable:
+            repeatable_comment = self.get_at(ea, CommentKind.REPEATABLE)
+            if repeatable_comment is not None:
+                comments.append(repeatable_comment.comment)
+
+        if include_posterior:
+            comments.extend(self.get_all_extra_at(ea, ExtraCommentKind.POSTERIOR))
+
+        return '\n'.join(comments) if comments else None
 
     def delete_extra_at(self, ea: int, index: int, kind: ExtraCommentKind) -> bool:
         """
