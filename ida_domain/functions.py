@@ -892,7 +892,7 @@ class Functions(DatabaseEntity):
 
         Warning:
             This only queues the function for analysis. In headless (idalib) mode
-            there is no analysis loop, so call ``ida_auto.auto_wait()`` afterward
+            there is no analysis loop, so call ``db.analysis.wait()`` afterward
             for the re-analysis to actually run.
 
         Args:

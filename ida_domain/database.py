@@ -16,6 +16,7 @@ import ida_typeinf
 from ida_idaapi import ea_t
 from typing_extensions import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple, Type, Union
 
+from .analysis import Analysis
 from .base import DatabaseError, check_db_open
 from .bytes import Bytes
 from .comments import Comments
@@ -378,7 +379,6 @@ class IdaCommandOptions:
             else:
                 logger.error(f"Unknown debug flag '{name}'")
         return value
-
 
 
 class Database:
@@ -928,6 +928,11 @@ class Database:
     def xrefs(self) -> Xrefs:
         """Handler that provides access to cross-reference (xref) operations."""
         return Xrefs(self)
+
+    @property
+    def analysis(self) -> Analysis:
+        """Handler that provides access to auto-analysis operations."""
+        return Analysis(self)
 
     @property
     def hooks(self) -> HooksList:

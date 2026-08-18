@@ -5,7 +5,6 @@ import logging
 import os
 from pathlib import Path
 
-import ida_auto
 import ida_diskio
 import ida_funcs
 import ida_idp
@@ -167,7 +166,7 @@ class SignatureFiles(DatabaseEntity):
         if probe_only:
             ida_undo.create_undo_point('ida_domain_flirt', 'undo_point')
         ida_funcs.plan_to_apply_idasgn(str(path))
-        ida_auto.auto_wait()
+        self.database.analysis.wait()
         hooks.unhook()
         results = hooks.results
         if probe_only:
