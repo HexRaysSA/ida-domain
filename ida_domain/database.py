@@ -503,7 +503,7 @@ class Database:
             # Library mode: Open a new database with custom options
             with Database.open(
                 "malware.exe",
-                args={"processor": "arm", "load_addr": 0x1000},
+                args=IdaCommandOptions(processor="arm", loading_address=0x1000),
                 save_on_close=True
             ) as db:
                 # Analyze the binary

@@ -1172,8 +1172,10 @@ class Bytes(DatabaseEntity):
 
         Example:
             ```python
-            tif = db.types.parse_one_declaration(None, 'struct Point {int x; int y;};')
-            db.bytes.create_struct_at(ea, 1, tif.get_tid())
+            tif = db.types.parse_one_declaration(
+                None, 'struct Point {int x; int y;};', name='Point'
+            )
+            db.bytes.create_struct_at(ea, 1, tif.force_tid())
             ```
         """
         if not self.database.is_valid_ea(ea):

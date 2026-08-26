@@ -217,15 +217,15 @@ class Xrefs(DatabaseEntity):
     Example:
         ```python
         # Get all references to an address
-        for xref in db.xrefs.to(ea):
-            print(f"{xref.frm:x} -> {xref.to:x} ({xref.type.name})")
+        for xref in db.xrefs.to_ea(ea):
+            print(f"{xref.from_ea:x} -> {xref.to_ea:x} ({xref.type.name})")
 
         # Get only code references
-        for caller in db.xrefs.code_refs_to(func_ea):
+        for caller in db.xrefs.code_refs_to_ea(func_ea):
             print(f"Called from: {caller:x}")
 
         # Get data reads
-        for reader in db.xrefs.reads_of(data_ea):
+        for reader in db.xrefs.reads_of_ea(data_ea):
             print(f"Read by: {reader:x}")
         ```
     """
