@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 @decorate_all_methods(check_db_open)
-class Analysis(DatabaseEntity):
+class AutoAnalysis(DatabaseEntity):
     """
     Provides access to IDA's auto-analysis engine.
 

@@ -166,7 +166,7 @@ class SignatureFiles(DatabaseEntity):
         if probe_only:
             ida_undo.create_undo_point('ida_domain_flirt', 'undo_point')
         ida_funcs.plan_to_apply_idasgn(str(path))
-        self.database.analysis.wait()
+        self.database.auto_analysis.wait()
         hooks.unhook()
         results = hooks.results
         if probe_only:

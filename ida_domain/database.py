@@ -16,7 +16,7 @@ import ida_typeinf
 from ida_idaapi import ea_t
 from typing_extensions import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple, Type, Union
 
-from .analysis import Analysis
+from .auto_analysis import AutoAnalysis
 from .base import DatabaseError, check_db_open
 from .bytes import Bytes
 from .comments import Comments
@@ -930,9 +930,9 @@ class Database:
         return Xrefs(self)
 
     @property
-    def analysis(self) -> Analysis:
+    def auto_analysis(self) -> AutoAnalysis:
         """Handler that provides access to auto-analysis operations."""
-        return Analysis(self)
+        return AutoAnalysis(self)
 
     @property
     def hooks(self) -> HooksList:
