@@ -1,3 +1,4 @@
+import ida_lines
 import pytest
 
 import ida_domain  # isort: skip
@@ -134,22 +135,11 @@ def test_comments(test_env):
 
 HEAD_EA = 0xAE  # Instruction head with no pre-existing comments
 TAIL_EA = 0x100  # Tail byte of the 8-byte instruction at 0xFF
+FUNC_EA = 0xC4  # Function start address
 INVALID_EA = 0xFFFFFFFF
-EXTRA_LINE_APIS = [
-    pytest.param(
-        'set_anterior_lines_at',
-        'clear_anterior_at',
-        ida_domain.comments.ExtraCommentKind.ANTERIOR,
-        999,
-        id='anterior',
-    ),
-    pytest.param(
-        'set_posterior_lines_at',
-        'clear_posterior_at',
-        ida_domain.comments.ExtraCommentKind.POSTERIOR,
-        1000,
-        id='posterior',
-    ),
+EXTRA_LINE_KINDS = [
+    pytest.param(ida_domain.comments.ExtraCommentKind.ANTERIOR, 999, id='anterior'),
+    pytest.param(ida_domain.comments.ExtraCommentKind.POSTERIOR, 1000, id='posterior'),
 ]
 
 
@@ -181,49 +171,81 @@ def test_append_at_validation(test_env):
     with pytest.raises(ida_domain.base.InvalidParameterError):
         db.comments.append_at(HEAD_EA, 'Both', ida_domain.comments.CommentKind.ALL)
     with pytest.raises(ida_domain.base.InvalidParameterError):
-        db.comments.append_at(HEAD_EA, 42)
-    with pytest.raises(ida_domain.base.InvalidParameterError):
         db.comments.append_at(TAIL_EA, 'Tail comment')
     with pytest.raises(ida_domain.base.InvalidEAError):
         db.comments.append_at(INVALID_EA, 'Invalid')
 
-    # Appending an empty string is a no-op and returns False.
-    assert not db.comments.append_at(HEAD_EA, '')
-
     assert db.comments.get_at(HEAD_EA).comment == 'Existing'
 
 
-@pytest.mark.parametrize('set_name,clear_name,kind,max_lines', EXTRA_LINE_APIS)
-def test_set_extra_lines_at(test_env, set_name, clear_name, kind, max_lines):
+def test_comments_are_rendered(test_env):
     db = test_env
-    set_lines = getattr(db.comments, set_name)
 
-    assert set_lines(HEAD_EA, (line for line in ['Line A', 'Line B', 'Line C']))
+    assert db.comments.append_at(HEAD_EA, 'Regular comment')
+    assert 'Regular comment' in db.bytes.get_disassembly_at(HEAD_EA)
+
+    db.comments.delete_at(HEAD_EA)
+    assert db.comments.set_at(
+        HEAD_EA, 'Repeatable comment', ida_domain.comments.CommentKind.REPEATABLE
+    )
+    assert 'Repeatable comment' in db.bytes.get_disassembly_at(HEAD_EA)
+
+    assert db.comments.set_extra_lines_at(
+        HEAD_EA, ['Anterior line'], ida_domain.comments.ExtraCommentKind.ANTERIOR
+    )
+    assert db.comments.set_extra_lines_at(
+        HEAD_EA, ['Posterior line'], ida_domain.comments.ExtraCommentKind.POSTERIOR
+    )
+    _, lines = ida_lines.generate_disassembly(HEAD_EA, 10, False, False)
+    rendered = [ida_lines.tag_remove(line) for line in lines]
+    assert any('Anterior line' in line for line in rendered)
+    assert any('Posterior line' in line for line in rendered)
+
+
+def test_append_at_function_start(test_env):
+    db = test_env
+    func = db.functions.get_at(FUNC_EA)
+    assert func is not None and func.start_ea == FUNC_EA
+    assert db.functions.set_comment(func, 'Function comment')
+
+    # append_at works on the item comment and leaves the function comment alone.
+    assert db.comments.append_at(FUNC_EA, 'Item first')
+    assert db.comments.append_at(FUNC_EA, 'Item second')
+    assert db.comments.get_at(FUNC_EA).comment == 'Item first\nItem second'
+    assert db.functions.get_comment(func) == 'Function comment'
+
+
+@pytest.mark.parametrize('kind,max_lines', EXTRA_LINE_KINDS)
+def test_set_extra_lines_at(test_env, kind, max_lines):
+    db = test_env
+
+    assert db.comments.set_extra_lines_at(
+        HEAD_EA, (line for line in ['Line A', 'Line B', 'Line C']), kind
+    )
     assert _extra_lines(db, kind) == ['Line A', 'Line B', 'Line C']
 
     # Replacement removes all previous lines, not just the overwritten ones.
-    assert set_lines(HEAD_EA, ['Replacement'])
+    assert db.comments.set_extra_lines_at(HEAD_EA, ['Replacement'], kind)
     assert _extra_lines(db, kind) == ['Replacement']
     assert db.comments.get_extra_at(HEAD_EA, 1, kind) is None
 
-    assert set_lines(HEAD_EA, [])
+    assert db.comments.set_extra_lines_at(HEAD_EA, [], kind)
     assert _extra_lines(db, kind) == []
 
 
-@pytest.mark.parametrize('set_name,clear_name,kind,max_lines', EXTRA_LINE_APIS)
-def test_set_extra_lines_at_validation(test_env, set_name, clear_name, kind, max_lines):
+@pytest.mark.parametrize('kind,max_lines', EXTRA_LINE_KINDS)
+def test_set_extra_lines_at_validation(test_env, kind, max_lines):
     db = test_env
-    set_lines = getattr(db.comments, set_name)
-    assert set_lines(HEAD_EA, ['Existing line'])
+    assert db.comments.set_extra_lines_at(HEAD_EA, ['Existing line'], kind)
 
     with pytest.raises(ida_domain.base.InvalidParameterError):
-        set_lines(HEAD_EA, ['New line', 42])
+        db.comments.set_extra_lines_at(HEAD_EA, ['New line', 42], kind)
     with pytest.raises(ida_domain.base.InvalidParameterError):
-        set_lines(HEAD_EA, 'abc')
+        db.comments.set_extra_lines_at(HEAD_EA, 'abc', kind)
     with pytest.raises(ida_domain.base.InvalidParameterError):
-        set_lines(HEAD_EA, ['line'] * (max_lines + 1))
+        db.comments.set_extra_lines_at(HEAD_EA, ['line'] * (max_lines + 1), kind)
     with pytest.raises(ida_domain.base.InvalidEAError):
-        set_lines(INVALID_EA, [])
+        db.comments.set_extra_lines_at(INVALID_EA, [], kind)
 
     # Rejected calls must not touch the existing lines.
     assert _extra_lines(db, kind) == ['Existing line']
@@ -234,34 +256,32 @@ def test_set_extra_lines_at_splits_line_breaks(test_env):
     anterior = ida_domain.comments.ExtraCommentKind.ANTERIOR
 
     # Embedded line breaks split into separate lines; empty lines are preserved.
-    assert db.comments.set_anterior_lines_at(
-        HEAD_EA, ['Split 1\nSplit 2', '', 'Split 3\r\nSplit 4']
+    assert db.comments.set_extra_lines_at(
+        HEAD_EA, ['Split 1\nSplit 2', '', 'Split 3\r\nSplit 4'], anterior
     )
     expected = ['Split 1', 'Split 2', '', 'Split 3', 'Split 4']
     assert _extra_lines(db, anterior) == expected
 
     # The slot capacity applies to the line count after splitting.
     with pytest.raises(ida_domain.base.InvalidParameterError):
-        db.comments.set_anterior_lines_at(HEAD_EA, ['x\ny'] * 500)
+        db.comments.set_extra_lines_at(HEAD_EA, ['x\ny'] * 500, anterior)
     assert _extra_lines(db, anterior) == expected
 
 
-@pytest.mark.parametrize('set_name,clear_name,kind,max_lines', EXTRA_LINE_APIS)
-def test_clear_extra_lines_at(test_env, set_name, clear_name, kind, max_lines):
+@pytest.mark.parametrize('kind,max_lines', EXTRA_LINE_KINDS)
+def test_delete_extra_lines_at(test_env, kind, max_lines):
     db = test_env
-    set_lines = getattr(db.comments, set_name)
-    clear_lines = getattr(db.comments, clear_name)
 
-    assert set_lines(HEAD_EA, ['Visible line'])
-    # A line stored after a gap is invisible to get_all_extra_at but must be cleared too.
+    assert db.comments.set_extra_lines_at(HEAD_EA, ['Visible line'], kind)
+    # A line stored after a gap is invisible to get_all_extra_at but must be deleted too.
     assert db.comments.set_extra_at(HEAD_EA, 3, 'Hidden line', kind)
 
-    assert clear_lines(HEAD_EA)
+    assert db.comments.delete_extra_lines_at(HEAD_EA, kind)
     assert _extra_lines(db, kind) == []
     assert db.comments.get_extra_at(HEAD_EA, 3, kind) is None
 
     with pytest.raises(ida_domain.base.InvalidEAError):
-        clear_lines(INVALID_EA)
+        db.comments.delete_extra_lines_at(INVALID_EA, kind)
 
 
 def test_get_combined_at(test_env):
@@ -271,19 +291,32 @@ def test_get_combined_at(test_env):
 
     assert db.comments.set_at(HEAD_EA, 'Regular')
     assert db.comments.set_at(HEAD_EA, 'Repeatable', ida_domain.comments.CommentKind.REPEATABLE)
-    assert db.comments.set_anterior_lines_at(HEAD_EA, ['Anterior 1', 'Anterior 2'])
-    assert db.comments.set_posterior_lines_at(HEAD_EA, ['Posterior 1'])
-
-    # Listing order: anterior, regular, repeatable, posterior.
-    assert db.comments.get_combined_at(HEAD_EA) == (
-        'Anterior 1\nAnterior 2\nRegular\nRepeatable\nPosterior 1'
+    assert db.comments.set_extra_lines_at(
+        HEAD_EA, ['Anterior 1', 'Anterior 2'], ida_domain.comments.ExtraCommentKind.ANTERIOR
     )
+    assert db.comments.set_extra_lines_at(
+        HEAD_EA, ['Posterior 1'], ida_domain.comments.ExtraCommentKind.POSTERIOR
+    )
+
+    # Listing order: anterior, regular or repeatable, posterior.
+    assert db.comments.get_combined_at(HEAD_EA) == ('Anterior 1\nAnterior 2\nRegular\nPosterior 1')
 
     assert (
         db.comments.get_combined_at(
             HEAD_EA, include_repeatable=False, include_anterior=False, include_posterior=False
         )
         == 'Regular'
+    )
+    assert (
+        db.comments.get_combined_at(
+            HEAD_EA, include_regular=False, include_anterior=False, include_posterior=False
+        )
+        == 'Repeatable'
+    )
+
+    db.comments.delete_at(HEAD_EA)
+    assert db.comments.get_combined_at(HEAD_EA) == (
+        'Anterior 1\nAnterior 2\nRepeatable\nPosterior 1'
     )
     assert (
         db.comments.get_combined_at(
@@ -299,13 +332,13 @@ def test_get_combined_at(test_env):
     with pytest.raises(ida_domain.base.InvalidEAError):
         db.comments.get_combined_at(INVALID_EA)
     with pytest.raises(ida_domain.base.InvalidEAError):
-        db.comments.set_anterior_lines_at(0xFFFFFFFF, [])
+        db.comments.set_extra_lines_at(
+            0xFFFFFFFF, [], ida_domain.comments.ExtraCommentKind.ANTERIOR
+        )
     with pytest.raises(ida_domain.base.InvalidEAError):
-        db.comments.set_posterior_lines_at(0xFFFFFFFF, [])
-    with pytest.raises(ida_domain.base.InvalidEAError):
-        db.comments.clear_anterior_at(0xFFFFFFFF)
-    with pytest.raises(ida_domain.base.InvalidEAError):
-        db.comments.clear_posterior_at(0xFFFFFFFF)
+        db.comments.delete_extra_lines_at(
+            0xFFFFFFFF, ida_domain.comments.ExtraCommentKind.POSTERIOR
+        )
     with pytest.raises(ida_domain.base.InvalidEAError):
         db.comments.append_at(0xFFFFFFFF, 'Invalid')
     with pytest.raises(ida_domain.base.InvalidEAError):
