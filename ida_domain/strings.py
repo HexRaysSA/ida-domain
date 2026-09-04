@@ -109,11 +109,8 @@ class Strings(DatabaseEntity):
     Provides access to string-related operations in the IDA database.
 
     Can be used to iterate over all strings in the opened database.
-
     On IDA 9.4+ the list also contains strings reconstructed by the decompiler
-    (``StringType.DECOMP``). They are collected from the decompiler cache when
-    the list is built, so decompile the functions of interest first and call
-    ``rebuild()`` if the list was already built.
+    (``StringType.DECOMP``).
 
     Args:
         database: Reference to the active IDA database.
@@ -221,9 +218,6 @@ class Strings(DatabaseEntity):
         """
         Rebuild the string list from scratch.
         This should be called to get an up-to-date string list.
-
-        Decompiler strings (IDA 9.4+) are taken from the decompiler cache: only
-        functions decompiled in the current session contribute.
         """
         opts = ida_strlist.get_strlist_options()
         opts.strtypes = config.string_types
