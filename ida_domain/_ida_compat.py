@@ -17,8 +17,10 @@ from typing import Any, Iterator, Optional, Tuple
 
 import ida_funcs
 import ida_hexrays
+import ida_nalt
 import ida_range
 import ida_segment
+import ida_strlist
 from ida_funcs import func_t
 from ida_idaapi import ea_t
 
@@ -161,6 +163,23 @@ else:
         if seg is None:
             return
         ida_segment.set_segment_cmt(seg, cmt, repeatable)
+
+
+# --- ida_strlist ------------------------------------------------------------
+STRTYPE_DECOMP: int = getattr(ida_nalt, 'STRTYPE_DECOMP', 0x10)
+
+if hasattr(ida_strlist, 'get_strlist_item_ex'):
+    def string_info_ex_t() -> ida_strlist.string_info_t:
+        return ida_strlist.string_info_ex_t()
+
+    def get_strlist_item_ex(si: ida_strlist.string_info_t, n: int) -> bool:
+        return ida_strlist.get_strlist_item_ex(si, n)
+else:
+    def string_info_ex_t() -> ida_strlist.string_info_t:
+        return ida_strlist.string_info_t()
+
+    def get_strlist_item_ex(si: ida_strlist.string_info_t, n: int) -> bool:
+        return ida_strlist.get_strlist_item(si, n)
 
 
 # --- ida_hexrays ------------------------------------------------------------

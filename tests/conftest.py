@@ -15,6 +15,7 @@ tiny_c_idb_path: str = ''
 tiny_imports_idb_path: str = ''
 tiny_pseudocode_idb_path: str = ''
 tiny_struct_idb_path: str = ''
+tiny_stackstrings_idb_path: str = ''
 
 _deprecation_warnings: dict = {}
 
@@ -164,6 +165,30 @@ def tiny_struct_env(tiny_struct_setup):
     """Opens tiny_struct database for each test."""
     ida_options = IdaCommandOptions(new_database=True, auto_analysis=True)
     db = ida_domain.Database.open(path=tiny_struct_idb_path, args=ida_options, save_on_close=False)
+    yield db
+    if db.is_open():
+        db.close(False)
+
+
+@pytest.fixture(scope='session')
+def tiny_stackstrings_setup(global_setup):
+    """Setup for stack-string tests - copies tiny_stackstrings.bin to work directory."""
+    global tiny_stackstrings_idb_path
+    tiny_stackstrings_idb_path = os.path.join(
+        tempfile.gettempdir(), 'api_tests_work_dir', 'tiny_stackstrings.bin'
+    )
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    src_path = os.path.join(current_dir, 'resources', 'tiny_stackstrings.bin')
+    shutil.copy(src_path, tiny_stackstrings_idb_path)
+
+
+@pytest.fixture(scope='function')
+def tiny_stackstrings_env(tiny_stackstrings_setup):
+    """Opens tiny_stackstrings database for each test."""
+    ida_options = IdaCommandOptions(new_database=True, auto_analysis=True)
+    db = ida_domain.Database.open(
+        path=tiny_stackstrings_idb_path, args=ida_options, save_on_close=False
+    )
     yield db
     if db.is_open():
         db.close(False)
