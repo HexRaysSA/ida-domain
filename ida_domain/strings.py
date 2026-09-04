@@ -145,13 +145,16 @@ class Strings(DatabaseEntity):
         """
         if 0 <= index < len(self):
             if get_strlist_item_ex(self._si, index):
+                itype = self._si.type
                 decompiler_string = (
-                    self._si.decompiler_string if self._si.type == STRTYPE_DECOMP else None
+                    self._si.decompiler_string
+                    if ida_nalt.get_str_type_code(itype) == STRTYPE_DECOMP
+                    else None
                 )
                 return StringItem(
                     address=self._si.ea,
                     length=self._si.length,
-                    internal_type=self._si.type,
+                    internal_type=itype,
                     decompiler_string=decompiler_string,
                 )
         raise IndexError(f'String index {index} out of range [0, {len(self)})')
