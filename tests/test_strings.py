@@ -2,6 +2,8 @@ import ida_nalt
 import pytest
 
 import ida_domain  # isort: skip
+from conftest import min_ida_version
+
 from ida_domain.base import InvalidEAError, InvalidParameterError
 from ida_domain.strings import StringType
 
@@ -131,3 +133,39 @@ def test_strings(test_env):
     assert modified_string.internal_type == string_type
     assert modified_string.type == StringType.C
     assert len(db.strings) == 3
+
+
+@min_ida_version('9.4')
+def test_decompiler_strings(tiny_stackstrings_env):
+    db = tiny_stackstrings_env
+
+    # The marker text is stored as 16-bit units on the stack: no string literal exists.
+    # The only literal is the compiler identification GCC emits into .rdata$zzz.
+    assert [item.type for item in db.strings] == [StringType.C]
+
+    func = db.functions.get_by_name('emit_marker')
+    assert func is not None
+    db.pseudocode.decompile(func.start_ea)
+    # Decompiler strings are collected from the decompiler cache when the list is built
+    db.strings.rebuild()
+
+    assert len(db.strings) == 2
+    items = [item for item in db.strings if item.type == StringType.DECOMP]
+    assert len(items) == 1
+    item = items[0]
+    assert item.decompiler_string == 'ida-domain'
+    assert str(item) == 'ida-domain'
+    assert item.contents == b'ida-domain'
+    assert bytes(item) == b'ida-domain'
+    assert item.length == 10
+    assert item.internal_type == ida_nalt.STRTYPE_DECOMP
+    assert func.start_ea <= item.address < func.end_ea
+
+    assert db.strings.get_at(item.address) == item
+    assert item in list(db.strings.get_between(func.start_ea, func.end_ea))
+
+    # Regular strings are unaffected
+    for other in db.strings:
+        if other.type != StringType.DECOMP:
+            assert other.decompiler_string is None
+            assert str(other) == other.contents.decode('utf-8')

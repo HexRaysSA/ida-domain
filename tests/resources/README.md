@@ -64,3 +64,18 @@ gcc -O0 -c tiny_struct.c -o tiny_struct.bin
 
 The tests use instruction addresses from this object. After rebuilding, replace
 `tiny_struct.bin` and update those addresses if the generated code changed.
+
+---
+
+## Stack String Test Binary (tiny_stackstrings)
+
+The `tiny_stackstrings.c` file stores a marker text on the stack as 16-bit
+integer units, so no string literal exists in the object; only the decompiler
+reconstructs it. Used to test decompiler strings (`StringType.DECOMP`, IDA 9.4+).
+
+To rebuild:
+```bash
+gcc -O0 -c -o tiny_stackstrings.bin tiny_stackstrings.c
+```
+
+After rebuilding, replace `tiny_stackstrings.bin` in this folder and update any tests as needed.

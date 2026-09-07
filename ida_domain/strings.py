@@ -10,6 +10,7 @@ import ida_strlist
 from ida_idaapi import ea_t
 from typing_extensions import TYPE_CHECKING, Iterator, Optional, Tuple, Union
 
+from ._ida_compat import STRTYPE_DECOMP, get_strlist_item_ex, string_info_ex_t
 from .base import (
     DatabaseEntity,
     InvalidEAError,
@@ -40,6 +41,7 @@ class StringType(IntEnum):
     LEN4 = ida_nalt.STRTYPE_LEN4  # Pascal-style, four-byte length prefix
     LEN4_16 = ida_nalt.STRTYPE_LEN4_16  # Pascal-style, 16bit chars, four-byte length prefix
     LEN4_32 = ida_nalt.STRTYPE_LEN4_32  # Pascal-style, 32bit chars, four-byte length prefix
+    DECOMP = STRTYPE_DECOMP  # Synthetic string reconstructed by the decompiler (IDA 9.4+)
 
 
 @dataclass(frozen=True)
@@ -49,11 +51,13 @@ class StringItem:
     """
 
     address: ea_t
-    """String address"""
+    """String address (for decompiler strings: the instruction building the string)"""
     length: int
     """String length in number of characters"""
     internal_type: int
     """Internal IDA string type, including internal string encoding"""
+    decompiler_string: Optional[str] = None
+    """Text reconstructed by the decompiler. ``None`` unless ``type`` is ``StringType.DECOMP``"""
 
     @property
     def type(self) -> StringType:
@@ -75,6 +79,8 @@ class StringItem:
         """
         Returns utf-8 encoded string contents.
         """
+        if self.decompiler_string is not None:
+            return self.decompiler_string.encode('utf-8')
         return ida_bytes.get_strlit_contents(self.address, self.length, self.internal_type)
 
     def __str__(self) -> str:
@@ -103,6 +109,8 @@ class Strings(DatabaseEntity):
     Provides access to string-related operations in the IDA database.
 
     Can be used to iterate over all strings in the opened database.
+    On IDA 9.4+ the list also contains strings reconstructed by the decompiler
+    (``StringType.DECOMP``).
 
     Args:
         database: Reference to the active IDA database.
@@ -110,7 +118,7 @@ class Strings(DatabaseEntity):
 
     def __init__(self, database: Database) -> None:
         super().__init__(database)
-        self._si = ida_strlist.string_info_t()
+        self._si = string_info_ex_t()
 
     def __iter__(self) -> Iterator[StringItem]:
         return self.get_all()
@@ -136,11 +144,18 @@ class Strings(DatabaseEntity):
             In case of error, returns None.
         """
         if 0 <= index < len(self):
-            if ida_strlist.get_strlist_item(self._si, index):
+            if get_strlist_item_ex(self._si, index):
+                itype = self._si.type
+                decompiler_string = (
+                    self._si.decompiler_string
+                    if ida_nalt.get_str_type_code(itype) == STRTYPE_DECOMP
+                    else None
+                )
                 return StringItem(
                     address=self._si.ea,
                     length=self._si.length,
-                    internal_type=self._si.type,
+                    internal_type=itype,
+                    decompiler_string=decompiler_string,
                 )
         raise IndexError(f'String index {index} out of range [0, {len(self)})')
 
