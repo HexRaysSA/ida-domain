@@ -18,6 +18,7 @@ The IDA Domain API is organized around the following top level entities:
 - **[Names](ref/names.md)** - Symbol name management
 - **[Comments](ref/comments.md)** - Comment management
 - **[Signature Files](ref/signature_files.md)** - FLIRT signature file operations
+- **[License](ref/license.md)** - Active license queries
 
 ## Accessing the entities
 
