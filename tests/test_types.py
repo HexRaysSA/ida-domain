@@ -164,7 +164,9 @@ def test_types(test_env):
     types_list = list(db.types.get_all(library=None, type_kind=TypeKind.NUMBERED))
     assert len(types_list) == 5
 
-    errors = db.types.parse_declarations(None, 'struct { int first; int second; };', 0)
+    errors = db.types.parse_declarations(
+        None, 'struct { int first; int second; } anon_instance;', 0
+    )
     assert errors == 0
 
     types_list = list(db.types.get_all(library=None, type_kind=TypeKind.NUMBERED))
