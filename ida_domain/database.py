@@ -596,13 +596,24 @@ class Database:
         """
         Execute the specified python script
 
+        A exit call inside the script ends the script only, not the
+        caller: exit code ``0`` or ``None`` counts as success, anything else as failure.
+
         Args:
             file_path: The script file path
 
         Raises:
-            DatabaseError: If script execution fails.
+            DatabaseError: If script execution fails or the script exits with a
+                non-zero status.
         """
-        compiler_error = ida_idaapi.IDAPython_ExecScript(file_path, globals())
+        try:
+            compiler_error = ida_idaapi.IDAPython_ExecScript(file_path, globals())
+        except SystemExit as e:
+            if e.code is None or e.code == 0:
+                return
+            raise DatabaseError(
+                f'script execution {file_path} failed with exit code {e.code!r}'
+            ) from e
         if compiler_error is not None:
             raise DatabaseError(f'script execution {file_path} failed with error {compiler_error}')
 
