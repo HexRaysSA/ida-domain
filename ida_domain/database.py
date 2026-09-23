@@ -596,7 +596,7 @@ class Database:
         """
         Execute the specified python script
 
-        A exit call inside the script ends the script only, not the
+        An exit call inside the script ends the script only, not the
         caller: exit code ``0`` or ``None`` counts as success, anything else as failure.
 
         Args:
