@@ -17,7 +17,7 @@ from ida_idaapi import ea_t
 from typing_extensions import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple, Type, Union
 
 from .auto_analysis import AutoAnalysis
-from .base import DatabaseError, check_db_open
+from .base import DatabaseError, check_db_open, requires_ida
 from .bytes import Bytes
 from .comments import Comments
 from .entries import Entries
@@ -26,6 +26,7 @@ from .heads import Heads
 from .hooks import HooksList  # type: ignore
 from .imports import Imports
 from .instructions import Instructions
+from .license import License
 from .microcode import Microcode
 from .names import Names
 from .pseudocode import Pseudocode
@@ -933,6 +934,12 @@ class Database:
     def auto_analysis(self) -> AutoAnalysis:
         """Handler that provides access to auto-analysis operations."""
         return AutoAnalysis(self)
+
+    @property
+    @requires_ida('9.5')
+    def license(self) -> License:
+        """Handler that provides access to license-related operations."""
+        return License()
 
     @property
     def hooks(self) -> HooksList:
