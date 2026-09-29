@@ -60,6 +60,7 @@ The IDA Domain API organizes functionality into logical namespaces:
 A fundamental change is that all functions now receive a `db: Database` parameter as their first argument. Rather than relying on global accessors, we access entities through a [Database](ref/database.md) reference. This may allow us to work on multiple databases in parallel, sometime in the future.
 
 **Before (implicit global state):**
+<!-- snippet: skip -->
 ```python
 def get_functions():
     for ea in idautils.Functions():
@@ -253,6 +254,7 @@ def get_file_imports(db: Database):  # db unused, kept for API consistency
 ### Pattern 1: Binary Search Simplification
 
 **Before (version-specific branching):**
+<!-- snippet: skip -->
 ```python
 IDA_NALT_ENCODING = ida_nalt.get_default_encoding_idx(ida_nalt.BPU_1B)
 
@@ -282,6 +284,7 @@ def find_byte_sequence(db: Database, start: int, end: int, seq: bytes) -> Iterat
 ### Pattern 2: Function Enumeration with Flag Checking
 
 **Before:**
+<!-- snippet: skip -->
 ```python
 def get_functions(skip_thunks=False, skip_libs=False):
     for ea in idautils.Functions():
@@ -321,6 +324,7 @@ class EntryInfo:
 ```
 
 **Before (tuple unpacking):**
+<!-- snippet: skip -->
 ```python
 def extract_exports():
     for _, ordinal, ea, name in idautils.Entries():
@@ -354,6 +358,7 @@ class CommentInfo:
 ```
 
 **Before (returns string):**
+<!-- snippet: skip -->
 ```python
 if contains_keywords(idaapi.get_cmt(ea, False)):
     return True
@@ -370,6 +375,7 @@ if contains_keywords(cmt):
 ### Pattern 5: Architecture Detection
 
 **Before (version-specific with boolean predicates):**
+<!-- snippet: skip -->
 ```python
 # IDA < 9
 info = idaapi.get_inf_structure()
@@ -400,6 +406,7 @@ elif arch == "metapc" and bitness == 32:
 ### Pattern 6: Mnemonic-Based Dispatch
 
 **Before (itype constants):**
+<!-- snippet: skip -->
 ```python
 if insn.itype in (idaapi.NN_xor, idaapi.NN_xorpd, idaapi.NN_xorps, idaapi.NN_pxor):
     # handle xor
@@ -409,7 +416,7 @@ if insn.itype in (idaapi.NN_xor, idaapi.NN_xorpd, idaapi.NN_xorps, idaapi.NN_pxo
 ```python
 mnem = db.instructions.get_mnemonic(insn)
 if mnem in ("xor", "xorpd", "xorps", "pxor"):
-    # handle xor
+    ...  # handle xor
 ```
 
 ---

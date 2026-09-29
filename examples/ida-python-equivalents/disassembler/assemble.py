@@ -16,11 +16,15 @@ class AssembleHook(ida_domain.hooks.ProcessorHooks):
             return b'\x33\xc0'
         elif line == 'nothing':
             # Get current instruction to figure out its size
-            insn = db.instructions.get_instruction_at(ea)
+            insn = db.instructions.get_at(ea)
             if insn:
                 # NOP all the instruction bytes
                 return b'\x90' * insn.size
         return None
+
+    def ev_term(self):
+        self.unhook()
+        return 0
 
 
 # Remove an existing hook on second run

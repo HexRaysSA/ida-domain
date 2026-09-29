@@ -19,7 +19,7 @@ class IdbLogger(ida_domain.hooks.DatabaseHooks):
                 print(f'>>> {msg}')
             else:
                 # Auto-log from caller
-                frame = inspect.currentframe().f_back
+                frame = inspect.stack()[1].frame
                 func_name = frame.f_code.co_name
                 args = inspect.getargvalues(frame)
                 arg_strs = [f'{a}={args.locals[a]}' for a in args.args[1:]]
@@ -28,6 +28,7 @@ class IdbLogger(ida_domain.hooks.DatabaseHooks):
 
     # Domain API hooks
     def closebase(self):
+        self.unhook()
         return self._log()
 
     def savebase(self):

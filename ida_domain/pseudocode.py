@@ -350,9 +350,13 @@ class PseudocodeNumber:
     and used in arithmetic directly:
 
     ```python
-    if expr.number == 0: ...
-    if expr.number > 10: ...
-    x = expr.number + 1
+    expr: PseudocodeExpression
+
+    number = expr.number
+    if number is not None:
+        if number == 0: ...
+        if number > 10: ...
+        x = number + 1
     ```
     """
 
@@ -2209,6 +2213,8 @@ class PseudocodeFunction:
 
         Example:
             ```python
+            func: PseudocodeFunction
+
             with func.user_labels() as labels:
                 if labels is not None:
                     for org_label, name in labels.items():
@@ -2231,6 +2237,8 @@ class PseudocodeFunction:
 
         Example:
             ```python
+            func: PseudocodeFunction
+
             with func.user_comments() as cmts:
                 if cmts is not None:
                     for treeloc, cmt in cmts.items():
@@ -2253,6 +2261,8 @@ class PseudocodeFunction:
 
         Example:
             ```python
+            func: PseudocodeFunction
+
             with func.user_iflags() as iflags:
                 if iflags is not None:
                     for cl, f in iflags.items():
@@ -2276,6 +2286,8 @@ class PseudocodeFunction:
 
         Example:
             ```python
+            func: PseudocodeFunction
+
             with func.user_numforms() as numforms:
                 if numforms is not None:
                     for ol, nf in numforms.items():
@@ -2302,6 +2314,8 @@ class PseudocodeFunction:
 
         Example:
             ```python
+            func: PseudocodeFunction
+
             with func.user_lvar_settings() as lvinf:
                 if lvinf is not None:
                     for lv in lvinf.lvvec:
@@ -2479,6 +2493,8 @@ class PseudocodeFunction:
 
         Example:
             ```python
+            func: PseudocodeFunction
+
             expr = func.find_expression(
                 lambda e: e.is_number and e.number == 0xDEAD
             )
@@ -2520,6 +2536,8 @@ class PseudocodeFunction:
 
         Example:
             ```python
+            func: PseudocodeFunction
+
             ret = func.find_instruction(lambda i: i.is_return)
             ```
         """
@@ -3158,6 +3176,8 @@ class PseudocodeExpressionVisitor(ida_hexrays.ctree_visitor_t):
 
     Example:
         ```python
+        decomp: PseudocodeFunction
+
         class FindCalls(PseudocodeExpressionVisitor):
             def __init__(self):
                 super().__init__()
@@ -3208,6 +3228,8 @@ class PseudocodeInstructionVisitor(ida_hexrays.ctree_visitor_t):
 
     Example:
         ```python
+        decomp: PseudocodeFunction
+
         class FindReturns(PseudocodeInstructionVisitor):
             def __init__(self):
                 super().__init__()

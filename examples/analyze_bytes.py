@@ -99,7 +99,7 @@ def analyze_bytes(
         if search_pattern:
             print(f"\n  Searching for text: '{search_pattern}'")
             # Case-sensitive search
-            addr_case = bytes_handler.find_text(
+            addr_case = bytes_handler.find_text_between(
                 search_pattern, flags=SearchFlags.DOWN | SearchFlags.CASE
             )
             # Case-insensitive search
@@ -155,16 +155,16 @@ def analyze_bytes(
             print(f'    Original flags: {original_flags}')
 
             # Make it a byte
-            if bytes_handler.make_byte_at(data_addr):
+            if bytes_handler.create_byte_at(data_addr):
                 print(f'    Successfully created byte at {hex(data_addr)}')
 
             # Make it a word
-            if bytes_handler.make_word(data_addr):
+            if bytes_handler.create_word_at(data_addr):
                 print(f'    Successfully created word at {hex(data_addr)}')
 
             # Create a string with specific type
             string_addr = data_addr + 8
-            if bytes_handler.make_string(string_addr, string_type=StringType.C):
+            if bytes_handler.create_string_at(string_addr, string_type=StringType.C):
                 print(f'    Successfully created C-string at {hex(string_addr)}')
 
         # 6. Patching demonstration (if requested)
@@ -175,7 +175,7 @@ def analyze_bytes(
             # Find a safe address to patch (data section)
             patch_addr = None
             for addr in range(db.minimum_ea, min(db.minimum_ea + 0x200, db.maximum_ea)):
-                if bytes_handler.is_data(addr):
+                if bytes_handler.is_data_at(addr):
                     patch_addr = addr
                     break
 
@@ -205,15 +205,13 @@ def analyze_bytes(
 
                 # Patch multiple bytes
                 test_data = b'\x90\x90\x90\x90'  # NOP instructions
-                if bytes_handler.patch_bytes(patch_addr, test_data):
-                    print(f'    Patched {len(test_data)} bytes with NOPs')
+                bytes_handler.patch_bytes_at(patch_addr, test_data)
+                print(f'    Patched {len(test_data)} bytes with NOPs')
 
-                    # Get original bytes
-                    success, orig_bytes = bytes_handler.get_original_bytes_at(
-                        patch_addr, len(test_data)
-                    )
-                    if success:
-                        print(f'    Original bytes: {orig_bytes.hex()}')
+                # Get original bytes
+                orig_bytes = bytes_handler.get_original_bytes_at(patch_addr, len(test_data))
+                if orig_bytes is not None:
+                    print(f'    Original bytes: {orig_bytes.hex()}')
 
         # 7. Navigation helpers
         print('\n7. Navigation Helpers:')
@@ -227,14 +225,10 @@ def analyze_bytes(
             prev_addr = bytes_handler.get_previous_address(test_addr)
 
             print(f'  From address {hex(test_addr)}:')
-            print(
-                f'    Next head: {hex(next_head) if next_head != 0xFFFFFFFFFFFFFFFF else "None"}'
-            )
-            print(
-                f'    Prev head: {hex(prev_head) if prev_head != 0xFFFFFFFFFFFFFFFF else "None"}'
-            )
-            print(f'    Next addr: {hex(next_addr)}')
-            print(f'    Prev addr: {hex(prev_addr)}')
+            print(f'    Next head: {hex(next_head) if next_head is not None else "None"}')
+            print(f'    Prev head: {hex(prev_head) if prev_head is not None else "None"}')
+            print(f'    Next addr: {hex(next_addr) if next_addr is not None else "None"}')
+            print(f'    Prev addr: {hex(prev_addr) if prev_addr is not None else "None"}')
 
         # 8. Summary statistics
         print('\n8. Summary Statistics:')
