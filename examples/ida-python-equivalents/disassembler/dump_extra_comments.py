@@ -16,7 +16,7 @@ def dump_extra_comments_at_current_ea(anchor):
     kind = ida_domain.comments.ExtraCommentKind(anchor)
 
     # Get all extra comments
-    comments = list(db.comments.get_extra_all(db.current_ea, kind))
+    comments = list(db.comments.get_all_extra_at(db.current_ea, kind))
     if comments:
         for i, comment in enumerate(comments):
             print(f"Got [{i}]: '{comment}'")

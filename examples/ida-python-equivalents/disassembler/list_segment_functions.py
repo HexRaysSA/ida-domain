@@ -15,7 +15,7 @@ def main():
     if not current_ea:
         entries = list(db.entries.get_all())
         if entries:
-            current_ea = entries[0].ea
+            current_ea = entries[0].address
         else:
             current_ea = db.minimum_ea
 

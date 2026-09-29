@@ -38,7 +38,7 @@ class OrNotVisitor(MicroInstructionVisitor):
 class OrNotOptimizer(MicroInstructionOptimizer):
     def optimize(self, block, insn, optflags):
         visitor = OrNotVisitor()
-        insn.for_all_insns(visitor)
+        insn.for_all_instructions(visitor)
         if visitor.cnt:
             block.mba.verify(True)
         return visitor.cnt

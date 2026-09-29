@@ -4,6 +4,7 @@ Original: https://github.com/HexRaysSA/ida-sdk/blob/main/src/plugins/idapython/e
 """
 
 import ida_domain
+from ida_domain.base import DecompilerError
 
 # Refer to current database by calling open with no arguments
 db = ida_domain.Database.open()
@@ -27,5 +28,5 @@ else:
         else:
             print('Failed to get pseudocode!')
 
-    except RuntimeError as e:
+    except DecompilerError as e:
         print(f'Failed to decompile: {e}')
