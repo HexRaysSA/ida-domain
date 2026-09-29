@@ -4130,9 +4130,12 @@ class MicroInstructionVisitor(ida_hexrays.minsn_visitor_t):
         super().__init__()
 
     def visit_minsn(self) -> int:
-        is_top = self.curins.obj_id == self.topins.obj_id
-        mba = MicroBlockArray(self.blk.mba)
-        parent = MicroBlock(self.blk, mba) if is_top else None
+        if self.blk is None or self.topins is None:
+            parent = None
+        else:
+            is_top = self.curins.obj_id == self.topins.obj_id
+            mba = MicroBlockArray(self.blk.mba)
+            parent = MicroBlock(self.blk, mba) if is_top else None
         return self.visit(MicroInstruction(self.curins, parent))
 
     def visit(self, insn: MicroInstruction) -> int:
