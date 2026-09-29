@@ -10,7 +10,14 @@ import ida_strlist
 from ida_idaapi import ea_t
 from typing_extensions import TYPE_CHECKING, Iterator, Optional, Tuple, Union
 
-from ._ida_compat import STRTYPE_DECOMP, get_strlist_item_ex, string_info_ex_t
+from ._ida_compat import (
+    STRTYPE_DECOMP,
+    STRTYPE_SYNTH,
+    get_decompiler_string,
+    get_str_type_code,
+    get_strlist_item_ex,
+    string_info_ex_t,
+)
 from .base import (
     DatabaseEntity,
     InvalidEAError,
@@ -42,6 +49,7 @@ class StringType(IntEnum):
     LEN4_16 = ida_nalt.STRTYPE_LEN4_16  # Pascal-style, 16bit chars, four-byte length prefix
     LEN4_32 = ida_nalt.STRTYPE_LEN4_32  # Pascal-style, 32bit chars, four-byte length prefix
     DECOMP = STRTYPE_DECOMP  # Synthetic string reconstructed by the decompiler (IDA 9.4+)
+    SYNTH = STRTYPE_SYNTH  # Synthetic string added by a plugin (IDA 9.5+, alias of DECOMP before)
 
 
 @dataclass(frozen=True)
@@ -64,7 +72,7 @@ class StringItem:
         """
         Return string type enum value, e.g. 'C-style null-terminated string'.
         """
-        return StringType(ida_nalt.get_str_type_code(self.internal_type))
+        return StringType(get_str_type_code(self.internal_type))
 
     @property
     def encoding(self) -> str:
@@ -147,8 +155,8 @@ class Strings(DatabaseEntity):
             if get_strlist_item_ex(self._si, index):
                 itype = self._si.type
                 decompiler_string = (
-                    self._si.decompiler_string
-                    if ida_nalt.get_str_type_code(itype) == STRTYPE_DECOMP
+                    get_decompiler_string(self._si)
+                    if get_str_type_code(itype) == STRTYPE_DECOMP
                     else None
                 )
                 return StringItem(

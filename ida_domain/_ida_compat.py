@@ -166,7 +166,30 @@ else:
 
 
 # --- ida_strlist ------------------------------------------------------------
+# 9.5 generalized decompiler strings into synthetic strings: STRTYPE_SYNTH (0x10) carries
+# the provider id in the second byte, so STRTYPE_DECOMP became 0x110 (0x10 in 9.4).
 STRTYPE_DECOMP: int = getattr(ida_nalt, 'STRTYPE_DECOMP', 0x10)
+STRTYPE_SYNTH: int = getattr(ida_nalt, 'STRTYPE_SYNTH', 0x10)
+
+
+def get_str_type_code(strtype: int) -> int:
+    """
+    ``ida_nalt.get_str_type_code`` that tells decompiler strings apart from other
+    synthetic strings: returns ``STRTYPE_DECOMP`` for the decompiler's and
+    ``STRTYPE_SYNTH`` for any other provider's (the same value before 9.5).
+    """
+    code = ida_nalt.get_str_type_code(strtype)
+    if code == STRTYPE_SYNTH:
+        return STRTYPE_DECOMP if strtype & 0xFFFF == STRTYPE_DECOMP else STRTYPE_SYNTH
+    return code
+
+
+def get_decompiler_string(si: ida_strlist.string_info_t) -> str:
+    """Text of a decompiler string (``decompiler_string`` was renamed in 9.5)."""
+    if hasattr(si, 'synthetic_string'):
+        return si.synthetic_string
+    return si.decompiler_string
+
 
 if hasattr(ida_strlist, 'get_strlist_item_ex'):
     def string_info_ex_t() -> ida_strlist.string_info_t:
