@@ -48,6 +48,12 @@ jobs:
       - name: Type checking
         run: uv run mypy ida_domain
 
+      - name: Type checking examples
+        run: uv run mypy --config-file mypy-examples.ini $(git ls-files 'examples/*.py')
+
+      - name: Type checking documentation snippets
+        run: uv run python scripts/check_doc_snippets.py
+
       - name: Build and verify package
         run: |
           rm -rf dist

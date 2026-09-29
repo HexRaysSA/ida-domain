@@ -64,6 +64,8 @@ class vds19_plugin_t(ida_idaapi.plugin_t):
             self.optimizer.remove()
 
     def run(self, arg):
+        if self.optimizer is None:
+            return
         if arg == 1:
             return self.optimizer.remove()
         elif arg == 2:

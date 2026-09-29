@@ -274,7 +274,7 @@ class Functions(DatabaseEntity):
 
     def get_flowchart(
         self, func: func_t, flags: FlowChartFlags = FlowChartFlags.NONE
-    ) -> Optional[FlowChart]:
+    ) -> FlowChart:
         """
         Retrieves the flowchart of the specified function,
         which the user can use to retrieve basic blocks.

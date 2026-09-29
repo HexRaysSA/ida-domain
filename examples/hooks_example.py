@@ -62,19 +62,19 @@ class MyDecompilerHooks(hooks.DecompilerHooks):
 
     def open_pseudocode(self, vu: 'vdui_t') -> int:
         self.log()
-        return super().open_pseudocode()
+        return super().open_pseudocode(vu)
 
     def switch_pseudocode(self, vu: 'vdui_t') -> int:
         self.log()
-        return super().switch_pseudocode()
+        return super().switch_pseudocode(vu)
 
     def refresh_pseudocode(self, vu: 'vdui_t') -> int:
         self.log()
-        return super().refresh_pseudocode()
+        return super().refresh_pseudocode(vu)
 
     def close_pseudocode(self, vu: 'vdui_t') -> int:
         self.log()
-        return super().close_pseudocode()
+        return super().close_pseudocode(vu)
 
 
 # Database hooks example

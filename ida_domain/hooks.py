@@ -1,4 +1,4 @@
-# type: ignore
+# mypy: disable-error-code="name-defined,valid-type"
 import logging
 
 import ida_idaapi
