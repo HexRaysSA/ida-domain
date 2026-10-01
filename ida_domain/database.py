@@ -475,19 +475,19 @@ class Database:
             database lifecycle including opening and closing.
 
         **IDA GUI mode** (running inside IDA):
-            Returns a handle to the currently open database. Set `path` to None.
+            Returns a handle to the currently open database. Leave `path` empty.
 
         Args:
             path: Path to the binary file to analyze.
                 - Library mode: Required path to the file
-                - IDA GUI mode: Must be None to reference the currently open database
-                Defaults to None.
+                - IDA GUI mode: Must be empty (default) to reference the currently open
+                  database
             args: Additional arguments to pass to the IDA kernel when opening the database
                 (e.g., processor type, loading address, analysis options). Only applicable
                 in library mode. Defaults to None.
             save_on_close: Whether to save changes when closing the database. This is used
                 automatically when exiting a context manager, but can be overridden in
-                explicit `close()` calls. Defaults to False.
+                explicit `close()` calls. Defaults to True.
             hooks: List of hook instances to associate with the database. Hooks are
                 automatically enabled before opening and disabled after closing.
                 Defaults to an empty list.
@@ -496,8 +496,9 @@ class Database:
             Database: A Database instance connected to the specified or current database.
 
         Raises:
-            DatabaseError: If the database cannot be opened or if `path` is provided
-                when running inside IDA GUI.
+            DatabaseError: If the database cannot be opened, if `path` is provided
+                when running inside IDA GUI, or if `path` is empty and no database
+                is currently loaded.
 
         Example:
             ```python
@@ -511,7 +512,7 @@ class Database:
                 pass  # Automatically saved and closed
 
             # IDA GUI mode: Get current database
-            db = Database.open()  # path=None
+            db = Database.open()
             # Work with the currently open database
             ```
         """
