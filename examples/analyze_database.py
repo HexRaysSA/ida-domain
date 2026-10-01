@@ -163,7 +163,7 @@ def traverse_strings(db: ida_domain.Database) -> None:
 
     for i, item in enumerate(strings[:display_count], 1):
         # Truncate very long strings for display
-        display_str = str(item)[:50] + '...' if len(str(item)) > 50 else str(i)
+        display_str = str(item)[:50] + '...' if len(str(item)) > 50 else str(item)
         print(f'  [{i:2d}] 0x{item.address:08x}: "{display_str}"')
 
     if display_count < len(strings):

@@ -6,6 +6,7 @@ Original: https://github.com/HexRaysSA/ida-sdk/blob/main/src/plugins/idapython/e
 import argparse
 
 import ida_domain
+from ida_domain.base import DecompilerError
 
 
 def main():
@@ -34,16 +35,10 @@ def main():
                         try:
                             # Get pseudocode for the function
                             pseudocode = db.functions.get_pseudocode(func)
-                            if pseudocode:
-                                outfile.write(f'\n// Function at 0x{func.start_ea:X}\n')
-                                outfile.write('\n'.join(pseudocode.to_text()) + '\n')
-                                print(f'OK')
-                            else:
-                                outfile.write(
-                                    f'// Failed to decompile function at 0x{func.start_ea:X}\n'
-                                )
-                                print(f'Failed!')
-                        except RuntimeError as e:
+                            outfile.write(f'\n// Function at 0x{func.start_ea:X}\n')
+                            outfile.write('\n'.join(pseudocode.to_text()) + '\n')
+                            print(f'OK')
+                        except DecompilerError as e:
                             outfile.write(f'// Decompilation error at 0x{func.start_ea:X}: {e}\n')
                             print(f'Failed: {e}')
                     else:

@@ -21,12 +21,9 @@ else:
         # Get pseudocode for the function
         pseudocode = db.functions.get_pseudocode(func)
 
-        if pseudocode:
-            print(f'Decompiled function at 0x{func.start_ea:X}:')
-            for line in pseudocode.to_text():
-                print(line)
-        else:
-            print('Failed to get pseudocode!')
+        print(f'Decompiled function at 0x{func.start_ea:X}:')
+        for line in pseudocode.to_text():
+            print(line)
 
     except DecompilerError as e:
         print(f'Failed to decompile: {e}')

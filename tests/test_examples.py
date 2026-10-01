@@ -22,6 +22,7 @@ import pytest
 
 import ida_domain  # isort: skip
 import conftest
+import ida_funcs
 import ida_hexrays
 import ida_idaapi
 import ida_idp
@@ -30,6 +31,7 @@ import ida_kernwin
 from ida_domain.base import DatabaseError, DecompilerError
 from ida_domain.comments import ExtraCommentKind
 from ida_domain.database import IdaCommandOptions
+from ida_domain.pseudocode import Pseudocode, PseudocodeError
 
 EXAMPLES_DIR = Path(__file__).parent.parent / 'examples'
 
@@ -177,6 +179,59 @@ def test_standalone(script, args):
     print(result.stderr)
 
     assert result.returncode == 0, f'Example {script_path} failed to run'
+
+
+def _run_bulk_example_with_failing_decompile(script, db, monkeypatch, tmp_path, failing_ea):
+    """
+    Run a bulk decompile example on the open ``db`` with decompilation of the function
+    at ``failing_ea`` failing; the test binaries have no function that fails on its own.
+    Returns the generated C file text.
+    """
+    real_decompile = Pseudocode.decompile
+
+    def decompile(self, ea_or_func, *args, **kwargs):
+        ea = ea_or_func.start_ea if isinstance(ea_or_func, ida_funcs.func_t) else ea_or_func
+        if ea == failing_ea:
+            raise PseudocodeError(f'injected failure at {ea:#x}')
+        return real_decompile(self, ea_or_func, *args, **kwargs)
+
+    input_file = tmp_path / 'input.bin'
+    monkeypatch.setattr(Pseudocode, 'decompile', decompile)
+    monkeypatch.setattr(ida_domain.Database, 'open', lambda *args, **kwargs: db)
+    monkeypatch.setattr(sys, 'argv', [script, '-f', str(input_file)])
+
+    namespace = _exec_in_own_namespace(EXAMPLES_DIR / script)
+    try:
+        assert namespace['main']() == 0
+    finally:
+        namespace.clear()
+
+    return Path(f'{input_file}.c').read_text()
+
+
+def test_produce_c_file_survives_decompilation_failure(test_env, monkeypatch, tmp_path, capsys):
+    """One function fails to decompile: it is reported and the others are still written"""
+    failing_ea = 0x2AF  # multiply_numbers; the other 7 functions of tiny_asm decompile
+
+    c_text = _run_bulk_example_with_failing_decompile(
+        f'{_DECOMPILER}/produce_c_file.py', test_env, monkeypatch, tmp_path, failing_ea
+    )
+
+    assert f'injected failure at {failing_ea:#x}' in c_text
+    assert '// Function: level3_func' in c_text, 'functions after the failure are skipped'
+    assert 'Successfully decompiled 7 of 8 functions' in capsys.readouterr().out
+
+
+def test_decompile_entry_points_survives_decompilation_failure(tiny_c_env, monkeypatch, tmp_path):
+    """The first entry point fails to decompile: it is reported and the next one is written"""
+    failing_ea = 0x0  # use_val; the other entry point (complex_assignments, 0x1a) decompiles
+
+    c_text = _run_bulk_example_with_failing_decompile(
+        f'{_DECOMPILER}/decompile_entry_points.py', tiny_c_env, monkeypatch, tmp_path, failing_ea
+    )
+
+    assert f'injected failure at {failing_ea:#x}' in c_text
+    assert '// Function at 0x1A' in c_text, 'entry points after the failure are skipped'
 
 
 @pytest.mark.parametrize('script, binary, ea, exit_code', INSIDE_IDA)
