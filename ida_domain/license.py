@@ -217,7 +217,7 @@ class License:
         """
         return self._license.set_file(path)
 
-    def set_server(self, host: str, port: int, use_tls: bool = True) -> bool:
+    def set_server(self, host: str, port: int = 0, use_tls: bool = True) -> bool:
         """
         Use a license server as the license source and check out a license from it.
 
@@ -225,7 +225,7 @@ class License:
 
         Args:
             host: Server host name or address.
-            port: Server port.
+            port: Server port; 0 selects the default port (65434).
             use_tls: Whether to connect over TLS.
 
         Returns:

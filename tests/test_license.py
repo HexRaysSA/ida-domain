@@ -52,7 +52,7 @@ def test_license_control(test_env):
     license_id = lic.id
 
     assert lic.set_file('') is False
-    assert lic.set_server('', 0) is False
+    assert lic.set_server('') is False
 
     with pytest.raises(InvalidParameterError):
         lic.set_server('localhost', 70000)
