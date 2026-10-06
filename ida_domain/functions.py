@@ -289,7 +289,7 @@ class Functions(DatabaseEntity):
 
     def get_instructions(self, func: func_t) -> Iterator[insn_t]:
         """
-        Retrieves all instructions within the given function, including its tail chunks.
+        Retrieves all instructions within the given function.
 
         Args:
             func: The function instance.
@@ -303,7 +303,7 @@ class Functions(DatabaseEntity):
 
     def get_disassembly(self, func: func_t, remove_tags: bool = True) -> List[str]:
         """
-        Retrieves the disassembly lines for the given function, including its tail chunks.
+        Retrieves the disassembly lines for the given function.
 
         Args:
             func: The function instance.
@@ -665,7 +665,7 @@ class Functions(DatabaseEntity):
 
     def get_data_items(self, func: func_t) -> Iterator[ea_t]:
         """
-        Iterate over data items within the function, including its tail chunks.
+        Iterate over data items within the function.
 
         This method finds all addresses within the function that are defined
         as data (not code). Useful for finding embedded data, jump tables,
