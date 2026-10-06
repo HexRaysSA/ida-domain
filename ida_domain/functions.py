@@ -298,7 +298,8 @@ class Functions(DatabaseEntity):
             An iterator over all instructions in the function,
             or empty iterator if function is invalid.
         """
-        return self.database.instructions.get_between(func.start_ea, func.end_ea)
+        for chunk in self.get_chunks(func):
+            yield from self.database.instructions.get_between(chunk.start_ea, chunk.end_ea)
 
     def get_disassembly(self, func: func_t, remove_tags: bool = True) -> List[str]:
         """
@@ -313,18 +314,19 @@ class Functions(DatabaseEntity):
             Returns empty list if function is invalid.
         """
         lines = []
-        ea = func.start_ea
 
         options = ida_lines.GENDSM_MULTI_LINE
         if remove_tags:
             options |= ida_lines.GENDSM_REMOVE_TAGS
 
-        while ea != BADADDR and ea < func.end_ea:
-            line = ida_lines.generate_disasm_line(ea, options)
-            if line:
-                lines.append(line)
+        for chunk in self.get_chunks(func):
+            ea = chunk.start_ea
+            while ea != BADADDR and ea < chunk.end_ea:
+                line = ida_lines.generate_disasm_line(ea, options)
+                if line:
+                    lines.append(line)
 
-            ea = ida_bytes.next_head(ea, func.end_ea)
+                ea = ida_bytes.next_head(ea, chunk.end_ea)
 
         return lines
 
@@ -564,7 +566,7 @@ class Functions(DatabaseEntity):
         callee_addrs = set()  # Use set to avoid duplicates
 
         # Iterate through all instructions in the function to find calls and jumps
-        for inst in self.database.instructions.get_between(func.start_ea, func.end_ea):
+        for inst in self.get_instructions(func):
             # Get call references from this instruction
             for target_ea in self.database.xrefs.calls_from_ea(inst.ea):
                 # Get the target function
@@ -683,12 +685,13 @@ class Functions(DatabaseEntity):
             ...     print(f"Data at 0x{data_ea:x}, size: {size}")
             ```
         """
-        ea = func.start_ea
-        while ea < func.end_ea and ea != BADADDR:
-            flags = ida_bytes.get_flags(ea)
-            if ida_bytes.is_data(flags):
-                yield ea
-            ea = ida_bytes.next_head(ea, func.end_ea)
+        for chunk in self.get_chunks(func):
+            ea = chunk.start_ea
+            while ea < chunk.end_ea and ea != BADADDR:
+                flags = ida_bytes.get_flags(ea)
+                if ida_bytes.is_data(flags):
+                    yield ea
+                ea = ida_bytes.next_head(ea, chunk.end_ea)
 
     def get_chunks(self, func: func_t) -> Iterator[FunctionChunk]:
         """
