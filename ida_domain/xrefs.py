@@ -164,8 +164,6 @@ class XrefsFlags(IntFlag):
             ida_flags |= ida_xref.XREF_DATA
         elif self & XrefsFlags.CODE:
             ida_flags |= ida_xref.XREF_CODE
-        else:
-            ida_flags = ida_xref.XREF_ALL
         return ida_flags
 
 
