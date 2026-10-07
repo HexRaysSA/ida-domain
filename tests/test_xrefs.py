@@ -257,3 +257,18 @@ def test_xref_addition_code_happy_path(test_env):
 
     assert refs_from_count == len(list(db.xrefs.from_ea(FROM_EA)))
     assert refs_to_count == len(list(db.xrefs.to_ea(TO_EA)))
+
+
+def test_xrefs_noflow(test_env):
+    db = test_env
+
+    # 0x22 flows into 0x27
+    flow = [(x.from_ea, x.to_ea) for x in db.xrefs.to_ea(0x27) if x.is_flow]
+    assert flow == [(0x22, 0x27)]
+    flow = [(x.from_ea, x.to_ea) for x in db.xrefs.from_ea(0x22) if x.is_flow]
+    assert flow == [(0x22, 0x27)]
+
+    # NOFLOW alone skips flow xrefs, like CODE_NOFLOW does for code xrefs
+    assert not any(x.is_flow for x in db.xrefs.to_ea(0x27, XrefsFlags.NOFLOW))
+    assert not any(x.is_flow for x in db.xrefs.from_ea(0x22, XrefsFlags.NOFLOW))
+    assert not any(x.is_flow for x in db.xrefs.to_ea(0x27, XrefsFlags.CODE_NOFLOW))
