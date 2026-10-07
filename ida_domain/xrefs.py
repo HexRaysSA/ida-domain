@@ -209,12 +209,20 @@ class Xrefs(DatabaseEntity):
     This class offers a simplified API for working with both code and data cross-references,
     with convenient methods for common use cases.
 
+    Try `to_item` first: it mimics the logic of the GUI "xrefs to" dialog. Use
+    `to_ea` when you want exact address resolution. The convenience helpers
+    (`calls_to_ea`, `get_callers`, ...) resolve exact addresses like `to_ea`.
+
     Args:
         database: Reference to the active IDA database.
 
     Example:
         ```python
-        # Get all references to an address
+        # Get all references to an item, like the GUI "xrefs to" dialog
+        for xref in db.xrefs.to_item(ea):
+            print(f"{xref.from_ea:x} -> {xref.to_ea:x} ({xref.type.name})")
+
+        # Get only references to an exact address
         for xref in db.xrefs.to_ea(ea):
             print(f"{xref.from_ea:x} -> {xref.to_ea:x} ({xref.type.name})")
 
@@ -233,11 +241,15 @@ class Xrefs(DatabaseEntity):
 
     def to_ea(self, ea: ea_t, flags: XrefsFlags = XrefsFlags.ALL) -> Iterator[XrefInfo]:
         """
-        Get all cross-references to an address.
+        Get all cross-references to an exact address.
+
+        Only xrefs targeting `ea` itself are returned, not those to other bytes of
+        the same item. You probably want `to_item` unless you need exact address
+        resolution.
 
         Args:
             ea: Target effective address
-            flags: Filter flags (default: all xrefs)
+            flags: Filter flags (default: all xrefs, including ordinary flow)
 
         Yields:
             XrefInfo objects with detailed xref information
@@ -254,15 +266,16 @@ class Xrefs(DatabaseEntity):
         """
         Get all cross-references to the item containing an address.
 
-        Like the GUI "xrefs to" dialog (`x` shortcut), this includes xrefs to any
-        byte of the item (e.g. ARM Thumb pointers to func+1), not only to its head.
+        Returns xrefs to any byte of the item, not only to its head. Same logic as
+        the GUI "xrefs to" dialog. Use `to_ea` for exact address resolution.
 
         Args:
             ea: Address of any byte of the target item
             flags: Filter flags (default: skip ordinary flow xrefs)
 
         Yields:
-            XrefInfo objects sorted by source address; to_ea is the referenced byte
+            XrefInfo objects sorted by source address; `XrefInfo.to_ea` is the
+            referenced byte
 
         Raises:
             InvalidEAError: If the effective address is invalid
