@@ -250,6 +250,34 @@ class Xrefs(DatabaseEntity):
 
         yield from _iter_xrefs_to(ea, flags)
 
+    def to_item(self, ea: ea_t, flags: XrefsFlags = XrefsFlags.NOFLOW) -> Iterator[XrefInfo]:
+        """
+        Get all cross-references to the item containing an address.
+
+        Like the GUI "xrefs to" dialog (`x` shortcut), this includes xrefs to any
+        byte of the item (e.g. ARM Thumb pointers to func+1), not only to its head.
+
+        Args:
+            ea: Address of any byte of the target item
+            flags: Filter flags (default: skip ordinary flow xrefs)
+
+        Yields:
+            XrefInfo objects sorted by source address; to_ea is the referenced byte
+
+        Raises:
+            InvalidEAError: If the effective address is invalid
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        xrefs = [
+            xref
+            for addr in range(ida_bytes.get_item_head(ea), ida_bytes.get_item_end(ea))
+            for xref in _iter_xrefs_to(addr, flags)
+        ]
+        xrefs.sort(key=lambda x: (x.from_ea, x.type, x.to_ea))
+        yield from xrefs
+
     def from_ea(self, ea: ea_t, flags: XrefsFlags = XrefsFlags.ALL) -> Iterator[XrefInfo]:
         """
         Get all cross-references from an address.

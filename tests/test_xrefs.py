@@ -1,3 +1,4 @@
+import ida_bytes
 import pytest
 
 from ida_domain.base import InvalidEAError, InvalidParameterError
@@ -272,3 +273,122 @@ def test_xrefs_noflow(test_env):
     assert not any(x.is_flow for x in db.xrefs.to_ea(0x27, XrefsFlags.NOFLOW))
     assert not any(x.is_flow for x in db.xrefs.from_ea(0x22, XrefsFlags.NOFLOW))
     assert not any(x.is_flow for x in db.xrefs.to_ea(0x27, XrefsFlags.CODE_NOFLOW))
+
+
+FUNC_A = 0x10120  # 2-byte head (PUSH {R4,LR})
+FUNC_B = 0x10128  # 4-byte head (PUSH.W {R4,LR})
+
+
+def _xrefs_over_item_bytes(db, head, flags):
+    """Reference result: plain to_ea() over every byte of the item, sorted."""
+    xrefs = [
+        x
+        for addr in range(head, head + db.heads.size(head))
+        for x in db.xrefs.to_ea(addr, flags)
+        if not (flags & XrefsFlags.NOFLOW and x.is_flow)
+    ]
+    return sorted(xrefs, key=_key)
+
+
+def _key(x):
+    return (x.from_ea, x.type, x.to_ea)
+
+
+def test_to_item_thumb(tiny_thumb_env):
+    db = tiny_thumb_env
+
+    # to_ea() is unchanged: only the BL targets the function head
+    xrefs = list(db.xrefs.to_ea(FUNC_A, XrefsFlags.NOFLOW | XrefsFlags.CODE))
+    assert [(x.from_ea, x.type) for x in xrefs] == [(0x10102, XrefType.CALL_NEAR)]
+    assert [x.from_ea for x in db.xrefs.to_ea(FUNC_A)] == [0x10102]
+
+    # to_item() also returns the offset xrefs stored at func+1
+    xrefs = list(db.xrefs.to_item(FUNC_A))
+    assert [(x.from_ea, x.to_ea, x.type) for x in xrefs] == [
+        (0x10102, FUNC_A, XrefType.CALL_NEAR),
+        (0x1010A, FUNC_A + 1, XrefType.OFFSET),
+        (0x10138, FUNC_A + 1, XrefType.OFFSET),
+        (0x10150, FUNC_A + 1, XrefType.OFFSET),
+        (0x20000, FUNC_A + 1, XrefType.OFFSET),
+    ]
+
+    xrefs = list(db.xrefs.to_item(FUNC_B))
+    assert [(x.from_ea, x.to_ea, x.type) for x in xrefs] == [
+        (0x10106, FUNC_B, XrefType.CALL_NEAR),
+        (0x1010C, FUNC_B + 1, XrefType.OFFSET),
+        (0x1013C, FUNC_B + 1, XrefType.OFFSET),
+        (0x10154, FUNC_B + 1, XrefType.OFFSET),
+    ]
+
+    # Any byte of the item gives the same result
+    assert list(db.xrefs.to_item(FUNC_B + 3)) == xrefs
+
+    # Same as merging the per-byte lookups, sorted
+    for head in (FUNC_A, FUNC_B):
+        for flags in (XrefsFlags.NOFLOW, XrefsFlags.ALL, XrefsFlags.DATA):
+            expected = _xrefs_over_item_bytes(db, head, flags)
+            assert list(db.xrefs.to_item(head, flags)) == expected
+
+    # Flags carry through
+    code = list(db.xrefs.to_item(FUNC_A, XrefsFlags.CODE_NOFLOW))
+    assert [(x.from_ea, x.type) for x in code] == [(0x10102, XrefType.CALL_NEAR)]
+    data = list(db.xrefs.to_item(FUNC_A, XrefsFlags.DATA))
+    assert [x.from_ea for x in data] == [0x1010A, 0x10138, 0x10150, 0x20000]
+    assert all(x.type == XrefType.OFFSET for x in data)
+
+    # The default skips ordinary flow; ALL keeps it (0x10122 follows 0x10120)
+    assert not any(x.is_flow for x in db.xrefs.to_item(0x10122))
+    flow = [x for x in db.xrefs.to_item(0x10122, XrefsFlags.ALL) if x.is_flow]
+    assert [(x.from_ea, x.to_ea) for x in flow] == [(FUNC_A, 0x10122)]
+
+    # A 1-byte unexplored item covers only its own address
+    assert ida_bytes.del_items(0x10140, ida_bytes.DELIT_SIMPLE, 4)
+    assert not db.heads.is_head(0x10140) and not db.heads.is_tail(0x10141)
+    assert db.xrefs.add_data_ref(0x1010E, 0x10140, XrefType.READ)
+    assert db.xrefs.add_data_ref(0x1010E, 0x10141, XrefType.READ)
+    xrefs = list(db.xrefs.to_item(0x10140))
+    assert [(x.from_ea, x.to_ea) for x in xrefs] == [(0x1010E, 0x10140)]
+
+    # Arrays: xrefs to any element are returned for the whole array
+    assert db.bytes.create_dword_at(0x10150, 2, force=True)
+    assert db.heads.size(0x10150) == 8
+    assert db.xrefs.add_data_ref(0x10110, 0x10154, XrefType.READ)
+    xrefs = list(db.xrefs.to_item(0x10154))
+    assert [(x.from_ea, x.to_ea, x.type) for x in xrefs] == [
+        (0x1010E, 0x10150, XrefType.OFFSET),
+        (0x10110, 0x10154, XrefType.READ),
+    ]
+    assert list(db.xrefs.to_item(0x10150)) == xrefs
+
+    with pytest.raises(InvalidEAError):
+        list(db.xrefs.to_item(0xFFFFFFFF))
+
+
+def test_to_item_x86(test_env):
+    db = test_env
+
+    # No xrefs to tail bytes: same as to_ea()
+    for ea in (0x2A3, 0x330):
+        expected = sorted((x for x in db.xrefs.to_ea(ea) if not x.is_flow), key=_key)
+        assert list(db.xrefs.to_item(ea)) == expected
+        assert _xrefs_over_item_bytes(db, ea, XrefsFlags.NOFLOW) == expected
+    assert [x.from_ea for x in db.xrefs.to_item(0x2A3)] == [0x27]
+
+    # A reference into the middle of a multi-byte instruction or data item
+    # is returned under the item, keeping its real target
+    assert db.heads.size(0x27) == 5
+    assert db.xrefs.add_data_ref(0x18, 0x29, XrefType.READ)
+    xrefs = list(db.xrefs.to_item(0x27))
+    assert [(x.from_ea, x.to_ea, x.type) for x in xrefs] == [(0x18, 0x29, XrefType.READ)]
+    assert [x for x in db.xrefs.to_ea(0x27) if not x.is_flow] == []
+
+    assert db.heads.size(0x330) == 8
+    assert db.xrefs.add_data_ref(0x18, 0x334, XrefType.WRITE)
+    xrefs = list(db.xrefs.to_item(0x330))
+    assert len(xrefs) == len(list(db.xrefs.to_ea(0x330))) + 1
+    assert [(x.from_ea, x.to_ea) for x in xrefs if x.to_ea != 0x330] == [(0x18, 0x334)]
+    assert xrefs == sorted(xrefs, key=_key)
+
+    private_ea = 0xFF00000000000000
+    with pytest.raises(InvalidEAError):
+        list(db.xrefs.to_item(private_ea))

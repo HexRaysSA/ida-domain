@@ -79,3 +79,18 @@ gcc -O0 -c -o tiny_stackstrings.bin tiny_stackstrings.c
 ```
 
 After rebuilding, replace `tiny_stackstrings.bin` in this folder and update any tests as needed.
+
+---
+
+## ARM Thumb Test Binary (tiny_thumb)
+
+`tiny_thumb.bin` is a synthetic 516-byte 32-bit ARM ELF (no source, the bytes
+were assembled by a small generator script). It stores Thumb function pointers
+with bit 0 set, so IDA creates the offset xrefs at `func+1` instead of `func`.
+Used to test `Xrefs.to_item()`.
+
+- `sub_10120` (2-byte head `PUSH {R4,LR}`): BL from `0x10102`; offset xrefs to
+  `0x10121` from `0x1010a` (`LDR R1, =(sub_10120+1)`), `0x10138`, `0x10150`
+  and `0x20000` (`DCD sub_10120+1`).
+- `sub_10128` (4-byte head `PUSH.W {R4,LR}`): BL from `0x10106`; offset xrefs
+  to `0x10129` from `0x1010c` (`LDR`), `0x1013c` and `0x10154` (`DCD`).
