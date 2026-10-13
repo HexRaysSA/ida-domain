@@ -42,7 +42,7 @@ def test_function(test_env):
     assert func.name == 'add_numbers'
 
     blocks = db.functions.get_flowchart(func)
-    assert blocks.size == 1
+    assert len(blocks) == 1
     assert blocks[0].start_ea == 0x2A3
     assert blocks[0].end_ea == 0x2AF
 
