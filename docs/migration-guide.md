@@ -235,7 +235,7 @@ db.xrefs.code_refs_from_ea(ea, flow=False)
 
 ### 6. Retained SDK Types
 
-The Domain API wraps SDK objects but doesn't replace them. You still work with `idaapi.func_t`, `idaapi.insn_t`, `idaapi.BasicBlock`, etc.
+The Domain API wraps SDK objects but doesn't replace them. Some calls still take or return SDK types such as `func_t` and `insn_t`. Where the Domain API has its own wrapper class, the wrapped SDK object is available through a `raw_*` property, for example `BasicBlock.raw_block`, `MicroBlock.raw_block` or `PseudocodeExpression.raw_expr`.
 
 ### 7. API Consistency Pattern
 
