@@ -201,3 +201,117 @@ def test_get_previous_only_reached_from_higher(tiny_pseudocode_env):
     caller = db.instructions.get_at(0x1A7)
     assert list(db.instructions.call_targets(caller)) == [0x26]
     assert db.instructions.get_previous(0x26) is None
+
+
+def _switch_in(db, func_name):
+    """The only switch IDA found in a function."""
+    func = db.functions.get_by_name(func_name)
+    assert func is not None
+    switches = []
+    for insn in db.functions.get_instructions(func):
+        switch = db.instructions.get_switch(insn)
+        if switch is not None:
+            switches.append(switch)
+    assert len(switches) == 1
+    return switches[0]
+
+
+def _callee(db, ea):
+    """Name of the function the case code at ea calls (tail calls are jumps)."""
+    ref = next(db.xrefs.code_refs_from_ea(ea, flow=False), None)
+    assert ref is not None, f'no call or jump at 0x{ea:x}'
+    return db.names.get_at(ref)
+
+
+def _calls_by_value(db, switch):
+    return {v: _callee(db, case.target) for case in switch.cases for v in case.values}
+
+
+DENSE_CALLS = {
+    10: 'dense_10',
+    11: 'dense_11',
+    12: 'dense_12_14',
+    13: 'dense_default',
+    14: 'dense_12_14',
+    15: 'dense_15',
+    16: 'dense_16',
+    17: 'dense_17',
+    18: 'dense_default',
+    19: 'dense_19',
+}
+
+
+def test_get_switch(tiny_switch_x64_env):
+    db = tiny_switch_x64_env
+
+    switch = _switch_in(db, 'dense')
+    jump = db.instructions.get_at(switch.ea)
+    assert db.instructions.is_indirect_jump_or_call(jump)
+    assert db.instructions.get_switch(jump) == switch
+    assert switch.element_size == 8
+    assert switch.low_case == 10
+    assert _callee(db, switch.default_ea) == 'dense_default'
+    assert _calls_by_value(db, switch) == DENSE_CALLS
+    # Gaps in the cases go to the default block
+    assert switch.target_of(13) == switch.target_of(18) == switch.default_ea
+    assert [case.values for case in switch.cases] == [
+        (10,),
+        (11,),
+        (12, 14),
+        (13, 18),
+        (15,),
+        (16,),
+        (17,),
+        (19,),
+    ]
+    # Values outside the table fall back to the default
+    assert switch.target_of(9) == switch.target_of(20) == switch.default_ea
+    assert switch.target_of(12) == switch.target_of(14) != switch.default_ea
+    assert db.segments.get_name(db.segments.get_at(switch.jump_table_ea)) == '.rodata'
+    assert hash(switch) == hash(db.instructions.get_switch(jump))
+
+    # The switch is stored on the indirect jump only
+    dense = db.functions.get_by_name('dense')
+    assert db.instructions.get_switch(db.instructions.get_at(dense.start_ea)) is None
+
+    switch = _switch_in(db, 'no_default')
+    assert switch.default_ea is None
+    assert switch.low_case == 0
+    assert _calls_by_value(db, switch) == {v: f'no_default_{v}' for v in range(8)}
+    assert switch.target_of(8) is None
+
+    switch = _switch_in(db, 'negative')
+    assert switch.low_case == -3
+    assert _calls_by_value(db, switch) == {
+        -3: 'negative_m3',
+        -2: 'negative_m2',
+        -1: 'negative_m1',
+        0: 'negative_0',
+        1: 'negative_1',
+        2: 'negative_2',
+        3: 'negative_3',
+    }
+    assert _callee(db, switch.target_of(-4)) == 'negative_default'
+    # Values are signed: the 32-bit pattern of -1 is not a case
+    assert switch.target_of(0xFFFFFFFF) == switch.default_ea
+
+
+def test_get_switch_thumb(tiny_switch_thumb_env):
+    db = tiny_switch_thumb_env
+
+    # TBB: one-byte jump table entries
+    switch = _switch_in(db, 'dense')
+    assert switch.element_size == 1
+    assert switch.low_case == 10
+    assert _callee(db, switch.default_ea) == 'dense_default'
+    assert _calls_by_value(db, switch) == DENSE_CALLS
+
+    # gcc handles case 0 through the out-of-range branch, so it is IDA's default
+    switch = _switch_in(db, 'no_default')
+    assert switch.low_case == 1
+    assert _calls_by_value(db, switch) == {v: f'no_default_{v}' for v in range(1, 8)}
+    assert _callee(db, switch.target_of(0)) == 'no_default_0'
+
+    # IDA doesn't see the subtraction of the lowest case here, so it reports table
+    # indices (0..6) instead of -3..3. Only check that the switch is found.
+    assert _switch_in(db, 'negative') is not None
