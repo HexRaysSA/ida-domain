@@ -16,6 +16,8 @@ tiny_imports_idb_path: str = ''
 tiny_pseudocode_idb_path: str = ''
 tiny_struct_idb_path: str = ''
 tiny_stackstrings_idb_path: str = ''
+tiny_switch_x64_idb_path: str = ''
+tiny_switch_thumb_idb_path: str = ''
 
 _deprecation_warnings: dict = {}
 
@@ -219,6 +221,54 @@ def tiny_imports_env(tiny_imports_setup):
     ida_options = IdaCommandOptions(new_database=True, auto_analysis=True)
     db = ida_domain.Database.open(
         path=tiny_imports_idb_path, args=ida_options, save_on_close=False
+    )
+    yield db
+    if db.is_open():
+        db.close(False)
+
+
+@pytest.fixture(scope='session')
+def tiny_switch_x64_setup(global_setup):
+    """Setup for x86-64 switch binary tests - copies tiny_switch_x64.bin to work directory."""
+    global tiny_switch_x64_idb_path
+    tiny_switch_x64_idb_path = os.path.join(
+        tempfile.gettempdir(), 'api_tests_work_dir', 'tiny_switch_x64.bin'
+    )
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    src_path = os.path.join(current_dir, 'resources', 'tiny_switch_x64.bin')
+    shutil.copy(src_path, tiny_switch_x64_idb_path)
+
+
+@pytest.fixture(scope='function')
+def tiny_switch_x64_env(tiny_switch_x64_setup):
+    """Opens tiny_switch_x64 database for each test."""
+    ida_options = IdaCommandOptions(new_database=True, auto_analysis=True)
+    db = ida_domain.Database.open(
+        path=tiny_switch_x64_idb_path, args=ida_options, save_on_close=False
+    )
+    yield db
+    if db.is_open():
+        db.close(False)
+
+
+@pytest.fixture(scope='session')
+def tiny_switch_thumb_setup(global_setup):
+    """Setup for Thumb switch binary tests - copies tiny_switch_thumb.bin to work directory."""
+    global tiny_switch_thumb_idb_path
+    tiny_switch_thumb_idb_path = os.path.join(
+        tempfile.gettempdir(), 'api_tests_work_dir', 'tiny_switch_thumb.bin'
+    )
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    src_path = os.path.join(current_dir, 'resources', 'tiny_switch_thumb.bin')
+    shutil.copy(src_path, tiny_switch_thumb_idb_path)
+
+
+@pytest.fixture(scope='function')
+def tiny_switch_thumb_env(tiny_switch_thumb_setup):
+    """Opens tiny_switch_thumb database for each test."""
+    ida_options = IdaCommandOptions(new_database=True, auto_analysis=True)
+    db = ida_domain.Database.open(
+        path=tiny_switch_thumb_idb_path, args=ida_options, save_on_close=False
     )
     yield db
     if db.is_open():
