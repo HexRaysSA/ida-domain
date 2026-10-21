@@ -130,7 +130,7 @@ jobs:
 
       - name: Publish to PyPI
         if: steps.verify.outputs.should_publish == 'true' && github.repository == 'hexrayssa/ida-domain'
-        run: uv publish
+        uses: pypa/gh-action-pypi-publish@release/v1
 
       - name: Trigger documentation workflow
         if: steps.verify.outputs.should_publish == 'true' && steps.verify.outputs.is_prerelease != 'true' && github.repository == 'hexrayssa/ida-domain'
