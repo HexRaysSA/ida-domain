@@ -13,10 +13,12 @@ and migrated separately when the surrounding public API can be reshaped.
 
 from __future__ import annotations
 
+import inspect
 from typing import Any, Iterator, Optional, Tuple
 
 import ida_funcs
 import ida_hexrays
+import ida_idp
 import ida_nalt
 import ida_range
 import ida_segment
@@ -163,6 +165,34 @@ else:
         if seg is None:
             return
         ida_segment.set_segment_cmt(seg, cmt, repeatable)
+
+
+# --- ida_idp ----------------------------------------------------------------
+
+if 'insn' in inspect.signature(ida_idp.IDP_Hooks.ev_get_simd_types).parameters:
+    def idp_hooks_ev_get_simd_types(
+        hooks: ida_idp.IDP_Hooks,
+        out: Any,
+        simd_attrs: Any,
+        argloc: Any,
+        create_tifs: bool,
+        insn: Any = None,
+        op: Any = None,
+    ) -> int:
+        return ida_idp.IDP_Hooks.ev_get_simd_types(
+            hooks, out, simd_attrs, argloc, create_tifs, insn, op
+        )
+else:
+    def idp_hooks_ev_get_simd_types(
+        hooks: ida_idp.IDP_Hooks,
+        out: Any,
+        simd_attrs: Any,
+        argloc: Any,
+        create_tifs: bool,
+        insn: Any = None,
+        op: Any = None,
+    ) -> int:
+        return ida_idp.IDP_Hooks.ev_get_simd_types(hooks, out, simd_attrs, argloc, create_tifs)
 
 
 # --- ida_strlist ------------------------------------------------------------
