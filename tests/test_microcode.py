@@ -671,8 +671,7 @@ def test_microcode_function_final_type(test_env):
     func = db.functions.get_at(0x2BC)
     mf = db.microcode.from_decompilation(func)
 
-    ft = mf.final_type
-    assert ft is not None  # decompiled function should have a return type
+    assert isinstance(mf.final_type, bool)
 
 
 
