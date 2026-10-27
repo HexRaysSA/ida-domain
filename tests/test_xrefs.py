@@ -275,6 +275,18 @@ def test_xrefs_noflow(test_env):
     assert not any(x.is_flow for x in db.xrefs.to_ea(0x27, XrefsFlags.CODE_NOFLOW))
 
 
+def test_xrefs_data_and_code(test_env):
+    db = test_env
+
+    # DATA | CODE means the same as ALL
+    all_refs = [(x.to_ea, x.is_code) for x in db.xrefs.from_ea(0xFF, XrefsFlags.ALL)]
+    assert (0x330, False) in all_refs
+
+    data_code = XrefsFlags.DATA | XrefsFlags.CODE
+    both = [(x.to_ea, x.is_code) for x in db.xrefs.from_ea(0xFF, data_code)]
+    assert both == all_refs
+
+
 FUNC_A = 0x10120  # 2-byte head (PUSH {R4,LR})
 FUNC_B = 0x10128  # 4-byte head (PUSH.W {R4,LR})
 
