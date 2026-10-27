@@ -1,4 +1,6 @@
 import ida_auto
+import ida_funcs
+import idautils
 import pytest
 
 import ida_domain  # isort: skip
@@ -407,3 +409,33 @@ def test_get_signature_returns_optional_str(test_env):
         sig = db.functions.get_signature(func)
         assert sig is None or isinstance(sig, str)
         assert sig != ''
+
+
+def test_function_tail_chunks(test_env):
+    """Per-function iterators cover tail chunks, not just the entry chunk."""
+    db = test_env
+
+    # Turn level2_func_a's body (which calls level3_func) into a tail of multiply_numbers
+    level2a = db.functions.get_by_name('level2_func_a')
+    tail_start, tail_end = level2a.start_ea, level2a.end_ea
+    assert db.functions.remove(tail_start) is True
+    func = db.functions.get_by_name('multiply_numbers')
+    assert ida_funcs.append_func_tail(func, tail_start, tail_end) is True
+    func = db.functions.get_by_name('multiply_numbers')
+
+    chunks = list(db.functions.get_chunks(func))
+    assert [(c.start_ea, c.end_ea, c.is_main) for c in chunks] == [
+        (func.start_ea, func.end_ea, True),
+        (tail_start, tail_end, False),
+    ]
+
+    insn_eas = [insn.ea for insn in db.functions.get_instructions(func)]
+    assert insn_eas == list(idautils.FuncItems(func.start_ea))
+    assert any(tail_start <= ea < tail_end for ea in insn_eas)
+
+    disasm = db.functions.get_disassembly(func)
+    assert len(disasm) == len(insn_eas)
+    assert any('level3_func' in line for line in disasm)
+
+    callees = db.functions.get_callees(func)
+    assert [f.name for f in callees] == ['level3_func']
