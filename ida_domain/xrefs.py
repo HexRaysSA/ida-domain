@@ -142,7 +142,7 @@ class XrefsFlags(IntFlag):
     """Flags for xref iteration control."""
 
     ALL = 0
-    """Default - all xrefs"""
+    """Default - all xrefs, same as DATA | CODE"""
     NOFLOW = ida_xref.XREF_NOFLOW
     """Skip ordinary flow xrefs"""
     DATA = ida_xref.XREF_DATA
@@ -155,14 +155,14 @@ class XrefsFlags(IntFlag):
 
     def to_ida_flags(self) -> int:
         """Convert to IDA's xref flags."""
-        if self == XrefsFlags.ALL:
-            return ida_xref.XREF_ALL
         ida_flags = 0
         if self & XrefsFlags.NOFLOW:
             ida_flags |= ida_xref.XREF_NOFLOW
-        if self & XrefsFlags.DATA:
+
+        kinds = self & (XrefsFlags.DATA | XrefsFlags.CODE)
+        if kinds == XrefsFlags.DATA:
             ida_flags |= ida_xref.XREF_DATA
-        elif self & XrefsFlags.CODE:
+        elif kinds == XrefsFlags.CODE:
             ida_flags |= ida_xref.XREF_CODE
         return ida_flags
 
