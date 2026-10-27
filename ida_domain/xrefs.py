@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-@dataclass
+@dataclass(frozen=True)
 class XrefInfo:
     """Enhanced cross-reference information."""
 
@@ -209,12 +209,21 @@ class Xrefs(DatabaseEntity):
     This class offers a simplified API for working with both code and data cross-references,
     with convenient methods for common use cases.
 
+    `to_item` returns xrefs to any byte of the item (instruction or data) at an
+    address, mimicking `x` in IDA; `to_ea` returns only xrefs to that exact address.
+    The convenience helpers (`calls_to_ea`, `get_callers`, ...) match exact
+    addresses, like `to_ea`.
+
     Args:
         database: Reference to the active IDA database.
 
     Example:
         ```python
-        # Get all references to an address
+        # Get all references to any byte of the item at ea (like `x` in IDA)
+        for xref in db.xrefs.to_item(ea):
+            print(f"{xref.from_ea:x} -> {xref.to_ea:x} ({xref.type.name})")
+
+        # Get only references to an exact address
         for xref in db.xrefs.to_ea(ea):
             print(f"{xref.from_ea:x} -> {xref.to_ea:x} ({xref.type.name})")
 
@@ -233,11 +242,15 @@ class Xrefs(DatabaseEntity):
 
     def to_ea(self, ea: ea_t, flags: XrefsFlags = XrefsFlags.ALL) -> Iterator[XrefInfo]:
         """
-        Get all cross-references to an address.
+        Get all cross-references to an exact address.
+
+        Only xrefs targeting `ea` itself are returned, not those to other bytes of
+        the same item. You probably want `to_item` unless you need exact address
+        resolution.
 
         Args:
             ea: Target effective address
-            flags: Filter flags (default: all xrefs)
+            flags: Filter flags (default: all xrefs, including ordinary flow)
 
         Yields:
             XrefInfo objects with detailed xref information
@@ -249,6 +262,33 @@ class Xrefs(DatabaseEntity):
             raise InvalidEAError(ea)
 
         yield from _iter_xrefs_to(ea, flags)
+
+    def to_item(self, ea: ea_t, flags: XrefsFlags = XrefsFlags.NOFLOW) -> Iterator[XrefInfo]:
+        """
+        Get cross-references to any byte of the item (instruction or data) containing ea.
+
+        Mimics `x` in IDA. Use `to_ea` for xrefs to exactly ea.
+
+        Args:
+            ea: Address of any byte of the target item
+            flags: Filter flags (default: skip ordinary flow xrefs)
+
+        Yields:
+            XrefInfo objects sorted by source address; `XrefInfo.to_ea` is the
+            referenced byte
+
+        Raises:
+            InvalidEAError: If the effective address is invalid
+        """
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+
+        xrefs: Set[XrefInfo] = {
+            xref
+            for addr in range(ida_bytes.get_item_head(ea), ida_bytes.get_item_end(ea))
+            for xref in _iter_xrefs_to(addr, flags)
+        }
+        yield from sorted(xrefs, key=lambda x: (x.from_ea, x.type, x.to_ea))
 
     def from_ea(self, ea: ea_t, flags: XrefsFlags = XrefsFlags.ALL) -> Iterator[XrefInfo]:
         """
