@@ -79,14 +79,16 @@ def main():
 
     # Head items (both code and data)
     with logger_t.section_t(logger, "'head' items:"):
-        for ea in db.heads.get_between(func.start_ea, func.end_ea):
-            logger.log_ea(ea, db)
+        for chunk in db.functions.get_chunks(func):
+            for ea in db.heads.get_between(chunk.start_ea, chunk.end_ea):
+                logger.log_ea(ea, db)
 
     # All addresses (not just heads)
     with logger_t.section_t(logger, 'Addresses:'):
-        for ea in range(func.start_ea, func.end_ea):
-            if db.is_valid_ea(ea):
-                logger.log_ea(ea, db)
+        for chunk in db.functions.get_chunks(func):
+            for ea in range(chunk.start_ea, chunk.end_ea):
+                if db.is_valid_ea(ea):
+                    logger.log_ea(ea, db)
 
     # Function chunks
     with logger_t.section_t(logger, 'Function chunks:'):
