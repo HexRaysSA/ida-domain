@@ -112,6 +112,8 @@ jobs:
             installer_path: "release/9.3/ida-pro/ida-pro_93_x64linux.run"
           - version: "9.4"
             installer_path: "release/9.4/ida-pro/ida-pro_94_x64linux.run"
+          - version: "9.5"
+            installer_path: "release/9.5/ida-pro/ida-pro_95_x64linux.run"
       fail-fast: false
 
     name: Running tests on IDA ${{ matrix.ida_version.version }}
