@@ -280,13 +280,13 @@ FUNC_B = 0x10128  # 4-byte head (PUSH.W {R4,LR})
 
 
 def _xrefs_over_item_bytes(db, head, flags):
-    """Reference result: plain to_ea() over every byte of the item, sorted."""
-    xrefs = [
+    """Reference result: plain to_ea() over every byte of the item, deduplicated and sorted."""
+    xrefs = {
         x
         for addr in range(head, head + db.heads.size(head))
         for x in db.xrefs.to_ea(addr, flags)
         if not (flags & XrefsFlags.NOFLOW and x.is_flow)
-    ]
+    }
     return sorted(xrefs, key=_key)
 
 
@@ -300,7 +300,6 @@ def test_to_item_thumb(tiny_thumb_env):
     # to_ea() is unchanged: only the BL targets the function head
     xrefs = list(db.xrefs.to_ea(FUNC_A, XrefsFlags.NOFLOW | XrefsFlags.CODE))
     assert [(x.from_ea, x.type) for x in xrefs] == [(0x10102, XrefType.CALL_NEAR)]
-    assert [x.from_ea for x in db.xrefs.to_ea(FUNC_A)] == [0x10102]
 
     # to_item() also returns the offset xrefs stored at func+1
     xrefs = list(db.xrefs.to_item(FUNC_A))

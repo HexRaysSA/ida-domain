@@ -283,13 +283,12 @@ class Xrefs(DatabaseEntity):
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
 
-        xrefs = [
+        xrefs: Set[XrefInfo] = {
             xref
             for addr in range(ida_bytes.get_item_head(ea), ida_bytes.get_item_end(ea))
             for xref in _iter_xrefs_to(addr, flags)
-        ]
-        xrefs.sort(key=lambda x: (x.from_ea, x.type, x.to_ea))
-        yield from xrefs
+        }
+        yield from sorted(xrefs, key=lambda x: (x.from_ea, x.type, x.to_ea))
 
     def from_ea(self, ea: ea_t, flags: XrefsFlags = XrefsFlags.ALL) -> Iterator[XrefInfo]:
         """
