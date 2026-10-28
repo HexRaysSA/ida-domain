@@ -5,10 +5,14 @@ At import time, capability detection (``hasattr``) selects the most modern
 SDK function available and falls back to the closest equivalent on older
 IDA versions. Call sites import the shim and remain unchanged as IDA evolves.
 
-Scope: only functions whose direct SDK name differs across supported IDA
+Scope: functions whose direct SDK name differs across supported IDA
 versions, or whose calling/iteration protocol has changed. Deprecated SDK
 calls that still work uniformly across versions are kept at the call site
 and migrated separately when the surrounding public API can be reshaped.
+
+SDK features that older IDA versions lack entirely also live here. Their
+shims come with a ``HAS_*`` flag, and callers check the flag before using
+them, since there is no equivalent to fall back to.
 """
 
 from __future__ import annotations
@@ -199,3 +203,11 @@ def make_decomp_ranges(func: Optional[func_t] = None) -> Any:
     if func is not None:
         return ida_hexrays.mba_ranges_t(func)
     return ida_hexrays.mba_ranges_t()
+
+
+HAS_DECOMPILER_TIMEOUT = hasattr(ida_hexrays, 'set_decompiler_timeout')
+
+
+def set_decompiler_timeout(msecs: int) -> int:
+    """Set the decompiler timeout. Only call this if ``HAS_DECOMPILER_TIMEOUT``."""
+    return ida_hexrays.set_decompiler_timeout(msecs)

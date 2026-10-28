@@ -32,6 +32,7 @@ from .base import (
 from .microcode import (
     DecompilationFlags,
     MicroBlockArray,
+    MicroError,
     MicroLocalVar,
     MicroLocalVars,
 )
@@ -331,10 +332,17 @@ class PseudocodeError(DecompilerError):
 
     Attributes:
         errea: The address where the error occurred (``None`` if unavailable).
+        code: The :class:`MicroError` code (``None`` if unavailable).
     """
 
-    def __init__(self, message: str, errea: Optional[int] = None):
+    def __init__(
+        self,
+        message: str,
+        errea: Optional[int] = None,
+        code: Optional[MicroError] = None,
+    ):
         self.errea = errea
+        self.code = code
         super().__init__(message)
 
 
@@ -3400,20 +3408,30 @@ class Pseudocode(DatabaseEntity):
             ea_or_func: Function entry address or ``func_t`` object.
             flags: Decompilation flags (``DecompilationFlags``).
 
+        To bound how long decompilation may take, wrap the call in
+        ``decompiler_timeout()`` (IDA 9.5+).
+
         Returns:
             A ``PseudocodeFunction`` wrapping the ``cfunc_t`` result.
 
         Raises:
-            PseudocodeError: If decompilation fails.
+            PseudocodeError: If decompilation fails. ``code`` is
+                ``MicroError.TIMEOUT`` if it ran past ``decompiler_timeout()``.
         """
         ea = ea_or_func.start_ea if isinstance(ea_or_func, func_t) else ea_or_func
         hf = ida_hexrays.hexrays_failure_t()
         cfunc = ida_hexrays.decompile(ea, hf, int(flags))
         if not cfunc:
             errea = hf.errea if hf.errea != ida_idaapi.BADADDR else None
+            try:
+                code: Optional[MicroError] = MicroError(hf.code)
+            except ValueError:
+                code = None
             raise PseudocodeError(
-                f'Failed to decompile function at 0x{ea:x}: {hf.str}',
+                f'Failed to decompile function at 0x{ea:x}: '
+                f'{hf.str or (code.name if code is not None else hf.code)}',
                 errea=errea,
+                code=code,
             )
         return PseudocodeFunction(cfunc)
 
