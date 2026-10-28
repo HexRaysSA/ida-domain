@@ -318,7 +318,7 @@ class EntryInfo:
     ordinal: int        # export ordinal number
     address: int        # address of entry point
     name: str           # entry point name
-    forwarder_name: str # forwarder name (or empty string)
+    forwarder_name: Optional[str]  # forwarder name (or None)
 
     def has_forwarder(self) -> bool: ...
 ```

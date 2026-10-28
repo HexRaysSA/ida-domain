@@ -59,6 +59,7 @@ def test_entries(test_env):
     assert forwarders[0].name == 'kernel32.CreateFile'
 
     entry_no_forwarder = db.entries.get_by_ordinal(0)
+    assert entry_no_forwarder.forwarder_name is None
     assert entry_no_forwarder.has_forwarder() is False
 
     with pytest.raises(IndexError):

@@ -3323,8 +3323,8 @@ class MicroBlockArray:
         return self._raw.has_over_chains()
 
     @property
-    def final_type(self) -> tinfo_t:
-        """Return type of the function."""
+    def final_type(self) -> bool:
+        """True if the function type is final (specified by the user)."""
         return self._raw.final_type
 
     @property
