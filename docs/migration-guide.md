@@ -451,8 +451,8 @@ def analyze_file(input_path: Path, save=True):
     opts = IdaCommandOptions(
         auto_analysis=True,       # Enable auto-analysis
         load_resources=True,      # Load Windows resources (helps find embedded PEs)
-        # Disable Lumina via plugin options
-        plugin_options="lumina:host=0.0.0.0;secondary_lumina:host=0.0.0.0",
+        # Disable Lumina via plugin options (one -O switch per server)
+        plugin_options=["lumina:host=0.0.0.0", "secondary_lumina:host=0.0.0.0"],
     )
 
     with Database.open(str(input_path), args=opts, save_on_close=save) as db:
@@ -467,7 +467,7 @@ def analyze_file(input_path: Path, save=True):
 |--------|------|---------|
 | `auto_analysis` | `bool` | Enable/disable automatic analysis |
 | `load_resources` | `bool` | Load Windows resources (replaces `-R` flag) |
-| `plugin_options` | `str` | Plugin options string (for Lumina, etc.) |
+| `plugin_options` | `str \| list[str]` | Plugin options, one `-O` switch per entry (for Lumina, etc.) |
 | `processor` | `str` | Processor type identifier (e.g., "arm", "metapc") |
 | `loading_address` | `int` | Load address in paragraphs |
 | `new_database` | `bool` | Create fresh database, deleting old one |
