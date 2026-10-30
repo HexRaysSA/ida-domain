@@ -10,11 +10,20 @@ import ida_strlist
 from ida_idaapi import ea_t
 from typing_extensions import TYPE_CHECKING, Iterator, Optional, Tuple, Union
 
-from ._ida_compat import STRTYPE_DECOMP, get_strlist_item_ex, string_info_ex_t
+from ._ida_compat import (
+    get_strlist_item_ex,
+    get_synth_provider_id,
+    get_synthetic_string,
+    is_synth_strtype,
+    string_info_ex_t,
+    synth_string_provider_name,
+)
 from .base import (
     DatabaseEntity,
     InvalidEAError,
     InvalidParameterError,
+    _CheckAttrSupport,
+    _since_ida,
     check_db_open,
     decorate_all_methods,
 )
@@ -26,7 +35,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class StringType(IntEnum):
+class StringType(IntEnum, metaclass=_CheckAttrSupport):
     """String type constants."""
 
     C = ida_nalt.STRTYPE_C  # C-style null-terminated string
@@ -41,7 +50,21 @@ class StringType(IntEnum):
     LEN4 = ida_nalt.STRTYPE_LEN4  # Pascal-style, four-byte length prefix
     LEN4_16 = ida_nalt.STRTYPE_LEN4_16  # Pascal-style, 16bit chars, four-byte length prefix
     LEN4_32 = ida_nalt.STRTYPE_LEN4_32  # Pascal-style, 32bit chars, four-byte length prefix
-    DECOMP = STRTYPE_DECOMP  # Synthetic string reconstructed by the decompiler (IDA 9.4+)
+    # Synthetic string: not in the bytes, reported by a provider and carrying its own text.
+    SYNTH = _since_ida(
+        '9.4',
+        ida_nalt,
+        'STRTYPE_SYNTH' if hasattr(ida_nalt, 'STRTYPE_SYNTH') else 'STRTYPE_DECOMP',
+    )
+
+
+class SyntheticProvider(IntEnum, metaclass=_CheckAttrSupport):
+    """
+    Ids of the providers of synthetic strings (``StringType.SYNTH``), IDA 9.5+.
+    """
+
+    DECOMPILER = _since_ida('9.5', ida_strlist, 'SYNTHSTR_PROVIDER_DECOMPILER')
+    SWIFT = _since_ida('9.5', ida_strlist, 'SYNTHSTR_PROVIDER_SWIFT')
 
 
 @dataclass(frozen=True)
@@ -51,13 +74,13 @@ class StringItem:
     """
 
     address: ea_t
-    """String address (for decompiler strings: the instruction building the string)"""
+    """String address (for synthetic strings: the instruction that builds or uses the string)"""
     length: int
     """String length in number of characters"""
     internal_type: int
     """Internal IDA string type, including internal string encoding"""
-    decompiler_string: Optional[str] = None
-    """Text reconstructed by the decompiler. ``None`` unless ``type`` is ``StringType.DECOMP``"""
+    synthetic_string: Optional[str] = None
+    """Text reported by the provider. ``None`` unless ``type`` is ``StringType.SYNTH``"""
 
     @property
     def type(self) -> StringType:
@@ -65,6 +88,28 @@ class StringItem:
         Return string type enum value, e.g. 'C-style null-terminated string'.
         """
         return StringType(ida_nalt.get_str_type_code(self.internal_type))
+
+    @property
+    def provider(self) -> Optional[int]:
+        """
+        Returns the id of the provider that reported a synthetic string, see
+        ``SyntheticProvider``. ``None`` unless ``type`` is ``StringType.SYNTH``,
+        and before IDA 9.5 (no providers).
+        """
+        if not is_synth_strtype(self.internal_type):
+            return None
+        return get_synth_provider_id(self.internal_type)
+
+    @property
+    def provider_name(self) -> Optional[str]:
+        """
+        Returns the name the provider of a synthetic string registered with, e.g. 'Decompiler',
+        as shown in the Type column of the Strings window. ``None`` for regular strings and
+        for providers that did not register a name.
+        """
+        if self.provider is None:
+            return None
+        return synth_string_provider_name(self.provider)
 
     @property
     def encoding(self) -> str:
@@ -79,8 +124,8 @@ class StringItem:
         """
         Returns utf-8 encoded string contents.
         """
-        if self.decompiler_string is not None:
-            return self.decompiler_string.encode('utf-8')
+        if self.synthetic_string is not None:
+            return self.synthetic_string.encode('utf-8')
         return ida_bytes.get_strlit_contents(self.address, self.length, self.internal_type)
 
     def __str__(self) -> str:
@@ -109,8 +154,8 @@ class Strings(DatabaseEntity):
     Provides access to string-related operations in the IDA database.
 
     Can be used to iterate over all strings in the opened database.
-    On IDA 9.4+ the list also contains strings reconstructed by the decompiler
-    (``StringType.DECOMP``).
+    On IDA 9.4+ the list also contains synthetic strings (``StringType.SYNTH``), which
+    do not exist in the bytes: for example, strings reconstructed by the decompiler (9.4+)
 
     Args:
         database: Reference to the active IDA database.
@@ -146,16 +191,13 @@ class Strings(DatabaseEntity):
         if 0 <= index < len(self):
             if get_strlist_item_ex(self._si, index):
                 itype = self._si.type
-                decompiler_string = (
-                    self._si.decompiler_string
-                    if ida_nalt.get_str_type_code(itype) == STRTYPE_DECOMP
-                    else None
-                )
                 return StringItem(
                     address=self._si.ea,
                     length=self._si.length,
                     internal_type=itype,
-                    decompiler_string=decompiler_string,
+                    synthetic_string=(
+                        get_synthetic_string(self._si) if is_synth_strtype(itype) else None
+                    ),
                 )
         raise IndexError(f'String index {index} out of range [0, {len(self)})')
 

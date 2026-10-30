@@ -2,10 +2,10 @@ import ida_nalt
 import pytest
 
 import ida_domain  # isort: skip
-from conftest import min_ida_version
+from conftest import min_ida_version, only_ida_version
 
 from ida_domain.base import InvalidEAError, InvalidParameterError
-from ida_domain.strings import StringType
+from ida_domain.strings import StringType, SyntheticProvider
 
 
 def test_strings(test_env):
@@ -135,9 +135,7 @@ def test_strings(test_env):
     assert len(db.strings) == 3
 
 
-@min_ida_version('9.4')
-def test_decompiler_strings(tiny_stackstrings_env):
-    db = tiny_stackstrings_env
+def _decompile_marker(db):
 
     # The marker text is stored as 16-bit units on the stack: no string literal exists.
     # The only literal is the compiler identification GCC emits into .rdata$zzz.
@@ -150,10 +148,17 @@ def test_decompiler_strings(tiny_stackstrings_env):
     db.strings.rebuild()
 
     assert len(db.strings) == 2
-    items = [item for item in db.strings if item.type == StringType.DECOMP]
+    items = [item for item in db.strings if item.type == StringType.SYNTH]
     assert len(items) == 1
-    item = items[0]
-    assert item.decompiler_string == 'ida-domain'
+    return func, items[0]
+
+
+@min_ida_version('9.4')
+def test_decompiler_strings(tiny_stackstrings_env):
+    db = tiny_stackstrings_env
+    func, item = _decompile_marker(db)
+
+    assert item.synthetic_string == 'ida-domain'
     assert str(item) == 'ida-domain'
     assert item.contents == b'ida-domain'
     assert bytes(item) == b'ida-domain'
@@ -166,6 +171,22 @@ def test_decompiler_strings(tiny_stackstrings_env):
 
     # Regular strings are unaffected
     for other in db.strings:
-        if other.type != StringType.DECOMP:
-            assert other.decompiler_string is None
+        if other.type != StringType.SYNTH:
+            assert other.synthetic_string is None
+            assert other.provider is None
+            assert other.provider_name is None
             assert str(other) == other.contents.decode('utf-8')
+
+
+@min_ida_version('9.5')
+def test_decompiler_string_provider(tiny_stackstrings_env):
+    _, item = _decompile_marker(tiny_stackstrings_env)
+    assert item.provider == SyntheticProvider.DECOMPILER
+    assert item.provider_name == 'Decompiler'
+
+
+@only_ida_version('9.4')
+def test_decompiler_string_has_no_provider(tiny_stackstrings_env):
+    _, item = _decompile_marker(tiny_stackstrings_env)
+    assert item.provider is None
+    assert item.provider_name is None

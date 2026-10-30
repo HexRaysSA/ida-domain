@@ -4,8 +4,8 @@
  * emit_marker() places the marker text "ida-domain" into a stack buffer as
  * little-endian 16-bit units, filled from the terminator backwards. The
  * object file therefore has no string literal; IDA 9.4+ reconstructs the
- * text with the decompiler and lists it as a decompiler (STRTYPE_DECOMP)
- * string.
+ * text with the decompiler and lists it as a synthetic (STRTYPE_DECOMP)
+ * string reported by the decompiler provider.
  *
  * Build (MinGW):  gcc -O0 -c -o tiny_stackstrings.bin tiny_stackstrings.c
  */

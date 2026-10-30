@@ -166,7 +166,44 @@ else:
 
 
 # --- ida_strlist ------------------------------------------------------------
-STRTYPE_DECOMP: int = getattr(ida_nalt, 'STRTYPE_DECOMP', 0x10)
+# 9.4 added decompiler strings to the string list (STRTYPE_DECOMP). 9.5 generalized
+# them into synthetic strings: the type code is STRTYPE_SYNTH, the second byte of the
+# type is the id of the provider that reported the string (so STRTYPE_DECOMP is now
+# STRTYPE_SYNTH with the decompiler's id), and string_info_ex_t.decompiler_string
+# was renamed synthetic_string.
+if hasattr(ida_nalt, 'is_synth_strtype'):
+    def is_synth_strtype(strtype: int) -> bool:
+        return ida_nalt.is_synth_strtype(strtype)
+elif hasattr(ida_nalt, 'STRTYPE_DECOMP'):
+    def is_synth_strtype(strtype: int) -> bool:
+        return ida_nalt.get_str_type_code(strtype) == ida_nalt.STRTYPE_DECOMP
+else:
+    def is_synth_strtype(strtype: int) -> bool:
+        return False
+
+
+if hasattr(ida_nalt, 'get_synth_provider_id'):
+    def get_synth_provider_id(strtype: int) -> Optional[int]:
+        return ida_nalt.get_synth_provider_id(strtype)
+else:
+    def get_synth_provider_id(strtype: int) -> Optional[int]:
+        return None  # no providers before 9.5
+
+
+if hasattr(ida_strlist, 'synth_string_provider_name'):
+    def synth_string_provider_name(provider_id: int) -> Optional[str]:
+        return ida_strlist.synth_string_provider_name(provider_id)
+else:
+    def synth_string_provider_name(provider_id: int) -> Optional[str]:
+        return None
+
+
+def get_synthetic_string(si: ida_strlist.string_info_t) -> str:
+    """Text of a synthetic string (``decompiler_string`` before 9.5)."""
+    if hasattr(si, 'synthetic_string'):
+        return si.synthetic_string
+    return si.decompiler_string
+
 
 if hasattr(ida_strlist, 'get_strlist_item_ex'):
     def string_info_ex_t() -> ida_strlist.string_info_t:

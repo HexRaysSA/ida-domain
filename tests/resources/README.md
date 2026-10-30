@@ -71,7 +71,7 @@ The tests use instruction addresses from this object. After rebuilding, replace
 
 The `tiny_stackstrings.c` file stores a marker text on the stack as 16-bit
 integer units, so no string literal exists in the object; only the decompiler
-reconstructs it. Used to test decompiler strings (`StringType.DECOMP`, IDA 9.4+).
+reconstructs it. Used to test synthetic strings
 
 To rebuild:
 ```bash
