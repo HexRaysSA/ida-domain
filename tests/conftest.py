@@ -79,6 +79,13 @@ def max_ida_version(v: str) -> pytest.MarkDecorator:
     )
 
 
+def only_ida_version(v: str) -> pytest.MarkDecorator:
+    return pytest.mark.skipif(
+        ida_domain.__ida_version__ != Version(v),
+        reason=f'requires IDA {v}',
+    )
+
+
 # Global setup (runs ONCE)
 @pytest.fixture(scope='session', autouse=True)
 def global_setup():
