@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 from logging import NullHandler
 from pathlib import Path
 
@@ -34,16 +35,9 @@ def _load_dependencies() -> None:
     to explicitly import idapro, which loads the IDA kernel libraries and IDA Python for us.
     """
 
-    # Check if IDA Python is already loaded
-    try:
-        import ida_kernwin
-
-        need_idapro = ida_kernwin.is_ida_library(None, 0, None)
-    except ImportError:
-        need_idapro = True
-
-    if need_idapro:
-        import idapro
+    # IDAPython sets IDAPYTHON_VERSION in __main__ before any user code runs
+    if getattr(sys.modules.get('__main__'), 'IDAPYTHON_VERSION', None) is None:
+        import idapro  # noqa: F401
 
 
 __version__ = '0.5.1'

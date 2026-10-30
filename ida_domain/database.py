@@ -17,7 +17,7 @@ from ida_idaapi import ea_t
 from typing_extensions import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple, Type, Union
 
 from .auto_analysis import AutoAnalysis
-from .base import DatabaseError, check_db_open, requires_ida
+from .base import DatabaseError, check_db_open, is_library_mode, requires_ida
 from .bytes import Bytes
 from .comments import Comments
 from .entries import Entries
@@ -450,7 +450,7 @@ class Database:
         Returns:
             False to allow exceptions to propagate (does not suppress exceptions).
         """
-        if self.is_open() and ida_kernwin.is_ida_library(None, 0, None):
+        if self.is_open() and is_library_mode():
             self.close(save=self.save_on_close)
 
         self.unhook()
@@ -521,12 +521,12 @@ class Database:
         db.hook()  # hook before load to catch potential preload events
 
         try:
-            is_library_mode = ida_kernwin.is_ida_library(None, 0, None)
+            library_mode = is_library_mode()
 
-            if is_library_mode and path:
+            if library_mode and path:
                 cls._open_new_database(path, args)
             else:
-                cls._use_current_database(path, is_library_mode)
+                cls._use_current_database(path, library_mode)
 
         except Exception:
             db.unhook()
@@ -583,7 +583,7 @@ class Database:
         # Use save_on_close as default if save parameter is not explicitly provided
         save_flag = save if save is not None else self.save_on_close
 
-        if ida_kernwin.is_ida_library(None, 0, None):
+        if is_library_mode():
             import idapro
 
             idapro.close_database(save_flag)
@@ -696,7 +696,7 @@ class Database:
         """
         Sets the current effective address (equivalent to the "screen EA" in IDA GUI).
         """
-        if ida_kernwin.is_ida_library(None, 0, None):
+        if is_library_mode():
             import idapro
 
             idapro.set_screen_ea(ea)
