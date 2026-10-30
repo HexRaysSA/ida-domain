@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import functools
 import logging
+import sys
 import warnings
 from collections.abc import Callable
 from enum import EnumMeta
@@ -260,6 +261,11 @@ def decorate_all_methods(decorator: Callable[[F], F]) -> Callable[[C], C]:
         return cls
 
     return decorate
+
+
+def is_library_mode() -> bool:
+    """Return True when IDA is running as a library (loaded through the idapro module)."""
+    return 'idapro' in sys.modules
 
 
 def requires_ida(min_version: str) -> Callable[[Callable[P, R]], Callable[P, R]]:
