@@ -144,7 +144,8 @@ class IdaCommandOptions:
             Default: None.
         disable_mouse (bool): If True, disables mouse support in text mode (-M).
             Default: False.
-        plugin_options (Optional[str]): Options to pass to plugins (-O).
+        plugin_options (Optional[Union[str, List[str]]]): Options to pass to
+            plugins (-O). A list gives one -O per entry.
             Default: None.
         output_database (Optional[str]): Output database path (-o). Implies new_database.
             Default: None.
@@ -207,8 +208,8 @@ class IdaCommandOptions:
     disable_mouse: bool = False
     """If True, disables mouse support in text mode (-M)."""
 
-    plugin_options: Optional[str] = None
-    """Options to pass to plugins (-O)."""
+    plugin_options: Optional[Union[str, List[str]]] = None
+    """Options to pass to plugins (-O). A list gives one -O per entry."""
 
     output_database: Optional[str] = None
     """Output database path (-o). Implies new_database."""
@@ -281,7 +282,11 @@ class IdaCommandOptions:
         if self.output_database:
             args.append(f'-o{self._quote(self.output_database)}')
         if self.plugin_options:
-            args.append(f'-O{self.plugin_options}')
+            plugin_options = self.plugin_options
+            if isinstance(plugin_options, str):
+                plugin_options = [plugin_options]
+            for opt in plugin_options:
+                args.append(f'-O{opt}')
         if self.processor:
             args.append(f'-p{self.processor}')
         if self.db_compression:
