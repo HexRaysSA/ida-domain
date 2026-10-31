@@ -3386,6 +3386,30 @@ def test_microcode_call_info_wrapper(test_env):
     assert arg.raw_arg is not None
 
 
+def test_microcode_call_arg_sub_instruction(test_env):
+    """A call argument's nested instruction keeps the call's parent block."""
+    from ida_domain.microcode import MicroMaturity
+
+    db = test_env
+    func = db.functions.get_at(0x2BC)
+    mf = db.microcode.generate(func, maturity=MicroMaturity.CALLS)
+
+    found_nested = False
+    for block in mf.blocks(skip_sentinels=True):
+        for insn in block:
+            if not insn.is_call():
+                continue
+            for arg in insn.d.call_info.args:
+                if arg.operand.is_sub_instruction():
+                    sub = arg.operand.sub_instruction
+                    assert sub is not None
+                    assert sub.block is not None
+                    assert sub.block.serial == block.serial
+                    found_nested = True
+
+    assert found_nested, 'print_number CALL should have a sub-instruction argument'
+
+
 def test_microcode_local_vars_wrapper(test_env):
     """Test MicroLocalVar, MicroLocalVars, and MicroBlockArray.vars."""
     from ida_domain.microcode import MicroLocalVar, MicroLocalVars, MicroMaturity
