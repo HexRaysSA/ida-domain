@@ -83,7 +83,7 @@ def test_expression_negate(test_env):
     ifs = func.find_if_instructions()
     loops = func.find_loops()
     targets = ifs + loops
-    assert len(targets) > 0, "print_number should have at least one if or loop"
+    assert len(targets) > 0, 'print_number should have at least one if or loop'
 
     for insn in targets:
         if insn.is_if:
@@ -113,7 +113,7 @@ def test_expression_negate(test_env):
         )
         return
 
-    pytest.fail("No suitable condition found in print_number")
+    pytest.fail('No suitable condition found in print_number')
 
 
 # ---------------------------------------------------------------------------
@@ -156,13 +156,11 @@ def test_find_parent_of_expression(tiny_pseudocode_env):
     for expr in func.walk_expressions():
         if expr.is_number or expr.is_variable:
             parent = func.find_parent_of(expr)
-            assert parent is not None, (
-                f"Expected a parent for {expr.op.name} at 0x{expr.ea:x}"
-            )
+            assert parent is not None, f'Expected a parent for {expr.op.name} at 0x{expr.ea:x}'
             assert isinstance(parent, (PseudocodeExpression, PseudocodeInstruction))
             return
 
-    pytest.fail("No number or variable expression found in nested_if")
+    pytest.fail('No number or variable expression found in nested_if')
 
 
 def test_find_parent_of_if_condition(tiny_pseudocode_env):
@@ -189,7 +187,7 @@ def test_find_parent_of_call_target(test_env):
     db = test_env
     func = db.pseudocode.decompile(0x2F7)  # level1_func — calls two functions
     calls = func.find_calls()
-    assert len(calls) > 0, "level1_func should have calls"
+    assert len(calls) > 0, 'level1_func should have calls'
 
     call_expr = calls[0]
     callee = call_expr.x
@@ -223,7 +221,7 @@ def test_find_parent_of_cache_matches_native(test_env):
         native = func.find_parent_of(node, use_cache=False)
         cached = func.find_parent_of(node, use_cache=True)
         assert node_id(cached) == node_id(native), (
-            f"parent mismatch for {node.op.name} at 0x{node.ea:x}"
+            f'parent mismatch for {node.op.name} at 0x{node.ea:x}'
         )
         assert type(cached) is type(native)
         nodes_checked += 1
@@ -232,14 +230,10 @@ def test_find_parent_of_cache_matches_native(test_env):
     # Full ancestor chain of every expression.
     chains_checked = 0
     for expr in func.walk_expressions():
-        native_chain = [
-            node_id(a) for a in func.walk_ancestors_of(expr, use_cache=False)
-        ]
-        cached_chain = [
-            node_id(a) for a in func.walk_ancestors_of(expr, use_cache=True)
-        ]
+        native_chain = [node_id(a) for a in func.walk_ancestors_of(expr, use_cache=False)]
+        cached_chain = [node_id(a) for a in func.walk_ancestors_of(expr, use_cache=True)]
         assert cached_chain == native_chain, (
-            f"ancestor chain mismatch for {expr.op.name} at 0x{expr.ea:x}"
+            f'ancestor chain mismatch for {expr.op.name} at 0x{expr.ea:x}'
         )
         chains_checked += 1
     assert chains_checked > 0
@@ -261,8 +255,8 @@ def test_set_user_comment(test_env):
     arg = args[0]
     old_comment = arg.comment
 
-    arg.set_user_comment("test comment from ida-domain")
-    assert arg.comment == "test comment from ida-domain"
+    arg.set_user_comment('test comment from ida-domain')
+    assert arg.comment == 'test comment from ida-domain'
 
     # Reset
     arg.set_user_comment(old_comment)
@@ -282,13 +276,13 @@ def test_save_local_variable_info_name(test_env):
     arg = func.arguments[0]
     original_name = arg.name
 
-    arg.set_user_name("my_test_param")
+    arg.set_user_name('my_test_param')
     result = func.save_local_variable_info(arg, save_name=True)
     assert result is True
 
     # Re-decompile and verify the name persisted
     func2 = db.pseudocode.decompile(0x2A3)
-    assert func2.arguments[0].name == "my_test_param"
+    assert func2.arguments[0].name == 'my_test_param'
 
     # Restore
     func2.arguments[0].set_user_name(original_name)
@@ -308,15 +302,15 @@ def test_save_local_variable_info_comment(test_env):
     func = db.pseudocode.decompile(0x2A3)
 
     arg = func.arguments[0]
-    arg.set_user_comment("persisted comment")
+    arg.set_user_comment('persisted comment')
     result = func.save_local_variable_info(arg, save_comment=True)
     assert result is True
 
     func2 = db.pseudocode.decompile(0x2A3)
-    assert func2.arguments[0].comment == "persisted comment"
+    assert func2.arguments[0].comment == 'persisted comment'
 
     # Cleanup
-    func2.arguments[0].set_user_comment("")
+    func2.arguments[0].set_user_comment('')
     func2.save_local_variable_info(func2.arguments[0], save_comment=True)
 
 
@@ -361,13 +355,13 @@ def test_user_comments_roundtrip(test_env):
     """Save a user comment via add_comment, then read it back via the context manager."""
     db = test_env
     func = db.pseudocode.decompile(0x2A3)
-    func.add_comment(func.entry_ea, "test cmt")
+    func.add_comment(func.entry_ea, 'test cmt')
 
     func2 = db.pseudocode.decompile(0x2A3)
     with func2.user_comments() as cmts:
         assert cmts is not None
-        found = any(str(cmt) == "test cmt" for _, cmt in cmts.items())
-        assert found, "Saved comment not found in user_comments()"
+        found = any(str(cmt) == 'test cmt' for _, cmt in cmts.items())
+        assert found, 'Saved comment not found in user_comments()'
 
     # Cleanup
     func2.remove_comment(func2.entry_ea)
@@ -386,14 +380,14 @@ def test_user_lvar_settings_after_rename(test_env):
     arg = func.arguments[0]
     original_name = arg.name
 
-    arg.set_user_name("lvar_test_name")
+    arg.set_user_name('lvar_test_name')
     func.save_local_variable_info(arg, save_name=True)
 
     func2 = db.pseudocode.decompile(0x2A3)
     with func2.user_lvar_settings() as lvinf:
         assert lvinf is not None
         names = [str(lv.name) for lv in lvinf.lvvec]
-        assert "lvar_test_name" in names
+        assert 'lvar_test_name' in names
 
     # Cleanup
     func2.arguments[0].set_user_name(original_name)
@@ -408,7 +402,7 @@ def test_user_lvar_settings_structure(test_env):
     arg = func.arguments[0]
     original_name = arg.name
 
-    arg.set_user_name("struct_check")
+    arg.set_user_name('struct_check')
     func.save_local_variable_info(arg, save_name=True)
 
     func2 = db.pseudocode.decompile(0x2A3)
@@ -436,7 +430,7 @@ def test_print_number_has_loop(test_env):
     db = test_env
     func = db.pseudocode.decompile(0x2BC)
     loops = func.find_loops()
-    assert len(loops) >= 1, "print_number should have at least one loop"
+    assert len(loops) >= 1, 'print_number should have at least one loop'
 
     loop = loops[0]
     if loop.op == PseudocodeInstructionOp.DO:
@@ -446,7 +440,7 @@ def test_print_number_has_loop(test_env):
     elif loop.op == PseudocodeInstructionOp.FOR:
         cond = loop.for_details.condition
     else:
-        pytest.fail(f"Unexpected loop type: {loop.op.name}")
+        pytest.fail(f'Unexpected loop type: {loop.op.name}')
 
     assert cond is not None
     assert len(cond.to_text()) > 0
@@ -467,11 +461,8 @@ def test_add_numbers_has_add_expression(test_env):
     db = test_env
     func = db.pseudocode.decompile(0x2A3)
 
-    add_exprs = [
-        e for e in func.walk_expressions()
-        if e.op == PseudocodeExpressionOp.ADD
-    ]
-    assert len(add_exprs) >= 1, "add_numbers should contain an ADD expression"
+    add_exprs = [e for e in func.walk_expressions() if e.op == PseudocodeExpressionOp.ADD]
+    assert len(add_exprs) >= 1, 'add_numbers should contain an ADD expression'
 
     add_expr = add_exprs[0]
     assert add_expr.x is not None
@@ -488,7 +479,7 @@ def test_add_numbers_find_local_variable(test_env):
     assert found is not None
     assert found.name == first_arg_name
 
-    assert func.find_local_variable("__nonexistent__") is None
+    assert func.find_local_variable('__nonexistent__') is None
 
 
 def test_level1_func_has_two_calls(test_env):
@@ -496,7 +487,7 @@ def test_level1_func_has_two_calls(test_env):
     db = test_env
     func = db.pseudocode.decompile(0x2F7)
     calls = func.find_calls()
-    assert len(calls) == 2, f"level1_func should have 2 calls, got {len(calls)}"
+    assert len(calls) == 2, f'level1_func should have 2 calls, got {len(calls)}'
 
 
 # ---------------------------------------------------------------------------
@@ -649,9 +640,7 @@ def test_number_signed_value(tiny_pseudocode_env):
     db = tiny_pseudocode_env
     func = db.pseudocode.decompile(0x157)  # use_negative — has 'a1 >= -1'
 
-    neg_one = func.find_expression(
-        lambda e: e.is_number and e.number == -1
-    )
+    neg_one = func.find_expression(lambda e: e.is_number and e.number == -1)
     assert neg_one is not None
     assert neg_one.number.value == -1
     assert neg_one.number.unsigned_value == 0xFFFFFFFFFFFFFFFF
@@ -1226,7 +1215,7 @@ def test_for_loop_has_break(tiny_pseudocode_env):
     for insn in func.walk_instructions():
         if insn.op == PseudocodeInstructionOp.BREAK:
             return
-    pytest.fail("Expected a BREAK instruction in use_for")
+    pytest.fail('Expected a BREAK instruction in use_for')
 
 
 # ---------------------------------------------------------------------------
@@ -1275,7 +1264,7 @@ def test_goto_instruction(tiny_pseudocode_env):
             assert gd.label_num >= 0
             return
 
-    pytest.fail("Expected a GOTO instruction in use_switch")
+    pytest.fail('Expected a GOTO instruction in use_switch')
 
 
 # ---------------------------------------------------------------------------
@@ -1302,7 +1291,7 @@ def test_ptr_expression_has_operand(tiny_pseudocode_env):
             assert e.ptr_size is not None
             assert e.ptr_size > 0
             return
-    pytest.fail("Expected a PTR expression in use_struct")
+    pytest.fail('Expected a PTR expression in use_struct')
 
 
 def test_idx_expression_has_operands(tiny_pseudocode_env):
@@ -1314,7 +1303,7 @@ def test_idx_expression_has_operands(tiny_pseudocode_env):
             assert e.x is not None  # base pointer
             assert e.y is not None  # index
             return
-    pytest.fail("Expected an IDX expression in use_struct")
+    pytest.fail('Expected an IDX expression in use_struct')
 
 
 # ---------------------------------------------------------------------------
@@ -1332,7 +1321,7 @@ def test_cast_expression(tiny_pseudocode_env):
             assert e.y is None  # unary
             assert e.type_info is not None
             return
-    pytest.fail("Expected a CAST expression in use_for")
+    pytest.fail('Expected a CAST expression in use_for')
 
 
 # ---------------------------------------------------------------------------
@@ -1465,7 +1454,7 @@ def test_goto_repr(tiny_pseudocode_env):
             assert 'PseudocodeGoto' in r
             assert 'label=' in r
             return
-    pytest.fail("No GOTO found")
+    pytest.fail('No GOTO found')
 
 
 # ---------------------------------------------------------------------------
@@ -1514,9 +1503,9 @@ def test_expression_from_number(test_env):
 
 def test_expression_from_string(test_env):
     """from_string creates a STR expression with the correct content."""
-    expr = PseudocodeExpression.from_string("hello")
+    expr = PseudocodeExpression.from_string('hello')
     assert expr.op == PseudocodeExpressionOp.STR
-    assert expr.string == "hello"
+    assert expr.string == 'hello'
 
 
 def test_expression_from_object(test_env):
@@ -1539,9 +1528,9 @@ def test_expression_from_variable(test_env):
 
 def test_expression_from_helper(test_env):
     """from_helper creates a HELPER expression with the correct name."""
-    expr = PseudocodeExpression.from_helper("LOWORD")
+    expr = PseudocodeExpression.from_helper('LOWORD')
     assert expr.op == PseudocodeExpressionOp.HELPER
-    assert expr.helper_name == "LOWORD"
+    assert expr.helper_name == 'LOWORD'
 
 
 def test_expression_set_type(test_env):
@@ -1595,10 +1584,10 @@ def test_expression_replace_with_string(test_env):
             break
     assert target is not None
 
-    new_str = PseudocodeExpression.from_string("0")
+    new_str = PseudocodeExpression.from_string('0')
     target.replace_with(new_str)
     assert target.op == PseudocodeExpressionOp.STR
-    assert target.string == "0"
+    assert target.string == '0'
 
     # Swap back to restore the tree
     target.replace_with(new_str)
@@ -1619,7 +1608,9 @@ def test_replace_then_refresh_renders_substitution(tiny_pseudocode_env):
 
     # Build a number with the type carried inline and swap it in.
     new_arg = PseudocodeExpression.from_number(
-        0x42, ea=old_arg.ea, type_info=old_arg.type_info,
+        0x42,
+        ea=old_arg.ea,
+        type_info=old_arg.type_info,
     )
     old_arg.replace_with(new_arg)
     func.refresh()
@@ -1681,7 +1672,7 @@ def test_instruction_make_return(test_env):
     assert insn.return_details is not None
 
 
-@min_ida_version("9.4")
+@min_ida_version('9.4')
 def test_instruction_make_if(test_env):
     """make_if creates an IF instruction with condition and branches."""
     db = test_env
@@ -1696,7 +1687,7 @@ def test_instruction_make_if(test_env):
     assert insn.if_details.has_else
 
 
-@min_ida_version("9.4")
+@min_ida_version('9.4')
 def test_instruction_make_if_no_else(test_env):
     """make_if without else_branch creates IF without else."""
     db = test_env
@@ -1756,8 +1747,8 @@ def test_add_comment_and_get_comment(test_env):
     func = db.pseudocode.decompile(0x2A3)
     ret = func.find_return_instructions()[0]
 
-    func.add_comment(ret.ea, "return value here")
-    assert func.get_comment(ret.ea) == "return value here"
+    func.add_comment(ret.ea, 'return value here')
+    assert func.get_comment(ret.ea) == 'return value here'
 
     # Cleanup
     func.remove_comment(ret.ea)
@@ -1770,10 +1761,10 @@ def test_add_comment_survives_redecompile(test_env):
     func = db.pseudocode.decompile(0x2A3)
     ea = func.entry_ea
 
-    func.add_comment(ea, "persisted cmt")
+    func.add_comment(ea, 'persisted cmt')
 
     func2 = db.pseudocode.decompile(0x2A3)
-    assert func2.get_comment(ea) == "persisted cmt"
+    assert func2.get_comment(ea) == 'persisted cmt'
 
     # Cleanup
     func2.remove_comment(ea)
@@ -1786,11 +1777,11 @@ def test_add_comment_appears_in_pseudocode(tiny_pseudocode_env):
 
     # Add comment at first return
     ret = func.find_return_instructions()[0]
-    func.add_comment(ret.ea, "negative branch")
+    func.add_comment(ret.ea, 'negative branch')
     func.refresh()
 
     text = '\n'.join(func.to_text())
-    assert "negative branch" in text
+    assert 'negative branch' in text
 
     # Cleanup
     func.remove_comment(ret.ea)
@@ -1802,8 +1793,8 @@ def test_remove_comment(test_env):
     func = db.pseudocode.decompile(0x2A3)
     ea = func.entry_ea
 
-    func.add_comment(ea, "temp comment")
-    assert func.get_comment(ea) == "temp comment"
+    func.add_comment(ea, 'temp comment')
+    assert func.get_comment(ea) == 'temp comment'
 
     func.remove_comment(ea)
     assert func.get_comment(ea) is None
@@ -1822,9 +1813,9 @@ def test_add_comment_replaces_existing(test_env):
     func = db.pseudocode.decompile(0x2A3)
     ea = func.entry_ea
 
-    func.add_comment(ea, "first")
-    func.add_comment(ea, "second")
-    assert func.get_comment(ea) == "second"
+    func.add_comment(ea, 'first')
+    func.add_comment(ea, 'second')
+    assert func.get_comment(ea) == 'second'
 
     # Cleanup
     func.remove_comment(ea)
@@ -1866,9 +1857,7 @@ def test_find_expression_variable(test_env):
     func = db.pseudocode.decompile(0x2A3)
     lvars = func.local_variables
 
-    expr = func.find_expression(
-        lambda e: e.is_variable and lvars[e.variable_index].name == 'a1'
-    )
+    expr = func.find_expression(lambda e: e.is_variable and lvars[e.variable_index].name == 'a1')
     assert expr is not None
     assert expr.is_variable
 
@@ -1943,7 +1932,9 @@ def test_from_binary_add(test_env):
     left = PseudocodeExpression.from_number(10)
     right = PseudocodeExpression.from_number(20)
     expr = PseudocodeExpression.from_binary(
-        PseudocodeExpressionOp.ADD, left, right,
+        PseudocodeExpressionOp.ADD,
+        left,
+        right,
     )
     assert expr.op == PseudocodeExpressionOp.ADD
     assert expr.x is not None
@@ -1958,7 +1949,9 @@ def test_from_binary_asg(test_env):
     lhs = PseudocodeExpression.from_variable(0, mba)
     rhs = PseudocodeExpression.from_number(42)
     expr = PseudocodeExpression.from_binary(
-        PseudocodeExpressionOp.ASG, lhs, rhs,
+        PseudocodeExpressionOp.ASG,
+        lhs,
+        rhs,
     )
     assert expr.op == PseudocodeExpressionOp.ASG
     assert expr.is_assignment
@@ -1966,7 +1959,7 @@ def test_from_binary_asg(test_env):
 
 def test_from_call_no_args(test_env):
     """from_call creates a call expression with no arguments."""
-    callee = PseudocodeExpression.from_helper("my_func")
+    callee = PseudocodeExpression.from_helper('my_func')
     call = PseudocodeExpression.from_call(callee)
     assert call.op == PseudocodeExpressionOp.CALL
     assert call.call_args is not None
@@ -1975,10 +1968,10 @@ def test_from_call_no_args(test_env):
 
 def test_from_call_with_args(test_env):
     """from_call creates a call expression with arguments."""
-    callee = PseudocodeExpression.from_helper("CONTAINING_RECORD")
+    callee = PseudocodeExpression.from_helper('CONTAINING_RECORD')
     arg1 = PseudocodeExpression.from_number(1)
-    arg2 = PseudocodeExpression.from_helper("MyStruct")
-    arg3 = PseudocodeExpression.from_helper("field_x")
+    arg2 = PseudocodeExpression.from_helper('MyStruct')
+    arg3 = PseudocodeExpression.from_helper('field_x')
     call = PseudocodeExpression.from_call(callee, [arg1, arg2, arg3])
     assert call.op == PseudocodeExpressionOp.CALL
     assert call.call_args is not None
@@ -2011,7 +2004,7 @@ def test_from_unary_rejects_binary_op(test_env):
     from ida_domain.base import InvalidParameterError
 
     a = PseudocodeExpression.from_number(1)
-    with pytest.raises(InvalidParameterError, match="not a unary"):
+    with pytest.raises(InvalidParameterError, match='not a unary'):
         PseudocodeExpression.from_unary(PseudocodeExpressionOp.ADD, a)
 
 
@@ -2020,7 +2013,7 @@ def test_from_unary_rejects_leaf_op(test_env):
     from ida_domain.base import InvalidParameterError
 
     a = PseudocodeExpression.from_number(1)
-    with pytest.raises(InvalidParameterError, match="not a unary"):
+    with pytest.raises(InvalidParameterError, match='not a unary'):
         PseudocodeExpression.from_unary(PseudocodeExpressionOp.NUM, a)
 
 
@@ -2030,7 +2023,7 @@ def test_from_binary_rejects_unary_op(test_env):
 
     a = PseudocodeExpression.from_number(1)
     b = PseudocodeExpression.from_number(2)
-    with pytest.raises(InvalidParameterError, match="not a binary"):
+    with pytest.raises(InvalidParameterError, match='not a binary'):
         PseudocodeExpression.from_binary(PseudocodeExpressionOp.NEG, a, b)
 
 
@@ -2044,7 +2037,7 @@ def test_from_unary_rejects_consumed_operand(test_env):
     a = PseudocodeExpression.from_number(1)
     neg = PseudocodeExpression.from_unary(PseudocodeExpressionOp.NEG, a)
     assert neg.op == PseudocodeExpressionOp.NEG
-    with pytest.raises(Exception, match="already owned"):
+    with pytest.raises(Exception, match='already owned'):
         PseudocodeExpression.from_unary(PseudocodeExpressionOp.BNOT, a)
 
 
@@ -2055,16 +2048,16 @@ def test_from_binary_rejects_consumed_operand(test_env):
     c = PseudocodeExpression.from_number(3)
     add = PseudocodeExpression.from_binary(PseudocodeExpressionOp.ADD, a, b)
     assert add.op == PseudocodeExpressionOp.ADD
-    with pytest.raises(Exception, match="already owned"):
+    with pytest.raises(Exception, match='already owned'):
         PseudocodeExpression.from_binary(PseudocodeExpressionOp.MUL, a, c)
 
 
 def test_from_call_rejects_consumed_callee(test_env):
     """A callee consumed by from_call cannot be reused in another factory."""
-    callee = PseudocodeExpression.from_helper("memset")
+    callee = PseudocodeExpression.from_helper('memset')
     call = PseudocodeExpression.from_call(callee)
     assert call.op == PseudocodeExpressionOp.CALL
-    with pytest.raises(Exception, match="already owned"):
+    with pytest.raises(Exception, match='already owned'):
         PseudocodeExpression.from_call(callee)
 
 
@@ -2073,9 +2066,9 @@ def test_make_expr_rejects_consumed_expression(test_env):
     expr = PseudocodeExpression.from_number(67)
     insn = PseudocodeInstruction.make_expr(0, expr)
     assert insn.op == PseudocodeInstructionOp.EXPR
-    with pytest.raises(Exception, match="already owned"):
+    with pytest.raises(Exception, match='already owned'):
         PseudocodeExpression.from_unary(PseudocodeExpressionOp.NEG, expr)
-    with pytest.raises(Exception, match="already owned"):
+    with pytest.raises(Exception, match='already owned'):
         PseudocodeInstruction.make_expr(0, expr)
 
 
@@ -2134,11 +2127,11 @@ def test_add_comment_accepts_comment_placement_enum(test_env):
     ea = func.entry_ea
 
     # Explicit CommentPlacement value.
-    func.add_comment(ea, "semi-anchored", placement=CommentPlacement.SEMI)
-    assert func.get_comment(ea, placement=CommentPlacement.SEMI) == "semi-anchored"
+    func.add_comment(ea, 'semi-anchored', placement=CommentPlacement.SEMI)
+    assert func.get_comment(ea, placement=CommentPlacement.SEMI) == 'semi-anchored'
 
     # Default placement resolves to CommentPlacement.SEMI — same comment is returned.
-    assert func.get_comment(ea) == "semi-anchored"
+    assert func.get_comment(ea) == 'semi-anchored'
 
     # Placement mismatch returns None (the comment was stored at SEMI only).
     assert func.get_comment(ea, placement=CommentPlacement.BLOCK1) is None
@@ -2177,6 +2170,7 @@ def test_add_comment_accepts_comment_placement_enum(test_env):
 #       return sys_write(1u, v4, (char *)&retaddr - v4);  // v4×2 R, retaddr ADDR
 #     }
 
+
 def _walk_cot_vars(pcfunc, var_index):
     """Helper: enumerate all cot_var cexpr_t nodes matching var_index by
     walking the ctree directly. Used as the ground-truth oracle for
@@ -2208,8 +2202,8 @@ def test_find_variable_references_count_matches_walk(test_env):
         refs = pcfunc.find_variable_references(var_index=lvar.index)
         ground_truth = _walk_cot_vars(pcfunc, lvar.index)
         assert len(refs) == len(ground_truth), (
-            f"{lvar.name}: find_variable_references returned {len(refs)} "
-            f"but ctree walk found {len(ground_truth)} cot_var occurrences"
+            f'{lvar.name}: find_variable_references returned {len(refs)} '
+            f'but ctree walk found {len(ground_truth)} cot_var occurrences'
         )
 
 
@@ -2227,7 +2221,7 @@ def test_find_variable_references_expr_is_cot_var(test_env):
             assert ref.expr.variable_index == lvar.index
             assert ref.expr.op == PseudocodeExpressionOp.VAR
             total += 1
-    assert total > 0, "expected at least one variable reference in func 0x2D0"
+    assert total > 0, 'expected at least one variable reference in func 0x2D0'
 
 
 def test_find_variable_references_parent_matches_find_parent_of(test_env):
@@ -2276,11 +2270,11 @@ def test_find_variable_references_write_has_assignment(test_env):
             if ref.access_type == LocalVariableAccessType.WRITE:
                 saw_write = True
                 assert ref.assignment is not None, (
-                    f"WRITE ref for {lvar.name} at line {ref.line_number} "
-                    f"has no enclosing assignment"
+                    f'WRITE ref for {lvar.name} at line {ref.line_number} '
+                    f'has no enclosing assignment'
                 )
                 assert ref.assignment.is_assignment
-    assert saw_write, "expected at least one WRITE in func 0x2D0"
+    assert saw_write, 'expected at least one WRITE in func 0x2D0'
 
 
 def test_walk_ancestors_yields_expressions_only(test_env):
@@ -2349,9 +2343,9 @@ def test_assignment_rhs_matches_assignment_y(test_env):
 def test_assignment_rhs_lvar_v5_eq_v3(test_env):
     """The only WRITE to v5 in print_number is the canonical copy:
 
-        v5 = v3;       // ref.assignment is this cot_asg
-                       // ref.assignment_rhs is the cot_var on .y
-                       // ref.assignment_rhs_lvar is LocalVariable("v3")
+    v5 = v3;       // ref.assignment is this cot_asg
+                   // ref.assignment_rhs is the cot_var on .y
+                   // ref.assignment_rhs_lvar is LocalVariable("v3")
     """
     db = test_env
     func = db.functions.get_at(0x2D0)
@@ -2359,7 +2353,7 @@ def test_assignment_rhs_lvar_v5_eq_v3(test_env):
 
     v5_refs = pcfunc.find_variable_references(var_name='v5')
     writes = [r for r in v5_refs if r.access_type == LocalVariableAccessType.WRITE]
-    assert len(writes) == 1, "expected exactly one WRITE for v5 (the v5 = v3;)"
+    assert len(writes) == 1, 'expected exactly one WRITE for v5 (the v5 = v3;)'
 
     write = writes[0]
     assert write.code_line == 'v5 = v3;'
@@ -2415,7 +2409,7 @@ def test_containing_call_args_lvars_sys_write(test_env):
 
     # Walk to find the sys_write call by name
     calls = pcfunc.find_calls(target_name='sys_write')
-    assert len(calls) == 1, "expected exactly one sys_write call"
+    assert len(calls) == 1, 'expected exactly one sys_write call'
     call = calls[0]
 
     args = list(call.call_args)
@@ -2424,17 +2418,16 @@ def test_containing_call_args_lvars_sys_write(test_env):
     # Build the expected lvar list directly from the call expression
     # (this is the same computation the property performs, used here as
     # a redundant ground-truth check).
-    v4_lvar = next(
-        lv for lv in db.functions.get_local_variables(func) if lv.name == 'v4'
-    )
+    v4_lvar = next(lv for lv in db.functions.get_local_variables(func) if lv.name == 'v4')
 
     # Grab any reference to v4 that sits inside this call — that ref's
     # containing_call_args_lvars should match the call's args.
     v4_refs = [
-        r for r in pcfunc.find_variable_references(var_index=v4_lvar.index)
+        r
+        for r in pcfunc.find_variable_references(var_index=v4_lvar.index)
         if r.containing_call is not None
     ]
-    assert len(v4_refs) > 0, "expected at least one v4 ref inside sys_write"
+    assert len(v4_refs) > 0, 'expected at least one v4 ref inside sys_write'
 
     for ref in v4_refs:
         assert ref.containing_call.raw_expr == call.raw_expr
@@ -2481,9 +2474,7 @@ def test_containing_call_args_lvars_consistency(test_env):
                     assert a is None or isinstance(a, LocalVariable)
                 checked_refs += 1
 
-    assert checked_refs > 0, (
-        "expected at least one lvar reference inside a call across the binary"
-    )
+    assert checked_refs > 0, 'expected at least one lvar reference inside a call across the binary'
 
 
 def test_print_number_ref_counts_hardcoded(test_env):
@@ -2518,13 +2509,13 @@ def test_print_number_ref_counts_hardcoded(test_env):
 
     # (total, writes, reads, addresses)
     expected = {
-        'a1':      (0, 0, 0, 0),
-        'a2':      (0, 0, 0, 0),
-        'a3':      (1, 0, 1, 0),
-        'v3':      (9, 5, 4, 0),
-        'v4':      (4, 2, 2, 0),
-        'v5':      (2, 1, 1, 0),
-        'v7':      (1, 0, 0, 1),
+        'a1': (0, 0, 0, 0),
+        'a2': (0, 0, 0, 0),
+        'a3': (1, 0, 1, 0),
+        'v3': (9, 5, 4, 0),
+        'v4': (4, 2, 2, 0),
+        'v5': (2, 1, 1, 0),
+        'v7': (1, 0, 0, 1),
         'retaddr': (1, 0, 0, 1),
     }
 
@@ -2537,18 +2528,16 @@ def test_print_number_ref_counts_hardcoded(test_env):
         total = len(refs)
         writes = sum(1 for r in refs if r.access_type == LocalVariableAccessType.WRITE)
         reads = sum(1 for r in refs if r.access_type == LocalVariableAccessType.READ)
-        addresses = sum(
-            1 for r in refs if r.access_type == LocalVariableAccessType.ADDRESS
-        )
+        addresses = sum(1 for r in refs if r.access_type == LocalVariableAccessType.ADDRESS)
         exp = expected[lvar.name]
         assert (total, writes, reads, addresses) == exp, (
-            f"{lvar.name}: expected (total,W,R,A)={exp}, "
-            f"got ({total},{writes},{reads},{addresses})"
+            f'{lvar.name}: expected (total,W,R,A)={exp}, '
+            f'got ({total},{writes},{reads},{addresses})'
         )
 
     # Sanity: every expected lvar was actually present in the function
     assert seen == set(expected.keys()), (
-        f"missing lvars in print_number: {set(expected.keys()) - seen}"
+        f'missing lvars in print_number: {set(expected.keys()) - seen}'
     )
 
 
@@ -2573,5 +2562,3 @@ def test_containing_call_none_when_not_in_call(test_env):
                 assert ref.containing_call_args_lvars is None
                 found_one = True
     assert found_one
-
-

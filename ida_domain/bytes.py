@@ -166,7 +166,6 @@ class ByteFlags(IntFlag):
     """Custom representation?"""
 
 
-
 logger = logging.getLogger(__name__)
 
 

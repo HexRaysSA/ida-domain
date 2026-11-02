@@ -33,7 +33,6 @@ def test_strings(test_env):
             f'String mismatch at index {i}, {str(item)} != {expected_strings[i][1]}'
         )
 
-
     string_info = db.strings.get_at(0x3D4)
     assert string_info is not None
     assert string_info.address == 0x3D4

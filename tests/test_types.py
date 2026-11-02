@@ -52,7 +52,6 @@ def test_types(test_env):
     assert type_info
     assert type_info.get_tid() == tif.get_tid()
 
-
     # Print details via visitor
     visitor = TypeDetailsVisitor(db)
     assert db.types.traverse(tif, visitor)
@@ -394,7 +393,7 @@ def test_apply_declaration_at(test_env):
 
     # Apply a function type declaration to the entry point
     entry = db.entries[0]
-    result = db.types.apply_declaration_at(entry.address, "int sub(int x);")
+    result = db.types.apply_declaration_at(entry.address, 'int sub(int x);')
     assert result is True
 
     # Verify the type was applied
@@ -408,7 +407,7 @@ def test_apply_declaration_at_invalid_ea(test_env):
     from ida_domain.base import InvalidEAError
 
     with pytest.raises(InvalidEAError):
-        db.types.apply_declaration_at(BADADDR, "int foo(void)")
+        db.types.apply_declaration_at(BADADDR, 'int foo(void)')
 
 
 def test_apply_declaration_at_empty_decl(test_env):
@@ -417,7 +416,7 @@ def test_apply_declaration_at_empty_decl(test_env):
 
     entry = db.entries[0]
     with pytest.raises(InvalidParameterError):
-        db.types.apply_declaration_at(entry.address, "")
+        db.types.apply_declaration_at(entry.address, '')
 
 
 def test_apply_declaration_at_invalid_decl(test_env):
@@ -426,7 +425,7 @@ def test_apply_declaration_at_invalid_decl(test_env):
 
     entry = db.entries[0]
     with pytest.raises(InvalidParameterError):
-        db.types.apply_declaration_at(entry.address, "not a valid declaration !!!")
+        db.types.apply_declaration_at(entry.address, 'not a valid declaration !!!')
 
 
 def test_parse_one_declaration_primitive_type(test_env):
@@ -698,8 +697,8 @@ def test_create_primitive_signed_and_unsigned(test_env):
         signed_t = db.types.create_primitive(size, signed=True)
         unsigned_t = db.types.create_primitive(size, signed=False)
 
-        assert signed_t.is_signed(), f"size={size} should be signed"
-        assert unsigned_t.is_unsigned(), f"size={size} should be unsigned"
+        assert signed_t.is_signed(), f'size={size} should be signed'
+        assert unsigned_t.is_unsigned(), f'size={size} should be unsigned'
         assert signed_t.get_size() == size
         assert unsigned_t.get_size() == size
         assert signed_t != unsigned_t
@@ -769,9 +768,7 @@ def test_pointer_ignored_at_idb(test_env):
     db.types.store_object_at(0x330, struct_type, {'value': 42, 'ptr': 0x340})
 
     # IGNORE_PTRS: pointer is NOT dereferenced, returns the address itself
-    retrieved = db.types.parse_object_at(
-        0x330, struct_type, ObjectIOFlags.IGNORE_PTRS
-    )
+    retrieved = db.types.parse_object_at(0x330, struct_type, ObjectIOFlags.IGNORE_PTRS)
     assert retrieved.value == 42
     assert retrieved.ptr == 0x340
 
@@ -811,9 +808,7 @@ def test_pointer_to_struct_followed_at_idb(test_env):
     assert retrieved.data.b == 0xBB
 
     # IGNORE_PTRS: data is the raw address
-    retrieved2 = db.types.parse_object_at(
-        0x330, outer_type, ObjectIOFlags.IGNORE_PTRS
-    )
+    retrieved2 = db.types.parse_object_at(0x330, outer_type, ObjectIOFlags.IGNORE_PTRS)
     assert retrieved2.id == 1
     assert retrieved2.data == 0x340
 
@@ -840,9 +835,7 @@ def test_pointer_lost_in_bytes_without_ignore_ptrs(test_env):
     assert retrieved.ptr == 0
 
     # IGNORE_PTRS from bytes: pointer value is preserved
-    retrieved2 = db.types.parse_object_from_bytes(
-        struct_type, packed, ObjectIOFlags.IGNORE_PTRS
-    )
+    retrieved2 = db.types.parse_object_from_bytes(struct_type, packed, ObjectIOFlags.IGNORE_PTRS)
     assert retrieved2.value == 42
     assert retrieved2.ptr == 0x200
 

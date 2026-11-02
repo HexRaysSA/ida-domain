@@ -39,9 +39,7 @@ class _BaseHooks(DatabaseEntity):
             argstrs = []
             for arg in args[1:]:
                 argstrs.append(f'{arg}={values[arg]}')
-            logger.debug(
-                '>>> %s.%s: %s', self.__class__.__name__, method_name, ', '.join(argstrs)
-            )
+            logger.debug('>>> %s.%s: %s', self.__class__.__name__, method_name, ', '.join(argstrs))
 
 
 class ProcessorHooks(_BaseHooks, IDP_Hooks):
