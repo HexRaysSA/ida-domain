@@ -264,7 +264,7 @@ def decorate_all_methods(decorator: Callable[[F], F]) -> Callable[[C], C]:
 
 
 def is_library_mode() -> bool:
-    """Return True when IDA is running as a library (loaded through the idapro module)."""
+    """Return True when IDA is running as a library."""
     return 'idapro' in sys.modules
 
 
