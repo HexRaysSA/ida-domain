@@ -8,6 +8,7 @@ from ida_idp import IDB_Hooks, IDP_Hooks
 from ida_kernwin import UI_Hooks, View_Hooks
 from typing_extensions import Any, TypeAlias, Union
 
+from . import _ida_compat
 from .base import DatabaseEntity
 
 logger = logging.getLogger(__name__)
@@ -2120,6 +2121,8 @@ class ProcessorHooks(_BaseHooks, IDP_Hooks):
         simd_attrs: 'simd_info_t',
         argloc: 'argloc_t',
         create_tifs: bool,
+        insn: 'insn_t' = None,
+        op: 'op_t' = None,
     ) -> int:
         """
         Get SIMD-related types according to given attributes and/or argument location.
@@ -2129,11 +2132,15 @@ class ProcessorHooks(_BaseHooks, IDP_Hooks):
             simd_attrs (simd_info_t): SIMD attributes (may be None).
             argloc (argloc_t): Argument location (may be None).
             create_tifs (bool): Return valid tinfo_t objects, create if necessary.
+            insn (insn_t): Instruction (may be None, not passed before IDA 9.3).
+            op (op_t): Operand (may be None, not passed before IDA 9.3).
 
         Returns:
             int: Number of found types, -1 on error.
         """
-        return IDP_Hooks.ev_get_simd_types(self, out, simd_attrs, argloc, create_tifs)
+        return _ida_compat.idp_hooks_ev_get_simd_types(
+            self, out, simd_attrs, argloc, create_tifs, insn, op
+        )
 
     def ev_calc_cdecl_purged_bytes(
         self,
