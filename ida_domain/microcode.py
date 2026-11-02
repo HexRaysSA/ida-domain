@@ -19,7 +19,7 @@ from ida_hexrays import (
     mlist_t,
     mop_t,
 )
-from typing_extensions import TYPE_CHECKING, Any, Iterator, List, Optional, Tuple
+from typing_extensions import TYPE_CHECKING, Any, Iterator, List, Optional, Tuple, deprecated
 
 from . import _ida_compat
 from .base import (
@@ -3323,9 +3323,20 @@ class MicroBlockArray:
         return self._raw.has_over_chains()
 
     @property
-    def final_type(self) -> bool:
+    def is_final_type(self) -> bool:
         """True if the function type is final (specified by the user)."""
         return self._raw.final_type
+
+    @property
+    @deprecated('final_type deprecated, use is_final_type instead')
+    def final_type(self) -> bool:
+        """Deprecated alias of :attr:`is_final_type`.
+
+        Warning:
+            This property has always returned a ``bool`` (the previous ``tinfo_t``
+            annotation was wrong). Use :attr:`is_final_type` instead.
+        """
+        return self.is_final_type
 
     @property
     def vars(self) -> MicroLocalVars:

@@ -665,14 +665,13 @@ def test_microcode_entry_block(test_env):
     assert eb.index == 0
 
 
-def test_microcode_function_final_type(test_env):
-    """Test final_type and create_helper_call on MicroBlockArray."""
+def test_microcode_function_is_final_type(test_env):
+    """Test is_final_type on MicroBlockArray."""
     db = test_env
     func = db.functions.get_at(0x2BC)
     mf = db.microcode.from_decompilation(func)
 
-    assert isinstance(mf.final_type, bool)
-
+    assert isinstance(mf.is_final_type, bool)
 
 
 def test_microcode_generate_for_range(test_env):
