@@ -22,7 +22,7 @@ class RequiresIdaExtension(griffe.Extension):
             if (
                 isinstance(decorator, ast.Call)
                 and isinstance(decorator.func, ast.Name)
-                and decorator.func.id == "requires_ida"
+                and decorator.func.id == 'requires_ida'
             ):
                 for arg in decorator.args:
                     if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
@@ -37,7 +37,11 @@ class RequiresIdaExtension(griffe.Extension):
             self._annotate(func, version)
 
     def on_attribute_instance(
-        self, *, node: ast.AST, attr: griffe.Attribute, **kwargs: Any,
+        self,
+        *,
+        node: ast.AST,
+        attr: griffe.Attribute,
+        **kwargs: Any,
     ) -> None:
         version = self._requires.pop(id(node), None)
         if version:
@@ -45,8 +49,8 @@ class RequiresIdaExtension(griffe.Extension):
 
     @staticmethod
     def _annotate(obj: griffe.Function | griffe.Attribute, version: str) -> None:
-        note = f"*IDA {version}+*{{ .ida-version-badge }}"
+        note = f'*IDA {version}+*{{ .ida-version-badge }}'
         if obj.docstring:
-            obj.docstring.value = f"{note}\n\n{obj.docstring.value}"
+            obj.docstring.value = f'{note}\n\n{obj.docstring.value}'
         else:
             obj.docstring = griffe.Docstring(note, parent=obj)

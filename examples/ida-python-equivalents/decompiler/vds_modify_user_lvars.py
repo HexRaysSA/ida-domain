@@ -25,7 +25,7 @@ for idx, lvar in enumerate(lvars):
     print(f"modify_lvars: var #{idx}: name = '{lvar.name}'")
     print(f"modify_lvars: var #{idx}: type = '{lvar.type_info}'")
     print(f"modify_lvars: var #{idx}: cmt  = '{lvar.comment}'")
-    print(f"modify_lvars: var #{idx}: size = {lvar.width}")
+    print(f'modify_lvars: var #{idx}: size = {lvar.width}')
 
     new_type_decl = NEW_TYPES.get(lvar.name)
     type_changed = False
@@ -35,7 +35,7 @@ for idx, lvar in enumerate(lvars):
             lvar.set_type(tif)
             type_changed = True
         except InvalidParameterError:
-            print(f"modify_lvars: could not parse type {new_type_decl!r}, skipping retype")
+            print(f'modify_lvars: could not parse type {new_type_decl!r}, skipping retype')
 
     lvar.set_user_name(NAME_PREFIX + lvar.name)
     lvar.set_user_comment(COMMENT_PREFIX + (lvar.comment or ''))

@@ -12,8 +12,6 @@ logger = logging.getLogger(__name__)
 
 
 def test_hooks():
-
-
     class TestProcHooks(hooks.ProcessorHooks):
         def __init__(self):
             super().__init__()

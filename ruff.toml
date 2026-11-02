@@ -2,6 +2,7 @@ line-length = 99
 indent-width = 4
 
 [format]
+exclude = ["*.md"]
 quote-style = "single"
 
 indent-style = "space"

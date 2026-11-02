@@ -40,7 +40,7 @@ class GotoChainOptimizer(MicroBlockOptimizer):
 
         # Rewrite: point goto directly at chain end
         tail.raw_instruction.l.b = i
-        block.replace_successor(t0, i)           # updates succset + predsets
+        block.replace_successor(t0, i)  # updates succset + predsets
         mf.mark_chains_dirty()
         mf.verify(True)
         return 1

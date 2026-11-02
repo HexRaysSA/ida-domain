@@ -45,7 +45,10 @@ class _GatedInt(int):
     needs_placeholder: bool
 
     def __new__(
-        cls, value: int, min_version: str, needs_placeholder: bool = False,
+        cls,
+        value: int,
+        min_version: str,
+        needs_placeholder: bool = False,
     ) -> _GatedInt:
         obj = super().__new__(cls, value)
         obj.min_version = Version(min_version)
@@ -68,7 +71,9 @@ class _CheckAttrSupport(EnumMeta):
 
                 if mval.needs_placeholder:
                     dict.__setitem__(
-                        namespace, mname, _GatedInt(placeholder, str(req)),
+                        namespace,
+                        mname,
+                        _GatedInt(placeholder, str(req)),
                     )
                     placeholder -= 1
 
@@ -279,8 +284,7 @@ def requires_ida(min_version: str) -> Callable[[Callable[P, R]], Callable[P, R]]
         @functools.wraps(fn)
         def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
             raise NotImplementedError(
-                f'{fn.__qualname__} requires IDA {min_version}+, '
-                f'current version is {_ida_version}'
+                f'{fn.__qualname__} requires IDA {min_version}+, current version is {_ida_version}'
             )
 
         return wrapper
