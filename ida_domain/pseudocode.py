@@ -3405,12 +3405,12 @@ class Pseudocode(DatabaseEntity):
     ) -> PseudocodeFunction:
         """Decompile a function and return the ctree result.
 
+        To bound how long decompilation may take, wrap the call in
+        ``decompiler_timeout()`` (IDA 9.5+).
+
         Args:
             ea_or_func: Function entry address or ``func_t`` object.
             flags: Decompilation flags (``DecompilationFlags``).
-
-        To bound how long decompilation may take, wrap the call in
-        ``decompiler_timeout()`` (IDA 9.5+).
 
         Returns:
             A ``PseudocodeFunction`` wrapping the ``cfunc_t`` result.

@@ -4458,6 +4458,9 @@ class Microcode(DatabaseEntity):
     ) -> MicroBlockArray:
         """Generate microcode for a function.
 
+        To bound how long generation may take, wrap the call in
+        ``decompiler_timeout()`` (IDA 9.5+).
+
         Args:
             func: An IDA ``func_t`` object (e.g. from ``db.functions.get_at()``).
             maturity: The desired maturity level.
@@ -4466,9 +4469,6 @@ class Microcode(DatabaseEntity):
 
         Returns:
             A :class:`MicroBlockArray` wrapping the generated ``mba_t``.
-
-        To bound how long generation may take, wrap the call in
-        ``decompiler_timeout()`` (IDA 9.5+).
 
         Raises:
             MicrocodeError: If microcode generation fails. ``code`` is
@@ -4499,6 +4499,9 @@ class Microcode(DatabaseEntity):
     ) -> MicroBlockArray:
         """Generate microcode for an address range.
 
+        To bound how long generation may take, wrap the call in
+        ``decompiler_timeout()`` (IDA 9.5+).
+
         Args:
             start_ea: Range start address.
             end_ea: Range end address.
@@ -4508,9 +4511,6 @@ class Microcode(DatabaseEntity):
 
         Returns:
             A :class:`MicroBlockArray` wrapping the generated ``mba_t``.
-
-        To bound how long generation may take, wrap the call in
-        ``decompiler_timeout()`` (IDA 9.5+).
 
         Raises:
             MicrocodeError: If microcode generation fails. ``code`` is
@@ -4540,6 +4540,9 @@ class Microcode(DatabaseEntity):
         Uses ``ida_hexrays.decompile()`` and returns the ``mba_t``
         from the resulting ``cfunc_t``.
 
+        To bound how long decompilation may take, wrap the call in
+        ``decompiler_timeout()`` (IDA 9.5+).
+
         Args:
             func: An IDA ``func_t`` object.
 
@@ -4547,13 +4550,14 @@ class Microcode(DatabaseEntity):
             A :class:`MicroBlockArray` at LVARS maturity.
 
         Raises:
-            MicrocodeError: If decompilation fails.
+            MicrocodeError: If decompilation fails. ``code`` is
+                ``MicroError.TIMEOUT`` if it ran past ``decompiler_timeout()``.
         """
         hf = ida_hexrays.hexrays_failure_t()
         cfunc = ida_hexrays.decompile(func.start_ea, hf)
         if not cfunc:
             raise _hexrays_error_from(
-                hf, f'Microcode generation failed for 0x{func.start_ea:x}', MicrocodeError
+                hf, f'Failed to decompile function at 0x{func.start_ea:x}', MicrocodeError
             )
         return MicroBlockArray(cfunc.mba, _owner=cfunc)
 
