@@ -315,3 +315,22 @@ def test_get_switch_thumb(tiny_switch_thumb_env):
     # IDA doesn't see the subtraction of the lowest case here, so it reports table
     # indices (0..6) instead of -3..3. Only check that the switch is found.
     assert _switch_in(db, 'negative') is not None
+
+
+def test_get_switch_sparse(tiny_switch_dalvik_env):
+    db = tiny_switch_dalvik_env
+
+    # Dalvik sparse-switch: a value table, so switch_info_t has no low case
+    switch = _switch_in(db, 'TinySwitch.sparse@VI')
+    assert switch.raw_switch_info.is_sparse()
+    assert not switch.raw_switch_info.is_indirect()
+    assert switch.low_case == -5
+    assert switch.element_size == 4
+    assert _callee(db, switch.default_ea) == 'TinySwitch.sparse_default@V'
+    assert _calls_by_value(db, switch) == {
+        -5: 'TinySwitch.sparse_m5@V',
+        1: 'TinySwitch.sparse_1@V',
+        100: 'TinySwitch.sparse_100@V',
+        1000: 'TinySwitch.sparse_1000@V',
+    }
+    assert switch.target_of(2) == switch.default_ea
