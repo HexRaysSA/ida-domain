@@ -66,7 +66,7 @@ class SwitchInfo:
     element_size: int
     """Size of a jump table entry, in bytes."""
     low_case: int
-    """Lowest case value the table lookup handles."""
+    """Lowest case value, counting values that the table sends to the default."""
     default_ea: Optional[ea_t]
     """
     Where values without a case jump to, or None if the switch has no default or
@@ -550,19 +550,13 @@ class Instructions(DatabaseEntity):
             return None
         cases.sort(key=lambda case: case.values[0])
 
-        # Case values are signed, like calc_switch_cases() and IDA's listing
-        # show them, but the low case comes back as an unsigned address-sized
-        # value. Not si.lowcase: for indirect switches it holds the value table.
-        bits = self.database.bitness or 64
-        low_case = si.get_lowcase() & ((1 << bits) - 1)
-        if low_case >= 1 << (bits - 1):
-            low_case -= 1 << bits
-
         return SwitchInfo(
             ea=insn.ea,
             jump_table_ea=si.jumps,
             element_size=si.get_jtable_element_size(),
-            low_case=low_case,
+            # Not si.get_lowcase(): sparse switches keep their value table
+            # address there, and it comes back unsigned.
+            low_case=cases[0].values[0],
             default_ea=si.defjump if si.has_default() else None,
             cases=tuple(cases),
             raw_switch_info=si,
