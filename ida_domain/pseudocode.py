@@ -35,6 +35,7 @@ from .microcode import (
     MicroError,
     MicroLocalVar,
     MicroLocalVars,
+    _hexrays_error_from,
 )
 
 if TYPE_CHECKING:
@@ -3422,16 +3423,8 @@ class Pseudocode(DatabaseEntity):
         hf = ida_hexrays.hexrays_failure_t()
         cfunc = ida_hexrays.decompile(ea, hf, int(flags))
         if not cfunc:
-            errea = hf.errea if hf.errea != ida_idaapi.BADADDR else None
-            try:
-                code: Optional[MicroError] = MicroError(hf.code)
-            except ValueError:
-                code = None
-            raise PseudocodeError(
-                f'Failed to decompile function at 0x{ea:x}: '
-                f'{hf.str or (code.name if code is not None else hf.code)}',
-                errea=errea,
-                code=code,
+            raise _hexrays_error_from(
+                hf, f'Failed to decompile function at 0x{ea:x}', PseudocodeError
             )
         return PseudocodeFunction(cfunc)
 

@@ -21,7 +21,17 @@ from ida_hexrays import (
     mlist_t,
     mop_t,
 )
-from typing_extensions import TYPE_CHECKING, Any, Iterator, List, Optional, Tuple, Union
+from typing_extensions import (
+    TYPE_CHECKING,
+    Any,
+    Iterator,
+    List,
+    Optional,
+    Protocol,
+    Tuple,
+    TypeVar,
+    Union,
+)
 
 from . import _ida_compat
 from .base import (
@@ -4280,20 +4290,38 @@ class MicrocodeLifter(ida_hexrays.microcode_filter_t):
 # ---------------------------------------------------------------------------
 
 
-def _microcode_error_from(hf: Any, location: str) -> MicrocodeError:
-    """Build a :class:`MicrocodeError` from a ``hexrays_failure_t``."""
+_E_co = TypeVar('_E_co', bound=DecompilerError, covariant=True)
+
+
+class _HexraysErrorType(Protocol[_E_co]):
+    """An error class built as ``cls(message, code=..., errea=...)``."""
+
+    def __call__(
+        self, message: str, *, code: Optional[MicroError], errea: Optional[int]
+    ) -> _E_co: ...
+
+
+def _hexrays_error_from(
+    hf: ida_hexrays.hexrays_failure_t, summary: str, error_cls: _HexraysErrorType[_E_co]
+) -> _E_co:
+    """Build ``error_cls`` from a ``hexrays_failure_t``.
+
+    Args:
+        hf: The failure filled in by the failed decompiler call.
+        summary: What failed, e.g. ``'Failed to decompile function at 0x1a'``.
+        error_cls: The error class to build, e.g. :class:`MicrocodeError`.
+    """
     try:
-        code = MicroError(hf.code)
-        code_label = code.name
+        code: Optional[MicroError] = MicroError(hf.code)
     except ValueError:
         code = None
-        code_label = str(hf.code)
+    code_label = code.name if code is not None else str(hf.code)
     errea = hf.errea if hf.errea != ida_idaapi.BADADDR else None
-    parts = [f'Microcode generation failed for {location}']
+    parts = [summary]
     parts.append(f'{code_label}: {hf.str}' if hf.str else code_label)
     if errea is not None:
         parts.append(f'at 0x{errea:x}')
-    return MicrocodeError(' — '.join(parts), code=code, errea=errea)
+    return error_cls(' — '.join(parts), code=code, errea=errea)
 
 
 # ---------------------------------------------------------------------------
@@ -4452,7 +4480,9 @@ class Microcode(DatabaseEntity):
         mba = ida_hexrays.gen_microcode(mbr, hf, ml, int(flags), int(maturity))
 
         if not mba:
-            raise _microcode_error_from(hf, f'0x{func.start_ea:x}')
+            raise _hexrays_error_from(
+                hf, f'Microcode generation failed for 0x{func.start_ea:x}', MicrocodeError
+            )
 
         if build_graph:
             mba.build_graph()
@@ -4493,7 +4523,11 @@ class Microcode(DatabaseEntity):
         mba = ida_hexrays.gen_microcode(mbr, hf, ml, int(flags), int(maturity))
 
         if not mba:
-            raise _microcode_error_from(hf, f'range 0x{start_ea:x}:0x{end_ea:x}')
+            raise _hexrays_error_from(
+                hf,
+                f'Microcode generation failed for range 0x{start_ea:x}:0x{end_ea:x}',
+                MicrocodeError,
+            )
 
         if build_graph:
             mba.build_graph()
@@ -4518,7 +4552,9 @@ class Microcode(DatabaseEntity):
         hf = ida_hexrays.hexrays_failure_t()
         cfunc = ida_hexrays.decompile(func.start_ea, hf)
         if not cfunc:
-            raise _microcode_error_from(hf, f'0x{func.start_ea:x}')
+            raise _hexrays_error_from(
+                hf, f'Microcode generation failed for 0x{func.start_ea:x}', MicrocodeError
+            )
         return MicroBlockArray(cfunc.mba, _owner=cfunc)
 
     def get_text(
