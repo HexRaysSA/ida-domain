@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 import math
-import warnings
 from contextlib import contextmanager
 from enum import IntEnum, IntFlag
 
@@ -29,9 +28,7 @@ from .base import (
     DatabaseEntity,
     DecompilerError,
     InvalidParameterError,
-    NotSupportedWarning,
     _CheckAttrSupport,
-    _ida_version,
     _since_ida,
     check_db_open,
     decorate_all_methods,
@@ -4342,6 +4339,7 @@ def get_hexrays_version() -> str:
 _MAX_DECOMPILER_TIMEOUT_MS = 2**31 - 1
 
 
+@requires_ida('9.5')
 @contextmanager
 def decompiler_timeout(seconds: Optional[float]) -> Iterator[None]:
     """Limit how long each decompilation may take inside a ``with`` block.
@@ -4358,9 +4356,6 @@ def decompiler_timeout(seconds: Optional[float]) -> Iterator[None]:
     The timeout lives in the decompiler, which is only loaded while a database
     is open: enter the block after opening the database. Closing the database
     clears the timeout.
-
-    Requires IDA 9.5+. On older versions this does nothing and emits a
-    ``NotSupportedWarning``.
 
     Example:
         ```python
@@ -4396,24 +4391,16 @@ def decompiler_timeout(seconds: Optional[float]) -> Iterator[None]:
             'seconds', seconds, f'must be at most {_MAX_DECOMPILER_TIMEOUT_MS / 1000} seconds'
         )
 
-    if not _ida_compat.HAS_DECOMPILER_TIMEOUT:
-        warnings.warn(
-            f'decompiler_timeout requires IDA 9.5+, current version is {_ida_version}',
-            category=NotSupportedWarning,
-            stacklevel=3,
-        )
-        yield
-        return
     if not ida_hexrays.init_hexrays_plugin():
         raise DecompilerError(
             'decompiler_timeout: the decompiler is not loaded; open a database first'
         )
 
-    previous = _ida_compat.set_decompiler_timeout(msecs)
+    previous = ida_hexrays.set_decompiler_timeout(msecs)
     try:
         yield
     finally:
-        _ida_compat.set_decompiler_timeout(previous)
+        ida_hexrays.set_decompiler_timeout(previous)
 
 
 # ---------------------------------------------------------------------------

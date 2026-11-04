@@ -8,11 +8,7 @@ import ida_domain  # isort: skip
 
 from conftest import max_ida_version, min_ida_version  # noqa: E402
 
-from ida_domain.base import (  # noqa: E402
-    DecompilerError,
-    InvalidParameterError,
-    NotSupportedWarning,
-)
+from ida_domain.base import DecompilerError, InvalidParameterError  # noqa: E402
 from ida_domain.microcode import (  # noqa: E402
     DecompilationFlags,
     MicrocodeError,
@@ -154,6 +150,7 @@ def test_timeout_rounds_up_to_one_millisecond(tiny_c_env):
         assert _current_timeout_ms() == 1
 
 
+@min_ida_version('9.5')
 @pytest.mark.parametrize(
     'seconds', [-1, -0.001, float('nan'), float('inf'), 2**31 / 1000, True, '5']
 )
@@ -164,11 +161,7 @@ def test_timeout_rejects_invalid_values(tiny_c_env, seconds):
 
 
 @max_ida_version('9.4')
-def test_timeout_is_noop_before_9_5(tiny_c_env):
-    func = tiny_c_env.functions.get_by_name('complex_assignments')
-
-    with pytest.warns(NotSupportedWarning):
-        with decompiler_timeout(0.001):
-            cfunc = tiny_c_env.pseudocode.decompile(func, DecompilationFlags.NO_CACHE)
-
-    assert cfunc.body is not None
+def test_timeout_requires_9_5(tiny_c_env):
+    with pytest.raises(NotImplementedError):
+        with decompiler_timeout(5):
+            pass
