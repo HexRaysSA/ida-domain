@@ -25,20 +25,22 @@ from ida_domain.microcode import (
 
 # -- intra-block xref collection (uses ida-domain) --------------------------
 
+
 def collect_block_xrefs(out, mlist, block, start_insn, find_uses):
     insn = start_insn
-    while insn and mlist:                              # MicroLocationSet.__bool__
+    while insn and mlist:  # MicroLocationSet.__bool__
         use_set = block.build_use_list(insn, AccessType.MUST)
         def_set = block.build_def_list(insn, AccessType.MUST)
         check = use_set if find_uses else def_set
-        if mlist.has_common(check):                     # any overlap?
+        if mlist.has_common(check):  # any overlap?
             if insn.ea not in out:
                 out.append(insn.ea)
-        mlist -= def_set                               # MicroLocationSet.__isub__ (subtract)
+        mlist -= def_set  # MicroLocationSet.__isub__ (subtract)
         insn = insn.next if find_uses else insn.prev
 
 
 # -- cross-block xref collection (raw IDAPython chains) ---------------------
+
 
 def collect_xrefs(out, ctx, mop, mlist, du, mf, find_uses):
     # Current block — wrap raw ctx objects into ida-domain wrappers
@@ -55,13 +57,14 @@ def collect_xrefs(out, ctx, mop, mlist, du, mf, find_uses):
     if not ch:
         return
     for bn in ch:
-        b = mf[bn]                                    # MicroBlockArray.__getitem__
+        b = mf[bn]  # MicroBlockArray.__getitem__
         ins = b.head if find_uses else b.tail
         if ins:
             collect_block_xrefs(out, mlist.copy(), b, ins, find_uses)
 
 
 # -- chooser UI (raw ida_kernwin) -------------------------------------------
+
 
 class XrefChooser(ida_kernwin.Choose):
     """Chooser dialog showing use/def xrefs."""
@@ -129,8 +132,7 @@ mf = db.microcode.generate(
 )
 ncalls = mf.analyze_calls(AnalyzeCallsFlags.GUESS)
 if ncalls < 0:
-    print(f'{func.start_ea:08x}: failed to determine '
-          f'some calling conventions')
+    print(f'{func.start_ea:08x}: failed to determine some calling conventions')
 
 mlist = MicroLocationSet()
 if not gco.append_to_list(mlist.raw_mlist, mf.raw_mba):

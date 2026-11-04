@@ -42,6 +42,7 @@ with pfunc.user_comments() as cmts:
 with pfunc.user_iflags() as iflags:
     if iflags is not None:
         import ida_hexrays
+
         print(f'------- {len(iflags)} user defined citem iflags')
         for cl, f in iflags.items():
             collapsed = ' CIT_COLLAPSED' if (f & ida_hexrays.CIT_COLLAPSED) else ''

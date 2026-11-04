@@ -43,7 +43,10 @@ jobs:
         run: uv sync --extra dev
 
       - name: Code linting
-        run: uvx ruff check
+        run: uv run ruff check
+
+      - name: Code formatting
+        run: uv run ruff format --check
 
       - name: Type checking
         run: uv run mypy ida_domain

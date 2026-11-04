@@ -31,6 +31,7 @@ from typing_extensions import (
     Tuple,
     TypeVar,
     Union,
+    deprecated,
 )
 
 from . import _ida_compat
@@ -634,9 +635,13 @@ class MicroCallArg:
         """The argument value as a :class:`MicroOperand`.
 
         ``mcallarg_t`` inherits from ``mop_t``, so the argument
-        itself is a micro-operand.
+        itself is a micro-operand.  It is parented on the instruction
+        that holds the call, if known.
         """
-        return MicroOperand(self._raw, _parent_insn=self)
+        call = self._parent_call
+        call_op = call._parent_op if call is not None else None
+        parent_insn = call_op._parent_insn if call_op is not None else None
+        return MicroOperand(self._raw, _parent_insn=parent_insn, _owner=self)
 
     # -- mutation ----------------------------------------------------------
 
@@ -1243,9 +1248,15 @@ class MicroOperand:
 
     _T = MicroOperandType  # shorthand for type checks
 
-    def __init__(self, raw: mop_t, _parent_insn: Optional[Any] = None):
+    def __init__(
+        self,
+        raw: mop_t,
+        _parent_insn: Optional[MicroInstruction] = None,
+        _owner: Any = None,
+    ):
         self._raw = raw
         self._parent_insn = _parent_insn
+        self._owner = _owner  # prevent GC of parent (e.g. a detached MicroCallInfo)
 
     # -- factories ---------------------------------------------------------
 
@@ -1558,7 +1569,7 @@ class MicroOperand:
     def address_target(self) -> Optional[MicroOperand]:
         """Inner operand of an address-of (``mop_a``) operand, or *None*."""
         if self._raw.t == self._T.ADDR_OF:
-            return MicroOperand(self._raw.a, self._parent_insn)
+            return MicroOperand(self._raw.a, self._parent_insn, self._owner)
         return None
 
     @property
@@ -1566,8 +1577,8 @@ class MicroOperand:
         """(low, high) operand pair for ``mop_p`` operands, or *None*."""
         if self._raw.t == self._T.PAIR:
             return (
-                MicroOperand(self._raw.pair.lop, self._parent_insn),
-                MicroOperand(self._raw.pair.hop, self._parent_insn),
+                MicroOperand(self._raw.pair.lop, self._parent_insn, self._owner),
+                MicroOperand(self._raw.pair.hop, self._parent_insn, self._owner),
             )
         return None
 
@@ -3336,9 +3347,20 @@ class MicroBlockArray:
         return self._raw.has_over_chains()
 
     @property
-    def final_type(self) -> tinfo_t:
-        """Return type of the function."""
+    def is_final_type(self) -> bool:
+        """True if the function type is final (specified by the user)."""
         return self._raw.final_type
+
+    @property
+    @deprecated('final_type deprecated, use is_final_type instead')
+    def final_type(self) -> bool:
+        """Deprecated alias of :attr:`is_final_type`.
+
+        Warning:
+            This property has always returned a ``bool`` (the previous ``tinfo_t``
+            annotation was wrong). Use :attr:`is_final_type` instead.
+        """
+        return self.is_final_type
 
     @property
     def vars(self) -> MicroLocalVars:

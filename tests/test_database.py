@@ -244,8 +244,12 @@ def test_ida_command_options():
     assert opts.build_args() == '-M'
 
     # Test plugin options
-    opts = IdaCommandOptions(plugin_options='opt1=val1')
-    assert opts.build_args() == '-Oopt1=val1'
+    opts = IdaCommandOptions(plugin_options='lumina:host=0.0.0.0')
+    assert opts.build_args() == '-Olumina:host=0.0.0.0'
+    opts = IdaCommandOptions(
+        plugin_options=['lumina:host=0.0.0.0', 'secondary_lumina:host=0.0.0.0']
+    )
+    assert opts.build_args() == '-Olumina:host=0.0.0.0 -Osecondary_lumina:host=0.0.0.0'
 
     # Test output database option (should also set -c flag)
     opts = IdaCommandOptions(output_database='output.idb')

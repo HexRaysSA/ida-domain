@@ -39,7 +39,7 @@ class EntryInfo:
     ordinal: int
     address: ea_t
     name: str
-    forwarder_name: str
+    forwarder_name: Optional[str]
 
     def has_forwarder(self) -> bool:
         """Check if this entry point has a forwarder."""
@@ -204,7 +204,7 @@ class Entries(DatabaseEntity):
             ForwarderInfo: Information about each entry with a forwarder
         """
         for entry in self.get_all():
-            if entry.has_forwarder():
+            if entry.forwarder_name:
                 yield ForwarderInfo(ordinal=entry.ordinal, name=entry.forwarder_name)
 
     def get_by_name(self, name: str) -> Optional[EntryInfo]:

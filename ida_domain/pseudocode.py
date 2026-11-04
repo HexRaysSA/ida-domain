@@ -75,96 +75,96 @@ class PseudocodeExpressionOp(IntEnum):
     """Expression operator types corresponding to ``cot_*`` constants."""
 
     # Empty
-    EMPTY = ida_hexrays.cot_empty       # 0
+    EMPTY = ida_hexrays.cot_empty  # 0
 
     # Assignment operators
-    COMMA = ida_hexrays.cot_comma       # 1  x, y
-    ASG = ida_hexrays.cot_asg           # 2  x = y
-    ASG_BOR = ida_hexrays.cot_asgbor    # 3  x |= y
-    ASG_XOR = ida_hexrays.cot_asgxor    # 4  x ^= y
+    COMMA = ida_hexrays.cot_comma  # 1  x, y
+    ASG = ida_hexrays.cot_asg  # 2  x = y
+    ASG_BOR = ida_hexrays.cot_asgbor  # 3  x |= y
+    ASG_XOR = ida_hexrays.cot_asgxor  # 4  x ^= y
     ASG_BAND = ida_hexrays.cot_asgband  # 5  x &= y
-    ASG_ADD = ida_hexrays.cot_asgadd    # 6  x += y
-    ASG_SUB = ida_hexrays.cot_asgsub    # 7  x -= y
-    ASG_MUL = ida_hexrays.cot_asgmul    # 8  x *= y
+    ASG_ADD = ida_hexrays.cot_asgadd  # 6  x += y
+    ASG_SUB = ida_hexrays.cot_asgsub  # 7  x -= y
+    ASG_MUL = ida_hexrays.cot_asgmul  # 8  x *= y
     ASG_SSHR = ida_hexrays.cot_asgsshr  # 9  x >>= y signed
     ASG_USHR = ida_hexrays.cot_asgushr  # 10 x >>= y unsigned
-    ASG_SHL = ida_hexrays.cot_asgshl    # 11 x <<= y
+    ASG_SHL = ida_hexrays.cot_asgshl  # 11 x <<= y
     ASG_SDIV = ida_hexrays.cot_asgsdiv  # 12 x /= y signed
     ASG_UDIV = ida_hexrays.cot_asgudiv  # 13 x /= y unsigned
     ASG_SMOD = ida_hexrays.cot_asgsmod  # 14 x %= y signed
     ASG_UMOD = ida_hexrays.cot_asgumod  # 15 x %= y unsigned
 
     # Ternary / logical
-    TERNARY = ida_hexrays.cot_tern      # 16 x ? y : z
-    LOR = ida_hexrays.cot_lor           # 17 x || y
-    LAND = ida_hexrays.cot_land         # 18 x && y
+    TERNARY = ida_hexrays.cot_tern  # 16 x ? y : z
+    LOR = ida_hexrays.cot_lor  # 17 x || y
+    LAND = ida_hexrays.cot_land  # 18 x && y
 
     # Bitwise
-    BOR = ida_hexrays.cot_bor           # 19 x | y
-    XOR = ida_hexrays.cot_xor           # 20 x ^ y
-    BAND = ida_hexrays.cot_band         # 21 x & y
+    BOR = ida_hexrays.cot_bor  # 19 x | y
+    XOR = ida_hexrays.cot_xor  # 20 x ^ y
+    BAND = ida_hexrays.cot_band  # 21 x & y
 
     # Comparison
-    EQ = ida_hexrays.cot_eq             # 22 x == y
-    NE = ida_hexrays.cot_ne             # 23 x != y
-    SGE = ida_hexrays.cot_sge           # 24 x >= y signed
-    UGE = ida_hexrays.cot_uge           # 25 x >= y unsigned
-    SLE = ida_hexrays.cot_sle           # 26 x <= y signed
-    ULE = ida_hexrays.cot_ule           # 27 x <= y unsigned
-    SGT = ida_hexrays.cot_sgt           # 28 x > y signed
-    UGT = ida_hexrays.cot_ugt          # 29 x > y unsigned
-    SLT = ida_hexrays.cot_slt           # 30 x < y signed
-    ULT = ida_hexrays.cot_ult           # 31 x < y unsigned
+    EQ = ida_hexrays.cot_eq  # 22 x == y
+    NE = ida_hexrays.cot_ne  # 23 x != y
+    SGE = ida_hexrays.cot_sge  # 24 x >= y signed
+    UGE = ida_hexrays.cot_uge  # 25 x >= y unsigned
+    SLE = ida_hexrays.cot_sle  # 26 x <= y signed
+    ULE = ida_hexrays.cot_ule  # 27 x <= y unsigned
+    SGT = ida_hexrays.cot_sgt  # 28 x > y signed
+    UGT = ida_hexrays.cot_ugt  # 29 x > y unsigned
+    SLT = ida_hexrays.cot_slt  # 30 x < y signed
+    ULT = ida_hexrays.cot_ult  # 31 x < y unsigned
 
     # Shift
-    SSHR = ida_hexrays.cot_sshr         # 32 x >> y signed
-    USHR = ida_hexrays.cot_ushr         # 33 x >> y unsigned
-    SHL = ida_hexrays.cot_shl           # 34 x << y
+    SSHR = ida_hexrays.cot_sshr  # 32 x >> y signed
+    USHR = ida_hexrays.cot_ushr  # 33 x >> y unsigned
+    SHL = ida_hexrays.cot_shl  # 34 x << y
 
     # Arithmetic
-    ADD = ida_hexrays.cot_add           # 35 x + y
-    SUB = ida_hexrays.cot_sub           # 36 x - y
-    MUL = ida_hexrays.cot_mul           # 37 x * y
-    SDIV = ida_hexrays.cot_sdiv         # 38 x / y signed
-    UDIV = ida_hexrays.cot_udiv         # 39 x / y unsigned
-    SMOD = ida_hexrays.cot_smod         # 40 x % y signed
-    UMOD = ida_hexrays.cot_umod         # 41 x % y unsigned
+    ADD = ida_hexrays.cot_add  # 35 x + y
+    SUB = ida_hexrays.cot_sub  # 36 x - y
+    MUL = ida_hexrays.cot_mul  # 37 x * y
+    SDIV = ida_hexrays.cot_sdiv  # 38 x / y signed
+    UDIV = ida_hexrays.cot_udiv  # 39 x / y unsigned
+    SMOD = ida_hexrays.cot_smod  # 40 x % y signed
+    UMOD = ida_hexrays.cot_umod  # 41 x % y unsigned
 
     # Floating-point arithmetic
-    FADD = ida_hexrays.cot_fadd         # 42 x + y fp
-    FSUB = ida_hexrays.cot_fsub         # 43 x - y fp
-    FMUL = ida_hexrays.cot_fmul         # 44 x * y fp
-    FDIV = ida_hexrays.cot_fdiv         # 45 x / y fp
+    FADD = ida_hexrays.cot_fadd  # 42 x + y fp
+    FSUB = ida_hexrays.cot_fsub  # 43 x - y fp
+    FMUL = ida_hexrays.cot_fmul  # 44 x * y fp
+    FDIV = ida_hexrays.cot_fdiv  # 45 x / y fp
 
     # Unary
-    FNEG = ida_hexrays.cot_fneg         # 46 -x fp
-    NEG = ida_hexrays.cot_neg           # 47 -x
-    CAST = ida_hexrays.cot_cast         # 48 (type)x
-    LNOT = ida_hexrays.cot_lnot        # 49 !x
-    BNOT = ida_hexrays.cot_bnot         # 50 ~x
-    PTR = ida_hexrays.cot_ptr           # 51 *x
-    REF = ida_hexrays.cot_ref           # 52 &x
-    POSTINC = ida_hexrays.cot_postinc   # 53 x++
-    POSTDEC = ida_hexrays.cot_postdec   # 54 x--
-    PREINC = ida_hexrays.cot_preinc     # 55 ++x
-    PREDEC = ida_hexrays.cot_predec     # 56 --x
+    FNEG = ida_hexrays.cot_fneg  # 46 -x fp
+    NEG = ida_hexrays.cot_neg  # 47 -x
+    CAST = ida_hexrays.cot_cast  # 48 (type)x
+    LNOT = ida_hexrays.cot_lnot  # 49 !x
+    BNOT = ida_hexrays.cot_bnot  # 50 ~x
+    PTR = ida_hexrays.cot_ptr  # 51 *x
+    REF = ida_hexrays.cot_ref  # 52 &x
+    POSTINC = ida_hexrays.cot_postinc  # 53 x++
+    POSTDEC = ida_hexrays.cot_postdec  # 54 x--
+    PREINC = ida_hexrays.cot_preinc  # 55 ++x
+    PREDEC = ida_hexrays.cot_predec  # 56 --x
 
     # Access
-    CALL = ida_hexrays.cot_call         # 57 x(...)
-    IDX = ida_hexrays.cot_idx           # 58 x[y]
-    MEMREF = ida_hexrays.cot_memref     # 59 x.m
-    MEMPTR = ida_hexrays.cot_memptr     # 60 x->m
+    CALL = ida_hexrays.cot_call  # 57 x(...)
+    IDX = ida_hexrays.cot_idx  # 58 x[y]
+    MEMREF = ida_hexrays.cot_memref  # 59 x.m
+    MEMPTR = ida_hexrays.cot_memptr  # 60 x->m
 
     # Leaf / literal
-    NUM = ida_hexrays.cot_num           # 61 number
-    FNUM = ida_hexrays.cot_fnum         # 62 fp number
-    STR = ida_hexrays.cot_str           # 63 string constant
-    OBJ = ida_hexrays.cot_obj           # 64 obj_ea
-    VAR = ida_hexrays.cot_var           # 65 local variable
-    INSN = ida_hexrays.cot_insn         # 66 embedded insn (internal)
-    SIZEOF = ida_hexrays.cot_sizeof     # 67 sizeof(x)
-    HELPER = ida_hexrays.cot_helper     # 68 helper name
-    TYPE = ida_hexrays.cot_type         # 69 arbitrary type
+    NUM = ida_hexrays.cot_num  # 61 number
+    FNUM = ida_hexrays.cot_fnum  # 62 fp number
+    STR = ida_hexrays.cot_str  # 63 string constant
+    OBJ = ida_hexrays.cot_obj  # 64 obj_ea
+    VAR = ida_hexrays.cot_var  # 65 local variable
+    INSN = ida_hexrays.cot_insn  # 66 embedded insn (internal)
+    SIZEOF = ida_hexrays.cot_sizeof  # 67 sizeof(x)
+    HELPER = ida_hexrays.cot_helper  # 68 helper name
+    TYPE = ida_hexrays.cot_type  # 69 arbitrary type
 
     # -- category queries --------------------------------------------------
 
@@ -215,18 +215,23 @@ class PseudocodeExpressionOp(IntEnum):
     def is_arithmetic(self) -> bool:
         """True for integer arithmetic operators (``+``, ``-``, ``*``, ``/``, ``%``)."""
         return self in (
-            PseudocodeExpressionOp.ADD, PseudocodeExpressionOp.SUB,
+            PseudocodeExpressionOp.ADD,
+            PseudocodeExpressionOp.SUB,
             PseudocodeExpressionOp.MUL,
-            PseudocodeExpressionOp.SDIV, PseudocodeExpressionOp.UDIV,
-            PseudocodeExpressionOp.SMOD, PseudocodeExpressionOp.UMOD,
+            PseudocodeExpressionOp.SDIV,
+            PseudocodeExpressionOp.UDIV,
+            PseudocodeExpressionOp.SMOD,
+            PseudocodeExpressionOp.UMOD,
         )
 
     @property
     def is_floating_point(self) -> bool:
         """True for floating-point arithmetic operators."""
         return self in (
-            PseudocodeExpressionOp.FADD, PseudocodeExpressionOp.FSUB,
-            PseudocodeExpressionOp.FMUL, PseudocodeExpressionOp.FDIV,
+            PseudocodeExpressionOp.FADD,
+            PseudocodeExpressionOp.FSUB,
+            PseudocodeExpressionOp.FMUL,
+            PseudocodeExpressionOp.FDIV,
             PseudocodeExpressionOp.FNEG,
         )
 
@@ -234,21 +239,21 @@ class PseudocodeExpressionOp(IntEnum):
 class PseudocodeInstructionOp(IntEnum):
     """Statement/instruction operator types corresponding to ``cit_*`` constants."""
 
-    EMPTY = ida_hexrays.cit_empty       # 70
-    BLOCK = ida_hexrays.cit_block       # 71
-    EXPR = ida_hexrays.cit_expr         # 72
-    IF = ida_hexrays.cit_if             # 73
-    FOR = ida_hexrays.cit_for           # 74
-    WHILE = ida_hexrays.cit_while       # 75
-    DO = ida_hexrays.cit_do             # 76
-    SWITCH = ida_hexrays.cit_switch     # 77
-    BREAK = ida_hexrays.cit_break       # 78
-    CONTINUE = ida_hexrays.cit_continue # 79
-    RETURN = ida_hexrays.cit_return     # 80
-    GOTO = ida_hexrays.cit_goto         # 81
-    ASM = ida_hexrays.cit_asm           # 82
-    TRY = ida_hexrays.cit_try           # 83
-    THROW = ida_hexrays.cit_throw       # 84
+    EMPTY = ida_hexrays.cit_empty  # 70
+    BLOCK = ida_hexrays.cit_block  # 71
+    EXPR = ida_hexrays.cit_expr  # 72
+    IF = ida_hexrays.cit_if  # 73
+    FOR = ida_hexrays.cit_for  # 74
+    WHILE = ida_hexrays.cit_while  # 75
+    DO = ida_hexrays.cit_do  # 76
+    SWITCH = ida_hexrays.cit_switch  # 77
+    BREAK = ida_hexrays.cit_break  # 78
+    CONTINUE = ida_hexrays.cit_continue  # 79
+    RETURN = ida_hexrays.cit_return  # 80
+    GOTO = ida_hexrays.cit_goto  # 81
+    ASM = ida_hexrays.cit_asm  # 82
+    TRY = ida_hexrays.cit_try  # 83
+    THROW = ida_hexrays.cit_throw  # 84
 
     # -- category queries --------------------------------------------------
 
@@ -265,8 +270,10 @@ class PseudocodeInstructionOp(IntEnum):
     def is_control_flow(self) -> bool:
         """True for control-flow instructions (``break``, ``continue``, ``return``, ``goto``)."""
         return self in (
-            PseudocodeInstructionOp.BREAK, PseudocodeInstructionOp.CONTINUE,
-            PseudocodeInstructionOp.RETURN, PseudocodeInstructionOp.GOTO,
+            PseudocodeInstructionOp.BREAK,
+            PseudocodeInstructionOp.CONTINUE,
+            PseudocodeInstructionOp.RETURN,
+            PseudocodeInstructionOp.GOTO,
         )
 
 
@@ -370,7 +377,8 @@ class PseudocodeNumber:
     """
 
     def __init__(
-        self, raw: ida_hexrays.cnumber_t,
+        self,
+        raw: ida_hexrays.cnumber_t,
         _parent_expr: Optional[PseudocodeExpression] = None,
     ):
         self._raw = raw
@@ -520,7 +528,8 @@ class PseudocodeCallArg:
     """
 
     def __init__(
-        self, raw: ida_hexrays.carg_t,
+        self,
+        raw: ida_hexrays.carg_t,
         _parent_list: Optional[PseudocodeCallArgList] = None,
     ):
         self._raw = raw
@@ -564,7 +573,8 @@ class PseudocodeCallArgList:
     """
 
     def __init__(
-        self, raw: ida_hexrays.carglist_t,
+        self,
+        raw: ida_hexrays.carglist_t,
         _parent_expr: Optional[PseudocodeExpression] = None,
     ):
         self._raw = raw
@@ -592,9 +602,7 @@ class PseudocodeCallArgList:
         if i < 0:
             i += len(self._raw)
         if i < 0 or i >= len(self._raw):
-            raise IndexError(
-                f'Argument index out of range (0..{len(self._raw) - 1})'
-            )
+            raise IndexError(f'Argument index out of range (0..{len(self._raw) - 1})')
         return PseudocodeCallArg(self._raw[i], self)
 
     def __iter__(self) -> Iterator[PseudocodeCallArg]:
@@ -619,7 +627,8 @@ class PseudocodeExpression:
     """
 
     def __init__(
-        self, raw: ida_hexrays.cexpr_t,
+        self,
+        raw: ida_hexrays.cexpr_t,
         _parent: Optional[Any] = None,
     ):
         self._raw = raw
@@ -1159,7 +1168,8 @@ class PseudocodeInstruction:
     """
 
     def __init__(
-        self, raw: ida_hexrays.cinsn_t,
+        self,
+        raw: ida_hexrays.cinsn_t,
         _parent: Optional[Any] = None,
     ):
         self._raw = raw
@@ -1550,7 +1560,8 @@ class PseudocodeBlock:
     """
 
     def __init__(
-        self, raw: ida_hexrays.cblock_t,
+        self,
+        raw: ida_hexrays.cblock_t,
         _parent: Optional[Any] = None,
     ):
         self._raw = raw
@@ -1569,9 +1580,7 @@ class PseudocodeBlock:
         if i < 0:
             i += size
         if i < 0 or i >= size:
-            raise IndexError(
-                f'Block index out of range (0..{size - 1})'
-            )
+            raise IndexError(f'Block index out of range (0..{size - 1})')
         return PseudocodeInstruction(self._raw.at(i), self)
 
     def __iter__(self) -> Iterator[PseudocodeInstruction]:
@@ -1642,7 +1651,8 @@ class PseudocodeIf:
     """Wrapper around an IDA ``cif_t`` (if-instruction details)."""
 
     def __init__(
-        self, raw: ida_hexrays.cif_t,
+        self,
+        raw: ida_hexrays.cif_t,
         _parent_insn: Optional[PseudocodeInstruction] = None,
     ):
         self._raw = raw
@@ -1673,10 +1683,7 @@ class PseudocodeIf:
     @property
     def has_else(self) -> bool:
         """True if there is an else-branch."""
-        return (
-            self._raw.ielse is not None
-            and self._raw.ielse.op != PseudocodeInstructionOp.EMPTY
-        )
+        return self._raw.ielse is not None and self._raw.ielse.op != PseudocodeInstructionOp.EMPTY
 
     def swap_branches(self) -> bool:
         """Swap the then/else branches and negate the condition.
@@ -1700,7 +1707,8 @@ class PseudocodeFor:
     """Wrapper around an IDA ``cfor_t`` (for-loop details)."""
 
     def __init__(
-        self, raw: ida_hexrays.cfor_t,
+        self,
+        raw: ida_hexrays.cfor_t,
         _parent_insn: Optional[PseudocodeInstruction] = None,
     ):
         self._raw = raw
@@ -1739,7 +1747,8 @@ class PseudocodeWhile:
     """Wrapper around an IDA ``cwhile_t`` (while-loop details)."""
 
     def __init__(
-        self, raw: ida_hexrays.cwhile_t,
+        self,
+        raw: ida_hexrays.cwhile_t,
         _parent_insn: Optional[PseudocodeInstruction] = None,
     ):
         self._raw = raw
@@ -1768,7 +1777,8 @@ class PseudocodeDo:
     """Wrapper around an IDA ``cdo_t`` (do-while details)."""
 
     def __init__(
-        self, raw: ida_hexrays.cdo_t,
+        self,
+        raw: ida_hexrays.cdo_t,
         _parent_insn: Optional[PseudocodeInstruction] = None,
     ):
         self._raw = raw
@@ -1797,7 +1807,8 @@ class PseudocodeCase:
     """Wrapper around an IDA ``ccase_t`` (single switch case)."""
 
     def __init__(
-        self, raw: ida_hexrays.ccase_t,
+        self,
+        raw: ida_hexrays.ccase_t,
         _parent_switch: Optional[PseudocodeSwitch] = None,
     ):
         self._raw = raw
@@ -1839,7 +1850,8 @@ class PseudocodeSwitch:
     """
 
     def __init__(
-        self, raw: ida_hexrays.cswitch_t,
+        self,
+        raw: ida_hexrays.cswitch_t,
         _parent_insn: Optional[PseudocodeInstruction] = None,
     ):
         self._raw = raw
@@ -1875,7 +1887,8 @@ class PseudocodeReturn:
     """Wrapper around an IDA ``creturn_t`` (return-instruction details)."""
 
     def __init__(
-        self, raw: ida_hexrays.creturn_t,
+        self,
+        raw: ida_hexrays.creturn_t,
         _parent_insn: Optional[PseudocodeInstruction] = None,
     ):
         self._raw = raw
@@ -1899,7 +1912,8 @@ class PseudocodeGoto:
     """Wrapper around an IDA ``cgoto_t`` (goto-instruction details)."""
 
     def __init__(
-        self, raw: ida_hexrays.cgoto_t,
+        self,
+        raw: ida_hexrays.cgoto_t,
         _parent_insn: Optional[PseudocodeInstruction] = None,
     ):
         self._raw = raw
@@ -1923,7 +1937,8 @@ class PseudocodeTry:
     """Wrapper around an IDA ``ctry_t`` (C++ try-instruction details)."""
 
     def __init__(
-        self, raw: ida_hexrays.ctry_t,
+        self,
+        raw: ida_hexrays.ctry_t,
         _parent_insn: Optional[PseudocodeInstruction] = None,
     ):
         self._raw = raw
@@ -1947,7 +1962,8 @@ class PseudocodeThrow:
     """Wrapper around an IDA ``cthrow_t`` (C++ throw-instruction details)."""
 
     def __init__(
-        self, raw: ida_hexrays.cthrow_t,
+        self,
+        raw: ida_hexrays.cthrow_t,
         _parent_insn: Optional[PseudocodeInstruction] = None,
     ):
         self._raw = raw
@@ -2128,6 +2144,7 @@ class PseudocodeFunction:
     def get_func_type(self) -> Optional[tinfo_t]:
         """Get the function type information."""
         import ida_typeinf
+
         tif = ida_typeinf.tinfo_t()
         if self._raw.get_func_type(tif):
             return tif
@@ -2613,10 +2630,7 @@ class PseudocodeFunction:
         Returns:
             List of ``PseudocodeExpression`` nodes where ``is_string`` is True.
         """
-        return [
-            expr for expr in self.walk_expressions()
-            if expr.is_string
-        ]
+        return [expr for expr in self.walk_expressions() if expr.is_string]
 
     def find_variables(
         self,
@@ -2689,16 +2703,18 @@ class PseudocodeFunction:
                 if 0 <= line_number < len(sv):
                     code_line = ida_lines.tag_remove(sv[line_number].line).strip()
 
-            refs.append(LocalVariableReference(
-                access_type=access_type,
-                context=context,
-                ea=ea,
-                line_number=line_number,
-                code_line=code_line,
-                expr=expr,
-                parent=parent,
-                cfunc=self,
-            ))
+            refs.append(
+                LocalVariableReference(
+                    access_type=access_type,
+                    context=context,
+                    ea=ea,
+                    line_number=line_number,
+                    code_line=code_line,
+                    expr=expr,
+                    parent=parent,
+                    cfunc=self,
+                )
+            )
         return refs
 
     def find_objects(self, obj_ea: Optional[int] = None) -> List[PseudocodeExpression]:
@@ -2711,7 +2727,8 @@ class PseudocodeFunction:
             List of ``PseudocodeExpression`` nodes where ``is_object`` is True.
         """
         return [
-            expr for expr in self.walk_expressions()
+            expr
+            for expr in self.walk_expressions()
             if expr.is_object and (obj_ea is None or expr.obj_ea == obj_ea)
         ]
 
@@ -2721,10 +2738,7 @@ class PseudocodeFunction:
         Returns:
             List of ``PseudocodeExpression`` nodes where ``is_assignment`` is True.
         """
-        return [
-            expr for expr in self.walk_expressions()
-            if expr.is_assignment
-        ]
+        return [expr for expr in self.walk_expressions() if expr.is_assignment]
 
     def find_if_instructions(self) -> List[PseudocodeInstruction]:
         """Find all if-instructions.
@@ -2732,10 +2746,7 @@ class PseudocodeFunction:
         Returns:
             List of ``PseudocodeInstruction`` nodes where ``is_if`` is True.
         """
-        return [
-            insn for insn in self.walk_instructions()
-            if insn.is_if
-        ]
+        return [insn for insn in self.walk_instructions() if insn.is_if]
 
     def find_loops(self) -> List[PseudocodeInstruction]:
         """Find all loop instructions (``for``, ``while``, ``do``).
@@ -2743,10 +2754,7 @@ class PseudocodeFunction:
         Returns:
             List of loop ``PseudocodeInstruction`` nodes.
         """
-        return [
-            insn for insn in self.walk_instructions()
-            if insn.is_loop
-        ]
+        return [insn for insn in self.walk_instructions() if insn.is_loop]
 
     def find_return_instructions(self) -> List[PseudocodeInstruction]:
         """Find all return instructions.
@@ -2754,10 +2762,7 @@ class PseudocodeFunction:
         Returns:
             List of ``PseudocodeInstruction`` nodes where ``is_return`` is True.
         """
-        return [
-            insn for insn in self.walk_instructions()
-            if insn.is_return
-        ]
+        return [insn for insn in self.walk_instructions() if insn.is_return]
 
     # -- dunder protocols --------------------------------------------------
 
@@ -2766,10 +2771,7 @@ class PseudocodeFunction:
         return '\n'.join(self.to_text())
 
     def __repr__(self) -> str:
-        return (
-            f'PseudocodeFunction(ea=0x{self._raw.entry_ea:x}, '
-            f'maturity={self.maturity.name})'
-        )
+        return f'PseudocodeFunction(ea=0x{self._raw.entry_ea:x}, maturity={self.maturity.name})'
 
 
 # ============================================================================
@@ -3021,9 +3023,7 @@ class LocalVariableReference:
                 result.append(None)
         return result
 
-    def walk_ancestors(
-        self, use_cache: bool = False
-    ) -> Iterator[PseudocodeExpression]:
+    def walk_ancestors(self, use_cache: bool = False) -> Iterator[PseudocodeExpression]:
         """Yield ancestor expressions from innermost (parent) to outermost.
 
         Thin delegate over :meth:`PseudocodeFunction.walk_ancestors_of`;
@@ -3038,16 +3038,18 @@ class LocalVariableReference:
 # assignment (e.g. ``HIWORD(v) = ...``, ``*v = ...``, ``v[i] = ...``).
 # When the immediate parent is one of these, we must walk up to find the
 # assignment and verify the variable is in its left subtree.
-_LVAR_WRITE_WRAPPING_OPS = frozenset({
-    PseudocodeExpressionOp.CALL,
-    PseudocodeExpressionOp.HELPER,
-    PseudocodeExpressionOp.CAST,
-    PseudocodeExpressionOp.PTR,
-    PseudocodeExpressionOp.MEMPTR,
-    PseudocodeExpressionOp.MEMREF,
-    PseudocodeExpressionOp.ADD,
-    PseudocodeExpressionOp.IDX,
-})
+_LVAR_WRITE_WRAPPING_OPS = frozenset(
+    {
+        PseudocodeExpressionOp.CALL,
+        PseudocodeExpressionOp.HELPER,
+        PseudocodeExpressionOp.CAST,
+        PseudocodeExpressionOp.PTR,
+        PseudocodeExpressionOp.MEMPTR,
+        PseudocodeExpressionOp.MEMREF,
+        PseudocodeExpressionOp.ADD,
+        PseudocodeExpressionOp.IDX,
+    }
+)
 
 
 def _is_in_left_subtree(

@@ -67,7 +67,6 @@ def test_names(test_env):
 
     assert db.names.get_at(db.minimum_ea) == '_start'
 
-
     test_addr = 0x418
     success = db.names.set_name(test_addr, 'test_name', SetNameFlags.NOCHECK)
     assert isinstance(success, bool) and success

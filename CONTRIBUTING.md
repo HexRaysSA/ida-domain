@@ -33,7 +33,7 @@ Feature requests are welcome! Please provide:
 
 ### Prerequisites for Development
 
-- Python 3.10+
+- Python 3.11+
 - IDA Pro (for testing)
 - UV for dependency management
 - pytest for testing (included in dev dependencies)
@@ -110,6 +110,7 @@ The generated documentation will be available at `docs/_build/html/index.html`.
 ### Python Code Style
 
 - Follow PEP 8 style guidelines
+- Code is formatted with `ruff format`
 - Use type hints for function parameters and return values
 - Use descriptive variable and function names
 - Keep functions focused and small
@@ -302,8 +303,11 @@ python examples/explore_database.py -f tests/resources/tiny_asm.bin
 ### Common Development Tasks
 
 ```bash
-# Format code
-uv run black ida_domain/ examples/ tests/
+# Format code (configuration lives in ruff.toml)
+uv run ruff format ida_domain/ examples/ tests/
+
+# Check formatting without modifying files
+uv run ruff format --check ida_domain/ examples/ tests/
 
 # Run linting
 uv run ruff check ida_domain/ examples/ tests/

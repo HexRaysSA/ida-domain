@@ -785,7 +785,7 @@ class TypeDetails:
 
     def __init__(self) -> None:
         self._attributes = TypeAttr(0)
-        self._name: str = ''
+        self._name: Optional[str] = None
         self._size: int = 0
         self._udt_details: Optional[UdtDetails] = None
         self._enum_details: Optional[EnumDetails] = None
@@ -800,8 +800,8 @@ class TypeDetails:
         return self._attributes
 
     @property
-    def name(self) -> str:
-        """Get the name of the type."""
+    def name(self) -> Optional[str]:
+        """Get the name of the type, or None for unnamed types."""
         return self._name
 
     @property
@@ -1544,7 +1544,7 @@ class Types(DatabaseEntity):
     def parse_header_file(
         self,
         library: til_t,
-        header: Path,
+        header: Union[str, Path],
         flags: TypeFormattingFlags = TypeFormattingFlags.HTI_FIL | TypeFormattingFlags.HTI_PAKDEF,
     ) -> int:
         """
@@ -1558,7 +1558,7 @@ class Types(DatabaseEntity):
         Returns:
             Number of parse errors.
         """
-        return ida_typeinf.parse_decls(library, header, None, flags)
+        return ida_typeinf.parse_decls(library, str(header), None, flags)
 
     def parse_declarations(
         self,
