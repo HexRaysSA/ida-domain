@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+import math
+from contextlib import contextmanager
 from enum import IntEnum, IntFlag
 
 import ida_hexrays
@@ -19,7 +21,18 @@ from ida_hexrays import (
     mlist_t,
     mop_t,
 )
-from typing_extensions import TYPE_CHECKING, Any, Iterator, List, Optional, Tuple, deprecated
+from typing_extensions import (
+    TYPE_CHECKING,
+    Any,
+    Iterator,
+    List,
+    Optional,
+    Protocol,
+    Tuple,
+    TypeVar,
+    Union,
+    deprecated,
+)
 
 from . import _ida_compat
 from .base import (
@@ -373,6 +386,7 @@ class MicroError(IntEnum, metaclass=_CheckAttrSupport):
     CLOUD = ida_hexrays.MERR_CLOUD
     LOOP = ida_hexrays.MERR_LOOP
     EMULATOR = _since_ida('9.2', ida_hexrays, 'MERR_EMULATOR')
+    TIMEOUT = _since_ida('9.5', ida_hexrays, 'MERR_TIMEOUT')
 
 
 class MicrocodeError(DecompilerError):
@@ -4298,20 +4312,38 @@ class MicrocodeLifter(ida_hexrays.microcode_filter_t):
 # ---------------------------------------------------------------------------
 
 
-def _microcode_error_from(hf: Any, location: str) -> MicrocodeError:
-    """Build a :class:`MicrocodeError` from a ``hexrays_failure_t``."""
+_E_co = TypeVar('_E_co', bound=DecompilerError, covariant=True)
+
+
+class _HexraysErrorType(Protocol[_E_co]):
+    """An error class built as ``cls(message, code=..., errea=...)``."""
+
+    def __call__(
+        self, message: str, *, code: Optional[MicroError], errea: Optional[int]
+    ) -> _E_co: ...
+
+
+def _hexrays_error_from(
+    hf: ida_hexrays.hexrays_failure_t, summary: str, error_cls: _HexraysErrorType[_E_co]
+) -> _E_co:
+    """Build ``error_cls`` from a ``hexrays_failure_t``.
+
+    Args:
+        hf: The failure filled in by the failed decompiler call.
+        summary: What failed, e.g. ``'Failed to decompile function at 0x1a'``.
+        error_cls: The error class to build, e.g. :class:`MicrocodeError`.
+    """
     try:
-        code = MicroError(hf.code)
-        code_label = code.name
+        code: Optional[MicroError] = MicroError(hf.code)
     except ValueError:
         code = None
-        code_label = str(hf.code)
+    code_label = code.name if code is not None else str(hf.code)
     errea = hf.errea if hf.errea != ida_idaapi.BADADDR else None
-    parts = [f'Microcode generation failed for {location}']
+    parts = [summary]
     parts.append(f'{code_label}: {hf.str}' if hf.str else code_label)
     if errea is not None:
         parts.append(f'at 0x{errea:x}')
-    return MicrocodeError(' — '.join(parts), code=code, errea=errea)
+    return error_cls(' — '.join(parts), code=code, errea=errea)
 
 
 # ---------------------------------------------------------------------------
@@ -4353,6 +4385,74 @@ def get_hexrays_version() -> str:
     return ida_hexrays.get_hexrays_version()
 
 
+# The decompiler stores the timeout in milliseconds as a C int.
+_MAX_DECOMPILER_TIMEOUT_MS = 2**31 - 1
+
+
+@requires_ida('9.5')
+@contextmanager
+def decompiler_timeout(seconds: Optional[Union[int, float]]) -> Iterator[None]:
+    """Limit how long each decompilation may take inside a ``with`` block.
+
+    Applies to every decompilation started in the block, including
+    ``db.pseudocode.decompile()`` and ``db.microcode.generate()``. Each
+    decompilation gets the full budget. A decompilation that runs out fails
+    with ``MicroError.TIMEOUT``.
+
+    The timeout is process-wide. Blocks can be nested; the innermost one wins,
+    and the previous timeout is restored on exit, even if an exception is
+    raised.
+
+    The timeout lives in the decompiler, which is only loaded while a database
+    is open: enter the block after opening the database. Closing the database
+    clears the timeout.
+
+    Example:
+        ```python
+        with decompiler_timeout(5):
+            try:
+                cfunc = db.pseudocode.decompile(ea)
+            except PseudocodeError as e:
+                if e.code == MicroError.TIMEOUT:
+                    ...
+        ```
+
+    Args:
+        seconds: Time budget per decompilation, in seconds. ``None`` or ``0``
+            disables the timeout inside the block.
+
+    Raises:
+        InvalidParameterError: If ``seconds`` is not a number, is negative,
+            NaN or infinite, or is longer than the decompiler supports
+            (about 24 days).
+        DecompilerError: If the decompiler is not loaded, for example because
+            no database is open.
+    """
+    if seconds is None:
+        seconds = 0
+    if isinstance(seconds, bool) or not isinstance(seconds, (int, float)):
+        raise InvalidParameterError('seconds', seconds, 'must be a number')
+    if not math.isfinite(seconds) or seconds < 0:
+        raise InvalidParameterError('seconds', seconds, 'must be a finite number >= 0')
+    # 0 means "no timeout" to the decompiler, so a positive budget must not round down to it.
+    msecs = math.ceil(seconds * 1000)
+    if msecs > _MAX_DECOMPILER_TIMEOUT_MS:
+        raise InvalidParameterError(
+            'seconds', seconds, f'must be at most {_MAX_DECOMPILER_TIMEOUT_MS / 1000} seconds'
+        )
+
+    if not ida_hexrays.init_hexrays_plugin():
+        raise DecompilerError(
+            'decompiler_timeout: the decompiler is not loaded; open a database first'
+        )
+
+    previous = ida_hexrays.set_decompiler_timeout(msecs)
+    try:
+        yield
+    finally:
+        ida_hexrays.set_decompiler_timeout(previous)
+
+
 # ---------------------------------------------------------------------------
 # Microcode entry point — DatabaseEntity
 # ---------------------------------------------------------------------------
@@ -4380,6 +4480,9 @@ class Microcode(DatabaseEntity):
     ) -> MicroBlockArray:
         """Generate microcode for a function.
 
+        To bound how long generation may take, wrap the call in
+        ``decompiler_timeout()`` (IDA 9.5+).
+
         Args:
             func: An IDA ``func_t`` object (e.g. from ``db.functions.get_at()``).
             maturity: The desired maturity level.
@@ -4390,7 +4493,8 @@ class Microcode(DatabaseEntity):
             A :class:`MicroBlockArray` wrapping the generated ``mba_t``.
 
         Raises:
-            MicrocodeError: If microcode generation fails.
+            MicrocodeError: If microcode generation fails. ``code`` is
+                ``MicroError.TIMEOUT`` if it ran past ``decompiler_timeout()``.
         """
         mbr = _ida_compat.make_decomp_ranges(func)
         hf = ida_hexrays.hexrays_failure_t()
@@ -4398,7 +4502,9 @@ class Microcode(DatabaseEntity):
         mba = ida_hexrays.gen_microcode(mbr, hf, ml, int(flags), int(maturity))
 
         if not mba:
-            raise _microcode_error_from(hf, f'0x{func.start_ea:x}')
+            raise _hexrays_error_from(
+                hf, f'Microcode generation failed for 0x{func.start_ea:x}', MicrocodeError
+            )
 
         if build_graph:
             mba.build_graph()
@@ -4415,6 +4521,9 @@ class Microcode(DatabaseEntity):
     ) -> MicroBlockArray:
         """Generate microcode for an address range.
 
+        To bound how long generation may take, wrap the call in
+        ``decompiler_timeout()`` (IDA 9.5+).
+
         Args:
             start_ea: Range start address.
             end_ea: Range end address.
@@ -4426,7 +4535,8 @@ class Microcode(DatabaseEntity):
             A :class:`MicroBlockArray` wrapping the generated ``mba_t``.
 
         Raises:
-            MicrocodeError: If microcode generation fails.
+            MicrocodeError: If microcode generation fails. ``code`` is
+                ``MicroError.TIMEOUT`` if it ran past ``decompiler_timeout()``.
         """
         mbr = _ida_compat.make_decomp_ranges()
         mbr.ranges.push_back(ida_range.range_t(start_ea, end_ea))
@@ -4435,7 +4545,11 @@ class Microcode(DatabaseEntity):
         mba = ida_hexrays.gen_microcode(mbr, hf, ml, int(flags), int(maturity))
 
         if not mba:
-            raise _microcode_error_from(hf, f'range 0x{start_ea:x}:0x{end_ea:x}')
+            raise _hexrays_error_from(
+                hf,
+                f'Microcode generation failed for range 0x{start_ea:x}:0x{end_ea:x}',
+                MicrocodeError,
+            )
 
         if build_graph:
             mba.build_graph()
@@ -4448,6 +4562,9 @@ class Microcode(DatabaseEntity):
         Uses ``ida_hexrays.decompile()`` and returns the ``mba_t``
         from the resulting ``cfunc_t``.
 
+        To bound how long decompilation may take, wrap the call in
+        ``decompiler_timeout()`` (IDA 9.5+).
+
         Args:
             func: An IDA ``func_t`` object.
 
@@ -4455,11 +4572,15 @@ class Microcode(DatabaseEntity):
             A :class:`MicroBlockArray` at LVARS maturity.
 
         Raises:
-            MicrocodeError: If decompilation fails.
+            MicrocodeError: If decompilation fails. ``code`` is
+                ``MicroError.TIMEOUT`` if it ran past ``decompiler_timeout()``.
         """
-        cfunc = ida_hexrays.decompile(func.start_ea)
+        hf = ida_hexrays.hexrays_failure_t()
+        cfunc = ida_hexrays.decompile(func.start_ea, hf)
         if not cfunc:
-            raise MicrocodeError(f'Failed to decompile function at 0x{func.start_ea:x}')
+            raise _hexrays_error_from(
+                hf, f'Failed to decompile function at 0x{func.start_ea:x}', MicrocodeError
+            )
         return MicroBlockArray(cfunc.mba, _owner=cfunc)
 
     def get_text(

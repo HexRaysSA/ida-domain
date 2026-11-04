@@ -5,7 +5,7 @@ import logging
 import sys
 import warnings
 from collections.abc import Callable
-from enum import EnumMeta
+from enum import EnumMeta, Flag
 
 import ida_kernwin
 from ida_idaapi import ea_t
@@ -58,8 +58,10 @@ class _GatedInt(int):
 
 class _CheckAttrSupport(EnumMeta):
     def __new__(mcs, name: str, bases: Any, namespace: Any, **kwargs: Any) -> Any:
-        # Capture _GatedInt values before super().__new__ converts them to int
-        placeholder = -1
+        # Capture _GatedInt values before super().__new__ converts them to int.
+        # Placeholders sit far below real SDK codes (MERR_* are small negative
+        # numbers) so they never alias a real member.
+        placeholder = -1_000_000
         for mname, mval in list(namespace.items()):
             if isinstance(mval, _GatedInt):
                 req = mval.min_version
@@ -70,6 +72,8 @@ class _CheckAttrSupport(EnumMeta):
                 _VERSION_SUPPORT_CHECK[(name, mname)] = _check
 
                 if mval.needs_placeholder:
+                    if any(issubclass(b, Flag) for b in bases):
+                        raise TypeError(f'{name}.{mname}: Flag members need _since_ida(value=...)')
                     dict.__setitem__(
                         namespace,
                         mname,
