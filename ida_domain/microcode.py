@@ -21,7 +21,7 @@ from ida_hexrays import (
     mlist_t,
     mop_t,
 )
-from typing_extensions import TYPE_CHECKING, Any, Iterator, List, Optional, Tuple
+from typing_extensions import TYPE_CHECKING, Any, Iterator, List, Optional, Tuple, Union
 
 from . import _ida_compat
 from .base import (
@@ -4341,7 +4341,7 @@ _MAX_DECOMPILER_TIMEOUT_MS = 2**31 - 1
 
 @requires_ida('9.5')
 @contextmanager
-def decompiler_timeout(seconds: Optional[float]) -> Iterator[None]:
+def decompiler_timeout(seconds: Optional[Union[int, float]]) -> Iterator[None]:
     """Limit how long each decompilation may take inside a ``with`` block.
 
     Applies to every decompilation started in the block, including
