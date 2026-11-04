@@ -339,18 +339,18 @@ class PseudocodeError(DecompilerError):
     """Raised when pseudocode/ctree operations fail.
 
     Attributes:
-        errea: The address where the error occurred (``None`` if unavailable).
         code: The :class:`MicroError` code (``None`` if unavailable).
+        errea: The address where the error occurred (``None`` if unavailable).
     """
 
     def __init__(
         self,
         message: str,
-        errea: Optional[int] = None,
         code: Optional[MicroError] = None,
+        errea: Optional[int] = None,
     ):
-        self.errea = errea
         self.code = code
+        self.errea = errea
         super().__init__(message)
 
 
