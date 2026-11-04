@@ -103,3 +103,13 @@ arm-none-eabi-gcc -mthumb -mcpu=cortex-m3 -O2 -c tiny_switch.c -o tiny_switch_th
 
 After rebuilding, replace both binaries in this folder and check that the tests
 still find one switch per function.
+
+### Sparse switch (tiny_switch_dalvik)
+
+`tiny_switch_dalvik.smali` has a Dalvik `sparse-switch`, which IDA stores as a
+sparse switch (`SWI_SPARSE`): a value table instead of a low case. It is written
+in smali because d8 compiles a Java switch this small to an if-chain. To rebuild
+with [smali](https://github.com/baksmali/smali) 3.0.7:
+```bash
+java -jar smali.jar assemble -o tiny_switch_dalvik.dex tiny_switch_dalvik.smali
+```

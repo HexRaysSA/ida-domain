@@ -18,6 +18,7 @@ tiny_struct_idb_path: str = ''
 tiny_stackstrings_idb_path: str = ''
 tiny_switch_x64_idb_path: str = ''
 tiny_switch_thumb_idb_path: str = ''
+tiny_switch_dalvik_idb_path: str = ''
 
 _deprecation_warnings: dict = {}
 
@@ -269,6 +270,31 @@ def tiny_switch_thumb_env(tiny_switch_thumb_setup):
     ida_options = IdaCommandOptions(new_database=True, auto_analysis=True)
     db = ida_domain.Database.open(
         path=tiny_switch_thumb_idb_path, args=ida_options, save_on_close=False
+    )
+    yield db
+    if db.is_open():
+        db.close(False)
+
+
+@pytest.fixture(scope='session')
+def tiny_switch_dalvik_setup(global_setup):
+    """Setup for Dalvik switch tests - copies tiny_switch_dalvik.dex to work directory."""
+    global tiny_switch_dalvik_idb_path
+    tiny_switch_dalvik_idb_path = os.path.join(
+        tempfile.gettempdir(), 'api_tests_work_dir', 'tiny_switch_dalvik.dex'
+    )
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    src_path = os.path.join(current_dir, 'resources', 'tiny_switch_dalvik.dex')
+    shutil.copy(src_path, tiny_switch_dalvik_idb_path)
+
+
+@pytest.fixture(scope='function')
+def tiny_switch_dalvik_env(tiny_switch_dalvik_setup):
+    """Opens tiny_switch_dalvik database for each test."""
+    # Pick IDA's own DEX loader over any third-party one in IDAUSR
+    ida_options = IdaCommandOptions(new_database=True, auto_analysis=True, file_type='Android DEX')
+    db = ida_domain.Database.open(
+        path=tiny_switch_dalvik_idb_path, args=ida_options, save_on_close=False
     )
     yield db
     if db.is_open():
