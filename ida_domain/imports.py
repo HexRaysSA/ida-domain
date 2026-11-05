@@ -136,17 +136,11 @@ class Imports(DatabaseEntity):
             found = self.get_module_by_name(module)
             if found is None:
                 raise InvalidParameterError('module', module, 'no import module with this name')
-            module_index = found.index
         else:
-            module_index = module
-            if module_index < 0 or module_index >= self.get_module_count():
-                raise IndexError(
-                    f'Module index {module_index} out of range [0, {self.get_module_count()})'
-                )
+            found = self.get_module_at_index(module)
 
-        module_name = ida_nalt.get_import_module_name(module_index)
-        if not module_name:
-            module_name = f'module_{module_index}'
+        module_index = found.index
+        module_name = found.name
 
         results: list[ImportInfo] = []
 
