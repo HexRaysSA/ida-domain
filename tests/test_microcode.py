@@ -1024,6 +1024,9 @@ def test_microcode_operand_none_fallbacks(test_env):
                 assert op.unsigned_value is None
                 assert op.register_name is not None  # should work
                 assert op.stack_offset is None
+                assert op.local_var_index is None
+                assert op.local_var_offset is None
+                assert not op.is_local_variable
                 assert op.sub_instruction is None
                 assert op.string_value is None
                 assert op.pair is None
@@ -2935,6 +2938,13 @@ def test_microcode_operand_local_var_factory(test_env):
     if len(mf.vars) > 0:
         lv = MicroOperand.local_var(mf, 0)
         assert lv.type == MicroOperandType.LOCAL_VAR
+        assert lv.local_var_index == 0
+        assert lv.local_var_offset == 0
+
+        lv = MicroOperand.local_var(mf, len(mf.vars) - 1, 4)
+        assert lv.is_local_variable is True
+        assert lv.local_var_index == len(mf.vars) - 1
+        assert lv.local_var_offset == 4
 
 
 def test_microcode_operand_fpnum_factory(test_env):
