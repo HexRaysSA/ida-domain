@@ -69,8 +69,9 @@ class SwitchInfo:
     """Lowest case value, counting values that the table sends to the default."""
     default_ea: Optional[ea_t]
     """
-    Where values without a case jump to, or None if the switch has no default or
-    its default returns (`SWI_DEFRET` in `raw_switch_info.flags`).
+    Where values without a case jump to, or None if the switch has no default, its
+    default returns (`SWI_DEFRET` in `raw_switch_info.flags`), or IDA did not find
+    the default.
     """
     cases: Tuple[SwitchCase, ...]
     """
