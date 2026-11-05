@@ -60,7 +60,7 @@ class SwitchInfo:
     """
 
     ea: ea_t
-    """The indirect jump instruction, where IDA stores the switch."""
+    """The instruction IDA stores the switch on, usually the indirect jump."""
     jump_table_ea: ea_t
     """Start of the jump table."""
     element_size: int
@@ -519,15 +519,16 @@ class Instructions(DatabaseEntity):
         """
         Retrieves the switch IDA recognized at an instruction.
 
-        IDA stores a switch on its indirect jump instruction, so this returns None
-        for any other instruction of the switch, including the first one.
+        IDA stores a switch on one instruction, usually its indirect jump, so this
+        returns None for any other instruction of the switch, including the first
+        one. Table entries IDA cannot resolve to a target are left out of `cases`.
 
         Args:
-            insn: The indirect jump instruction of the switch.
+            insn: The instruction holding the switch, usually its indirect jump.
 
         Returns:
-            The switch, or None if the instruction is not a switch jump or IDA could
-            not decode its jump table.
+            The switch, or None if the instruction holds no switch or IDA could not
+            decode its jump table.
 
         Example:
             ```python
@@ -547,7 +548,8 @@ class Instructions(DatabaseEntity):
         cases = [
             SwitchCase(target=target, values=tuple(sorted(values)))
             for values, target in zip(result.cases, result.targets)
-            if len(values)
+            # BADADDR: an entry IDA can't decode, e.g. in a table of jump insns
+            if len(values) and target != ida_idaapi.BADADDR
         ]
         # IDA's listing shows these as "switch with an invalid jump table"
         if not cases:
