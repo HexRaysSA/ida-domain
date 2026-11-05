@@ -312,9 +312,19 @@ def test_get_switch_thumb(tiny_switch_thumb_env):
     assert _calls_by_value(db, switch) == {v: f'no_default_{v}' for v in range(1, 8)}
     assert _callee(db, switch.target_of(0)) == 'no_default_0'
 
-    # IDA doesn't see the subtraction of the lowest case here, so it reports table
-    # indices (0..6) instead of -3..3. Only check that the switch is found.
-    assert _switch_in(db, 'negative') is not None
+    # IDA doesn't see the ADDS that biases the index here, so it reports table
+    # indices (0..6) instead of -3..3. Fails once IDA recognizes the bias.
+    switch = _switch_in(db, 'negative')
+    assert switch.low_case == 0
+    assert _calls_by_value(db, switch) == {
+        0: 'negative_m3',
+        1: 'negative_m2',
+        2: 'negative_m1',
+        3: 'negative_0',
+        4: 'negative_1',
+        5: 'negative_2',
+        6: 'negative_3',
+    }
 
 
 def test_get_switch_sparse(tiny_switch_dalvik_env):
