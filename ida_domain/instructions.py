@@ -83,20 +83,23 @@ class SwitchInfo:
 
     def target_of(self, value: int) -> Optional[ea_t]:
         """
-        Returns where the switch jumps for a value.
+        Returns where the switch jumps for a value, as its jump table says.
+
+        Values outside the table have no case. Use
+        `switch.target_of(value) or switch.default_ea` to send them to the
+        default, as long as IDA decoded the switch right.
 
         Args:
             value: The value being switched on, signed like the case values
                 (-16, not 0xFFFFFFF0).
 
         Returns:
-            The target of the case that matches `value`, `default_ea` if no case
-            matches, or None if no case matches and the switch has no default.
+            The target of the case that matches `value`, or None if no case matches.
         """
         for case in self.cases:
             if value in case.values:
                 return case.target
-        return self.default_ea
+        return None
 
 
 @decorate_all_methods(check_db_open)

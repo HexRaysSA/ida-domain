@@ -278,8 +278,9 @@ def test_get_switch(tiny_switch_x64_env):
         (17,),
         (19,),
     ]
-    # Values outside the table fall back to the default
-    assert switch.target_of(9) == switch.target_of(20) == switch.default_ea
+    # Values outside the table have no case
+    assert switch.target_of(9) is None
+    assert switch.target_of(20) is None
     assert switch.target_of(12) == switch.target_of(14) != switch.default_ea
     assert db.segments.get_name(db.segments.get_at(switch.jump_table_ea)) == '.rodata'
     assert hash(switch) == hash(db.instructions.get_switch(jump))
@@ -305,9 +306,10 @@ def test_get_switch(tiny_switch_x64_env):
         2: 'negative_2',
         3: 'negative_3',
     }
-    assert _callee(db, switch.target_of(-4)) == 'negative_default'
+    assert switch.target_of(-4) is None
+    assert _callee(db, switch.default_ea) == 'negative_default'
     # Values are signed: the 32-bit pattern of -1 is not a case
-    assert switch.target_of(0xFFFFFFFF) == switch.default_ea
+    assert switch.target_of(0xFFFFFFFF) is None
 
     assert _check_get_switches(db) == 3
     assert list(db.functions.get_switches(db.functions.get_by_name('dense_10'))) == []
@@ -327,7 +329,8 @@ def test_get_switch_thumb(tiny_switch_thumb_env):
     switch = _switch_in(db, 'no_default')
     assert switch.low_case == 1
     assert _calls_by_value(db, switch) == {v: f'no_default_{v}' for v in range(1, 8)}
-    assert _callee(db, switch.target_of(0)) == 'no_default_0'
+    assert switch.target_of(0) is None
+    assert _callee(db, switch.default_ea) == 'no_default_0'
 
     # IDA doesn't see the ADDS that biases the index here, so it reports table
     # indices (0..6) instead of -3..3. Fails once IDA recognizes the bias.
@@ -362,6 +365,6 @@ def test_get_switch_sparse(tiny_switch_dalvik_env):
         100: 'TinySwitch.sparse_100@V',
         1000: 'TinySwitch.sparse_1000@V',
     }
-    assert switch.target_of(2) == switch.default_ea
+    assert switch.target_of(2) is None
 
     assert _check_get_switches(db) == 1
