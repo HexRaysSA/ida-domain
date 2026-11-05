@@ -7,6 +7,7 @@ from enum import Flag, IntEnum
 
 import ida_bytes
 import ida_funcs
+import ida_idp
 import ida_lines
 import ida_nalt
 import ida_name
@@ -317,11 +318,16 @@ class Functions(DatabaseEntity):
             An iterator over the function's switches, in address order within
             each chunk.
         """
+        # IDA flags switch jumps with FF_JUMP, except in the Dalvik module, which
+        # stores the switch without creating its table. Look for the switch info
+        # at every instruction there.
+        no_ff_jump = ida_idp.ph_get_id() == ida_idp.PLFM_DALVIK
         for chunk in self.get_chunks(func):
             ea = chunk.start_ea
             while ea != BADADDR and ea < chunk.end_ea:
-                # Not FF_JUMP: some processor modules (e.g. Dalvik) don't set it
-                if ida_nalt.get_switch_info(ea) is not None:
+                if ida_bytes.get_flags(ea) & ida_bytes.FF_JUMP or (
+                    no_ff_jump and ida_nalt.get_switch_info(ea) is not None
+                ):
                     insn = self.database.instructions.get_at(ea)
                     switch = insn and self.database.instructions.get_switch(insn)
                     if switch:
