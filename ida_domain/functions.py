@@ -8,6 +8,7 @@ from enum import Flag, IntEnum
 import ida_bytes
 import ida_funcs
 import ida_lines
+import ida_nalt
 import ida_name
 import ida_typeinf
 from ida_funcs import func_t
@@ -40,6 +41,7 @@ from .types import TypeApplyFlags
 
 if TYPE_CHECKING:
     from .database import Database
+    from .instructions import SwitchInfo
     from .microcode import MicroBlockArray
 
 logger = logging.getLogger(__name__)
@@ -299,6 +301,32 @@ class Functions(DatabaseEntity):
             or empty iterator if function is invalid.
         """
         return self.database.instructions.get_between(func.start_ea, func.end_ea)
+
+    def get_switches(self, func: func_t) -> Iterator[SwitchInfo]:
+        """
+        Retrieves the switches IDA recognized in the given function, including its
+        tail chunks.
+
+        Only instructions that hold a switch are decoded, so this is faster than
+        calling `Instructions.get_switch()` on every instruction.
+
+        Args:
+            func: The function instance.
+
+        Returns:
+            An iterator over the function's switches, in address order within
+            each chunk.
+        """
+        for chunk in self.get_chunks(func):
+            ea = chunk.start_ea
+            while ea != BADADDR and ea < chunk.end_ea:
+                # Not FF_JUMP: some processor modules (e.g. Dalvik) don't set it
+                if ida_nalt.get_switch_info(ea) is not None:
+                    insn = self.database.instructions.get_at(ea)
+                    switch = insn and self.database.instructions.get_switch(insn)
+                    if switch:
+                        yield switch
+                ea = ida_bytes.next_head(ea, chunk.end_ea)
 
     def get_disassembly(self, func: func_t, remove_tags: bool = True) -> List[str]:
         """
