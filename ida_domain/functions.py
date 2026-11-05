@@ -319,8 +319,9 @@ class Functions(DatabaseEntity):
             each chunk.
         """
         # IDA flags switch jumps with FF_JUMP, except in the Dalvik module, which
-        # stores the switch without creating its table. Look for the switch info
-        # at every instruction there.
+        # stores the switch without creating its table (seen up to IDA 9.5, fix
+        # pending in a future release). Look for the switch info at every
+        # instruction there.
         no_ff_jump = ida_idp.ph_get_id() == ida_idp.PLFM_DALVIK
         for chunk in self.get_chunks(func):
             ea = chunk.start_ea
