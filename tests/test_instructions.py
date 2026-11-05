@@ -216,6 +216,20 @@ def _switch_in(db, func_name):
     return switches[0]
 
 
+def _check_get_switches(db):
+    """functions.get_switches() finds what get_switch() finds on every instruction."""
+    found = 0
+    for func in db.functions:
+        expected = [
+            switch
+            for insn in db.functions.get_instructions(func)
+            if (switch := db.instructions.get_switch(insn)) is not None
+        ]
+        assert list(db.functions.get_switches(func)) == expected
+        found += len(expected)
+    return found
+
+
 def _callee(db, ea):
     """Name of the function the case code at ea calls (tail calls are jumps)."""
     ref = next(db.xrefs.code_refs_from_ea(ea, flow=False), None)
@@ -295,6 +309,9 @@ def test_get_switch(tiny_switch_x64_env):
     # Values are signed: the 32-bit pattern of -1 is not a case
     assert switch.target_of(0xFFFFFFFF) == switch.default_ea
 
+    assert _check_get_switches(db) == 3
+    assert list(db.functions.get_switches(db.functions.get_by_name('dense_10'))) == []
+
 
 def test_get_switch_thumb(tiny_switch_thumb_env):
     db = tiny_switch_thumb_env
@@ -326,6 +343,8 @@ def test_get_switch_thumb(tiny_switch_thumb_env):
         6: 'negative_3',
     }
 
+    assert _check_get_switches(db) == 3
+
 
 def test_get_switch_sparse(tiny_switch_dalvik_env):
     db = tiny_switch_dalvik_env
@@ -344,3 +363,5 @@ def test_get_switch_sparse(tiny_switch_dalvik_env):
         1000: 'TinySwitch.sparse_1000@V',
     }
     assert switch.target_of(2) == switch.default_ea
+
+    assert _check_get_switches(db) == 1
