@@ -2,14 +2,16 @@ import logging
 from pathlib import Path
 
 import ida_auto
+import ida_ida
 import ida_typeinf
 import idc
 import pytest
 from ida_idaapi import BADADDR
 
 import ida_domain  # isort: skip
-from ida_domain.base import InvalidEAError, InvalidParameterError
+from ida_domain.base import DatabaseError, InvalidEAError, InvalidParameterError
 from ida_domain.types import (
+    CallingConvention,
     ObjectIOFlags,
     TypeAttr,
     TypeDetails,
@@ -719,6 +721,163 @@ def test_create_primitive_invalid_size(test_env):
     for size in (0, 3, 5, 7, 16):
         with pytest.raises(InvalidParameterError):
             db.types.create_primitive(size)
+
+
+def _char_int_struct(db, name):
+    return (
+        db.types.create_struct(name)
+        .add_member('a', db.types.create_primitive(1))
+        .add_member('b', db.types.create_primitive(4))
+    )
+
+
+def _udt(struct_type):
+    udt = ida_typeinf.udt_type_data_t()
+    assert struct_type.get_udt_details(udt)
+    return udt
+
+
+def test_struct_builder_packed(test_env):
+    """Test that set_packed removes the padding."""
+    db = test_env
+
+    natural = _char_int_struct(db, 'Natural').build()
+    udt = _udt(natural)
+    assert natural.get_size() == 8
+    assert udt.effalign == 4
+    assert not udt.taudt_bits & ida_typeinf.TAUDT_UNALIGNED
+    assert [m.offset // 8 for m in udt] == [0, 4]
+
+    packed = _char_int_struct(db, 'Packed').set_packed().build()
+    udt = _udt(packed)
+    assert packed.get_size() == 5
+    assert udt.effalign == 1
+    assert udt.taudt_bits & ida_typeinf.TAUDT_UNALIGNED
+    assert [m.offset // 8 for m in udt] == [0, 1]
+
+    unpacked = _char_int_struct(db, 'Unpacked').set_packed().set_packed(False).build()
+    udt = _udt(unpacked)
+    assert unpacked.get_size() == 8
+    assert not udt.taudt_bits & ida_typeinf.TAUDT_UNALIGNED
+    assert [m.offset // 8 for m in udt] == [0, 4]
+
+
+def test_struct_builder_alignment(test_env):
+    """Test that set_alignment sets a minimum alignment."""
+    db = test_env
+
+    for alignment, size, effalign, sda in (
+        (1, 8, 4, 1),
+        (2, 8, 4, 2),
+        (16, 16, 16, 5),
+        (2**14, 2**14, 2**14, 15),
+    ):
+        aligned = _char_int_struct(db, f'Align{alignment}').set_alignment(alignment).build()
+        udt = _udt(aligned)
+        assert aligned.get_size() == size
+        assert udt.effalign == effalign
+        assert udt.sda == sda
+        assert [m.offset // 8 for m in udt] == [0, 4]
+
+    packed_aligned = _char_int_struct(db, 'PackedAlign16').set_packed().set_alignment(16).build()
+    udt = _udt(packed_aligned)
+    assert packed_aligned.get_size() == 16
+    assert udt.effalign == 16
+    assert udt.sda == 5
+    assert udt.taudt_bits & ida_typeinf.TAUDT_UNALIGNED
+    assert [m.offset // 8 for m in udt] == [0, 1]
+
+    for alignment in (0, 3, 2**15, 16.0):
+        with pytest.raises(InvalidParameterError):
+            db.types.create_struct('BadAlign').set_alignment(alignment)  # type: ignore
+
+
+def test_enum_builder_base_size(test_env):
+    """Test that base_size sets the enum width, and None keeps the database default."""
+    db = test_env
+
+    default = db.types.create_enum('DefaultWidth').add_member('A', 1).build()
+    edt = ida_typeinf.enum_type_data_t()
+    assert default.get_enum_details(edt)
+    assert default.get_size() == ida_ida.inf_get_cc_size_e()
+    assert edt.bte & ida_typeinf.BTE_SIZE_MASK == 0
+
+    for size, size_bits in ((1, 1), (2, 2), (4, 3), (8, 4)):
+        enum_type = db.types.create_enum(f'Width{size}', base_size=size).add_member('A', 1).build()
+        edt = ida_typeinf.enum_type_data_t()
+        assert enum_type.get_enum_details(edt)
+        assert enum_type.get_size() == size
+        assert edt.bte & ida_typeinf.BTE_SIZE_MASK == size_bits
+
+    for size in (0, 3, 16, 4.0):
+        with pytest.raises(InvalidParameterError):
+            db.types.create_enum('BadWidth', base_size=size)  # type: ignore
+
+
+def test_enum_builder_bitmask(test_env):
+    """Test that set_bitmask builds a bitmask enum."""
+    db = test_env
+
+    flags = db.types.create_enum('Flags', base_size=1).add_member('READ', 1).add_member('RW', 6)
+    bitmask = flags.set_bitmask().build()
+    assert bitmask.is_bitmask_enum()
+    assert bitmask.get_size() == 1
+    assert not flags.set_bitmask(False).build().is_bitmask_enum()
+
+    zero = db.types.create_enum('ZeroFlag').add_member('NONE', 0).add_member('READ', 1)
+    with pytest.raises(DatabaseError):
+        zero.set_bitmask().build()
+    trailing_zero = (
+        db.types.create_enum('TrailingZero').add_member('READ', 1).add_member('NONE', 0)
+    )
+    assert trailing_zero.set_bitmask().build().is_bitmask_enum()
+
+
+def test_func_type_builder_calling_convention(test_env):
+    """Test that set_calling_convention and set_variadic set the calling convention."""
+    db = test_env
+    int4 = db.types.create_primitive(4)
+
+    def builder():
+        return db.types.create_func_type().set_return_type(int4).add_argument('a', int4)
+
+    def keywords(func_type):
+        """Calling convention keywords in the printed type: only explicit ones print."""
+        printed = func_type.dstr()
+        return [k for k in ('__cdecl', '__stdcall', '__fastcall', '__thiscall') if k in printed]
+
+    assert keywords(builder().build()) == []
+    for convention, expected in (
+        (CallingConvention.CDECL, ['__cdecl']),
+        (CallingConvention.STDCALL, ['__stdcall']),
+        (CallingConvention.FASTCALL, ['__fastcall']),
+        (CallingConvention.THISCALL, ['__thiscall']),
+        (CallingConvention.DEFAULT, []),
+    ):
+        assert keywords(builder().set_calling_convention(convention).build()) == expected, (
+            convention
+        )
+
+    for convention in (None, CallingConvention.CDECL, CallingConvention.DEFAULT):
+        variadic = builder().set_variadic()
+        if convention is not None:
+            variadic.set_calling_convention(convention)
+        func_type = variadic.build()
+        assert func_type.is_vararg_cc(), convention
+        assert keywords(func_type) == [], convention
+        assert func_type.get_nargs() == 1, convention
+    assert not builder().set_variadic().set_variadic(False).build().is_vararg_cc()
+
+    for convention in (
+        CallingConvention.STDCALL,
+        CallingConvention.FASTCALL,
+        CallingConvention.THISCALL,
+    ):
+        with pytest.raises(InvalidParameterError):
+            builder().set_calling_convention(convention).set_variadic().build()
+
+    with pytest.raises(InvalidParameterError):
+        builder().set_calling_convention('cdecl')  # type: ignore
 
 
 def test_pointer_followed_at_idb(test_env):

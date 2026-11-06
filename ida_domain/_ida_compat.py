@@ -23,6 +23,7 @@ import ida_nalt
 import ida_range
 import ida_segment
 import ida_strlist
+import ida_typeinf
 from ida_funcs import func_t
 from ida_idaapi import ea_t
 
@@ -236,6 +237,18 @@ else:
 
     def get_strlist_item_ex(si: ida_strlist.string_info_t, n: int) -> bool:
         return ida_strlist.get_strlist_item(si, n)
+
+
+# --- ida_typeinf ------------------------------------------------------------
+
+if hasattr(ida_typeinf.func_type_data_t, 'set_cc'):
+
+    def set_func_type_cc(ftd: ida_typeinf.func_type_data_t, cc: int) -> None:
+        ftd.set_cc(cc)
+else:
+
+    def set_func_type_cc(ftd: ida_typeinf.func_type_data_t, cc: int) -> None:
+        ftd.cc = cc
 
 
 # --- ida_hexrays ------------------------------------------------------------
