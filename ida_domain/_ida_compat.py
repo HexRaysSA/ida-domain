@@ -242,7 +242,8 @@ else:
 if hasattr(ida_nalt, 'get_synth_provider_id'):
 
     def get_synth_provider_id(strtype: int) -> Optional[int]:
-        return ida_nalt.get_synth_provider_id(strtype)
+        pid = ida_nalt.get_synth_provider_id(strtype)
+        return None if pid == ida_strlist.SYNTHSTR_PROVIDER_NONE else pid
 else:
 
     def get_synth_provider_id(strtype: int) -> Optional[int]:
