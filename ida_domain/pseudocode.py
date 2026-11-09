@@ -32,8 +32,10 @@ from .base import (
 from .microcode import (
     DecompilationFlags,
     MicroBlockArray,
+    MicroError,
     MicroLocalVar,
     MicroLocalVars,
+    _hexrays_error_from,
 )
 
 if TYPE_CHECKING:
@@ -337,10 +339,17 @@ class PseudocodeError(DecompilerError):
     """Raised when pseudocode/ctree operations fail.
 
     Attributes:
+        code: The :class:`MicroError` code (``None`` if unavailable).
         errea: The address where the error occurred (``None`` if unavailable).
     """
 
-    def __init__(self, message: str, errea: Optional[int] = None):
+    def __init__(
+        self,
+        message: str,
+        code: Optional[MicroError] = None,
+        errea: Optional[int] = None,
+    ):
+        self.code = code
         self.errea = errea
         super().__init__(message)
 
@@ -3398,6 +3407,9 @@ class Pseudocode(DatabaseEntity):
     ) -> PseudocodeFunction:
         """Decompile a function and return the ctree result.
 
+        To bound how long decompilation may take, wrap the call in
+        ``decompiler_timeout()`` (IDA 9.5+).
+
         Args:
             ea_or_func: Function entry address or ``func_t`` object.
             flags: Decompilation flags (``DecompilationFlags``).
@@ -3406,16 +3418,15 @@ class Pseudocode(DatabaseEntity):
             A ``PseudocodeFunction`` wrapping the ``cfunc_t`` result.
 
         Raises:
-            PseudocodeError: If decompilation fails.
+            PseudocodeError: If decompilation fails. ``code`` is
+                ``MicroError.TIMEOUT`` if it ran past ``decompiler_timeout()``.
         """
         ea = ea_or_func.start_ea if isinstance(ea_or_func, func_t) else ea_or_func
         hf = ida_hexrays.hexrays_failure_t()
         cfunc = ida_hexrays.decompile(ea, hf, int(flags))
         if not cfunc:
-            errea = hf.errea if hf.errea != ida_idaapi.BADADDR else None
-            raise PseudocodeError(
-                f'Failed to decompile function at 0x{ea:x}: {hf.str}',
-                errea=errea,
+            raise _hexrays_error_from(
+                hf, f'Failed to decompile function at 0x{ea:x}', PseudocodeError
             )
         return PseudocodeFunction(cfunc)
 
