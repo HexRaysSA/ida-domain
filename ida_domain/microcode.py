@@ -4506,6 +4506,8 @@ class Microcode(DatabaseEntity):
             maturity: The desired maturity level.
             flags: Decompilation flags (default: ``DecompilationFlags.WARNINGS``).
             build_graph: Whether to build the CFG graph after generation.
+                Only applies if the generated microcode is below ``LOCOPT``:
+                from ``LOCOPT`` on, the decompiler has already built the graph.
 
         Returns:
             A :class:`MicroBlockArray` wrapping the generated ``mba_t``.
@@ -4524,7 +4526,7 @@ class Microcode(DatabaseEntity):
                 hf, f'Microcode generation failed for 0x{func.start_ea:x}', MicrocodeError
             )
 
-        if build_graph:
+        if build_graph and mba.maturity < MicroMaturity.LOCOPT:
             mba.build_graph()
 
         return MicroBlockArray(mba)
@@ -4548,6 +4550,8 @@ class Microcode(DatabaseEntity):
             maturity: The desired maturity level.
             flags: Decompilation flags (default: ``DecompilationFlags.WARNINGS``).
             build_graph: Whether to build the CFG graph after generation.
+                Only applies if the generated microcode is below ``LOCOPT``:
+                from ``LOCOPT`` on, the decompiler has already built the graph.
 
         Returns:
             A :class:`MicroBlockArray` wrapping the generated ``mba_t``.
@@ -4569,7 +4573,7 @@ class Microcode(DatabaseEntity):
                 MicrocodeError,
             )
 
-        if build_graph:
+        if build_graph and mba.maturity < MicroMaturity.LOCOPT:
             mba.build_graph()
 
         return MicroBlockArray(mba)
