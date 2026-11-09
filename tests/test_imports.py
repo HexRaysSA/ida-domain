@@ -47,6 +47,9 @@ def test_imports(test_env):
     with pytest.raises(IndexError):
         list(db.imports.get_imports_for_module(0))
 
+    with pytest.raises(ida_domain.base.InvalidParameterError):
+        db.imports.get_imports_for_module('kernel32.dll')
+
     imp_info = ida_domain.imports.ImportInfo(
         address=0x1000,
         name='TestFunc',
@@ -183,6 +186,16 @@ def test_imports_populated(tiny_imports_env):
             assert imp.module_index == module.index
             assert imp.module_name == module.name
     assert total_from_modules == expected_import_count
+
+    # === Test get_imports_for_module() by name ===
+    by_index = list(db.imports.get_imports_for_module(first_module.index))
+    assert list(db.imports.get_imports_for_module(first_module.name)) == by_index
+    # Same case-insensitive matching as get_module_by_name()
+    assert list(db.imports.get_imports_for_module(first_module.name.upper())) == by_index
+
+    # Unknown names raise on the call, not when the iterator is consumed
+    with pytest.raises(ida_domain.base.InvalidParameterError, match='nonexistent_module.dll'):
+        db.imports.get_imports_for_module('nonexistent_module.dll')
 
     # === Test get_import_names() - qualified format ===
     import_names = list(db.imports.get_import_names())

@@ -9,7 +9,7 @@ from typing_extensions import TYPE_CHECKING, Iterator, Optional
 if TYPE_CHECKING:
     from .database import Database
 
-from .base import DatabaseEntity, check_db_open, decorate_all_methods
+from .base import DatabaseEntity, InvalidParameterError, check_db_open, decorate_all_methods
 
 
 @dataclass(frozen=True)
@@ -112,26 +112,35 @@ class Imports(DatabaseEntity):
         for i in range(count):
             yield self.get_module_at_index(i)
 
-    def get_imports_for_module(self, module_index: int) -> Iterator[ImportInfo]:
+    def get_imports_for_module(self, module: int | str) -> Iterator[ImportInfo]:
         """Get all imports from a specific module.
 
         Args:
-            module_index: Index of the module.
+            module: Index of the module, or its name. Names are matched
+                case-insensitively, as in get_module_by_name().
 
-        Yields:
-            Each import from the specified module.
+        Returns:
+            An iterator over each import from the specified module.
 
         Raises:
-            IndexError: If module_index is out of range.
-        """
-        if module_index < 0 or module_index >= self.get_module_count():
-            raise IndexError(
-                f'Module index {module_index} out of range [0, {self.get_module_count()})'
-            )
+            IndexError: If module is an index that is out of range.
+            InvalidParameterError: If module is a name that matches no module.
 
-        module_name = ida_nalt.get_import_module_name(module_index)
-        if not module_name:
-            module_name = f'module_{module_index}'
+        Example:
+            ```python
+            for imp in db.imports.get_imports_for_module('kernel32.dll'):
+                print(f'0x{imp.address:x} {imp.name}')
+            ```
+        """
+        if isinstance(module, str):
+            found = self.get_module_by_name(module)
+            if found is None:
+                raise InvalidParameterError('module', module, 'no import module with this name')
+        else:
+            found = self.get_module_at_index(module)
+
+        module_index = found.index
+        module_name = found.name
 
         results: list[ImportInfo] = []
 
@@ -148,7 +157,7 @@ class Imports(DatabaseEntity):
             return True
 
         ida_nalt.enum_import_names(module_index, callback)
-        yield from results
+        return iter(results)
 
     def get_all_imports(self) -> Iterator[ImportInfo]:
         """Get all imports from all modules (flattened).
