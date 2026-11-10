@@ -40,7 +40,7 @@ def _load_dependencies() -> None:
         import idapro  # noqa: F401
 
 
-__version__ = '0.5.1'
+__version__ = '0.6.0'
 
 # Make sure all dependencies are loaded
 _load_dependencies()
