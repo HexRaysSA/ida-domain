@@ -1098,20 +1098,28 @@ class StructBuilder:
 
         return result
 
-    def build_and_save(self, library: Optional[til_t] = None) -> tinfo_t:
+    def build_and_save(self, library: Optional[til_t] = None, replace: bool = False) -> tinfo_t:
         """
         Build the struct and save it to a type library.
 
+        A type replaced in ``library`` keeps its ordinal, so types that refer to it
+        use the new definition.
+
         Args:
             library: Target library (local library if None).
+            replace: Replace an existing type of the same name instead of failing.
 
         Returns:
             The constructed and saved tinfo_t.
+
+        Raises:
+            DatabaseError: If struct creation or saving fails.
         """
         result = self.build()
         if library is None:
             library = ida_typeinf.get_idati()
-        if result.set_named_type(library, self._name) < 0:
+        flags = ida_typeinf.NTF_REPLACE if replace else 0
+        if result.set_named_type(library, self._name, flags) < 0:
             raise DatabaseError(f"Failed to save struct '{self._name}' to library")
         return result
 
@@ -1175,20 +1183,28 @@ class UnionBuilder:
 
         return result
 
-    def build_and_save(self, library: Optional[til_t] = None) -> tinfo_t:
+    def build_and_save(self, library: Optional[til_t] = None, replace: bool = False) -> tinfo_t:
         """
         Build the union and save it to a type library.
 
+        A type replaced in ``library`` keeps its ordinal, so types that refer to it
+        use the new definition.
+
         Args:
             library: Target library (local library if None).
+            replace: Replace an existing type of the same name instead of failing.
 
         Returns:
             The constructed and saved tinfo_t.
+
+        Raises:
+            DatabaseError: If union creation or saving fails.
         """
         result = self.build()
         if library is None:
             library = ida_typeinf.get_idati()
-        if result.set_named_type(library, self._name) < 0:
+        flags = ida_typeinf.NTF_REPLACE if replace else 0
+        if result.set_named_type(library, self._name, flags) < 0:
             raise DatabaseError(f"Failed to save union '{self._name}' to library")
         return result
 
@@ -1263,20 +1279,28 @@ class EnumBuilder:
 
         return result
 
-    def build_and_save(self, library: Optional[til_t] = None) -> tinfo_t:
+    def build_and_save(self, library: Optional[til_t] = None, replace: bool = False) -> tinfo_t:
         """
         Build the enum and save it to a type library.
 
+        A type replaced in ``library`` keeps its ordinal, so types that refer to it
+        use the new definition.
+
         Args:
             library: Target library (local library if None).
+            replace: Replace an existing type of the same name instead of failing.
 
         Returns:
             The constructed and saved tinfo_t.
+
+        Raises:
+            DatabaseError: If enum creation or saving fails.
         """
         result = self.build()
         if library is None:
             library = ida_typeinf.get_idati()
-        if result.set_named_type(library, self._name) < 0:
+        flags = ida_typeinf.NTF_REPLACE if replace else 0
+        if result.set_named_type(library, self._name, flags) < 0:
             raise DatabaseError(f"Failed to save enum '{self._name}' to library")
         return result
 
