@@ -3,7 +3,7 @@ import pytest
 import ida_domain  # isort: skip
 import ida_domain.flowchart
 from ida_domain.base import InvalidEAError, InvalidParameterError
-from ida_domain.flowchart import FlowChartFlags
+from ida_domain.flowchart import BasicBlock, BlockType, FlowChartFlags
 
 
 def test_basic_block(test_env):
@@ -12,7 +12,7 @@ def test_basic_block(test_env):
     assert func is not None
 
     blocks = db.functions.get_flowchart(func)
-    assert blocks.size == 4
+    assert len(blocks) == 4
 
     # Validate expected blocks
     expected_blocks = [(0xC4, 0x262), (0x262, 0x26B), (0x26B, 0x272), (0x272, 0x2A3)]
@@ -127,3 +127,53 @@ def test_basic_block(test_env):
         # Check that we can get predecessors of the successor
         succ_preds = list(succ.get_predecessors())
         assert any(pred.start_ea == test_block_with_successor.start_ea for pred in succ_preds)
+
+
+def test_flowchart_block_api(test_env):
+    db = test_env
+    func = db.functions.get_at(0x29E)
+    blocks = db.functions.get_flowchart(func)
+
+    # Blocks compare by (flowchart, id), so they work in sets/dicts
+    assert blocks[0] == blocks[0]
+    assert next(blocks[0].get_successors()) == blocks[3]
+    assert blocks[0] in set(blocks[3].get_predecessors())
+    assert blocks[0] != db.functions.get_flowchart(func)[0]
+
+    assert blocks[0].successor_ids == [3]
+    assert 0 in blocks[3].predecessor_ids
+    assert blocks[0].flowchart is blocks
+    assert blocks[0].raw_block.start_ea == 0xC4
+    assert blocks.raw_flowchart.size() == len(blocks)
+
+    assert all(isinstance(b.block_type, BlockType) for b in blocks)
+    assert blocks[3].block_type == BlockType.RETURN
+    assert blocks[3].is_return
+    assert not blocks[0].is_return
+    assert repr(blocks[0]) == 'BasicBlock(id=0, start_ea=0xc4, end_ea=0x262)'
+
+    rpo = blocks.reverse_postorder()
+    assert rpo[0] == blocks[0]
+    assert blocks[3] in rpo
+    assert next(blocks.dfs_preorder()) == blocks[0]
+
+    blocks.refresh()
+    assert len(blocks) == 4
+
+    with pytest.raises(InvalidParameterError):
+        ida_domain.flowchart.FlowChart(db)
+
+
+def test_flowchart_deprecated(test_env):
+    db = test_env
+    func = db.functions.get_at(0x29E)
+    blocks = db.functions.get_flowchart(func)
+    with pytest.deprecated_call():
+        assert blocks.size == 4
+    with pytest.deprecated_call():
+        assert [b.id for b in blocks[0].succs()] == [3]
+    with pytest.deprecated_call():
+        assert 0 in [b.id for b in blocks[3].preds()]
+    with pytest.deprecated_call():
+        assert blocks[3].type == int(BlockType.RETURN)
+    assert isinstance(blocks[0], BasicBlock)
