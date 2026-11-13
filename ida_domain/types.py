@@ -1003,23 +1003,15 @@ class TypeMemberLookupMode(Enum):
 # =============================================================================
 
 
-class CallingConvention(Enum):
+class CallingConvention(IntEnum):
     """Calling convention for function types."""
 
-    CDECL = 'cdecl'
-    STDCALL = 'stdcall'
-    FASTCALL = 'fastcall'
-    THISCALL = 'thiscall'
-    DEFAULT = 'default'
-
-
-_CALLING_CONVENTION_CM = {
-    CallingConvention.CDECL: ida_typeinf.CM_CC_CDECL,
-    CallingConvention.STDCALL: ida_typeinf.CM_CC_STDCALL,
-    CallingConvention.FASTCALL: ida_typeinf.CM_CC_FASTCALL,
-    CallingConvention.THISCALL: ida_typeinf.CM_CC_THISCALL,
-    CallingConvention.DEFAULT: ida_typeinf.CM_CC_UNKNOWN,  # the database's default
-}
+    CDECL = ida_typeinf.CM_CC_CDECL
+    STDCALL = ida_typeinf.CM_CC_STDCALL
+    FASTCALL = ida_typeinf.CM_CC_FASTCALL
+    THISCALL = ida_typeinf.CM_CC_THISCALL
+    DEFAULT = ida_typeinf.CM_CC_UNKNOWN
+    """The database's default calling convention."""
 
 
 # =============================================================================
@@ -1436,7 +1428,7 @@ class FuncTypeBuilder:
             CallingConvention.DEFAULT,
         ):
             raise InvalidParameterError(
-                'cc', self._calling_convention, 'cannot be combined with set_variadic()'
+                'cc', repr(self._calling_convention), 'cannot be combined with set_variadic()'
             )
 
         ftd = func_type_data_t()
@@ -1459,7 +1451,7 @@ class FuncTypeBuilder:
         if self._variadic:
             _ida_compat.set_func_type_cc(ftd, ida_typeinf.CM_CC_ELLIPSIS)
         elif self._calling_convention is not None:
-            _ida_compat.set_func_type_cc(ftd, _CALLING_CONVENTION_CM[self._calling_convention])
+            _ida_compat.set_func_type_cc(ftd, self._calling_convention)
 
         result = tinfo_t()
         if not result.create_func(ftd):
