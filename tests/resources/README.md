@@ -94,3 +94,37 @@ Used to test `Xrefs.to_item()`.
   and `0x20000` (`DCD sub_10120+1`).
 - `sub_10128` (4-byte head `PUSH.W {R4,LR}`): BL from `0x10106`; offset xrefs
   to `0x10129` from `0x1010c` (`LDR`), `0x1013c` and `0x10154` (`DCD`).
+
+---
+
+## Switch Test Binaries (tiny_switch_x64, tiny_switch_thumb)
+
+The `tiny_switch.c` file contains switches that compile to jump tables: a dense
+switch with gaps and a shared target, one without a default, and one whose cases
+straddle zero. Each case calls its own function, so tests can tell where a value
+goes from the name of the function its target calls.
+
+The same source is built for x86-64 (8-byte table entries) and for Thumb, where
+the switches use `TBB` (1-byte entries).
+
+The checked-in binaries were built with GCC 13.2.0 (x86-64) and GCC 14.2.0
+(arm-none-eabi). The tests depend on the generated code, so other versions may
+need test updates. To rebuild (on x86-64 Linux, `gcc` works in place of
+`x86_64-linux-gnu-gcc`):
+```bash
+x86_64-linux-gnu-gcc -O2 -c tiny_switch.c -o tiny_switch_x64.bin
+arm-none-eabi-gcc -mthumb -mcpu=cortex-m3 -O2 -c tiny_switch.c -o tiny_switch_thumb.bin
+```
+
+After rebuilding, replace both binaries in this folder and check that the tests
+still find one switch per function.
+
+### Sparse switch (tiny_switch_dalvik)
+
+`tiny_switch_dalvik.smali` has a Dalvik `sparse-switch`, which IDA stores as a
+sparse switch (`SWI_SPARSE`): a value table instead of a low case. It is written
+in smali because d8 compiles a Java switch this small to an if-chain. To rebuild
+with [smali](https://github.com/baksmali/smali) 3.0.7:
+```bash
+java -jar smali.jar assemble -o tiny_switch_dalvik.dex tiny_switch_dalvik.smali
+```

@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass, field
 
 import ida_bytes
 import ida_idaapi
 import ida_idp
 import ida_lines
+import ida_nalt
 import ida_ua
 import ida_xref
 from ida_ua import insn_t
-from typing_extensions import TYPE_CHECKING, Iterator, List, Optional
+from typing_extensions import TYPE_CHECKING, Iterator, List, Optional, Tuple
 
 from .base import (
     DatabaseEntity,
@@ -26,6 +28,78 @@ if TYPE_CHECKING:
     from .database import Database
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class SwitchCase:
+    """A switch jump target and the case values that reach it."""
+
+    target: ea_t
+    """Where the switch jumps for these values."""
+    values: Tuple[int, ...]
+    """Every case value that jumps to `target`, in ascending order."""
+
+
+@dataclass(frozen=True)
+class SwitchInfo:
+    """
+    A switch (jump table) recognized by IDA, as returned by `Instructions.get_switch()`.
+
+    Only the most common properties are exposed. Everything else, such as `elbase`,
+    `shift` or value tables, is available through `raw_switch_info`.
+
+    Everything here is IDA's analysis of the switch, as shown in its listing:
+
+    - Case values are signed. A value IDA sees as negative is reported negative even
+      in a 64-bit database, so a 32-bit `case 0xFFFFFFF0` is -16.
+    - If IDA misses the instruction that rebases the selector before the table
+      lookup (seen on most architectures when cases are negative or start far from
+      zero), `low_case` is 0 and the values are table indices.
+    - `default_ea` is where the table's bounds check jumps. Compilers may route a real
+      case through it, and checks before the switch may send values elsewhere.
+    """
+
+    ea: ea_t
+    """The instruction IDA stores the switch on, usually the indirect jump."""
+    jump_table_ea: ea_t
+    """Start of the jump table."""
+    element_size: int
+    """Size of a jump table entry, in bytes."""
+    low_case: int
+    """Lowest case value, counting values that the table sends to the default."""
+    default_ea: Optional[ea_t]
+    """
+    Where values without a case jump to, or None if the switch has no default, its
+    default returns (`SWI_DEFRET` in `raw_switch_info.flags`), or IDA did not find
+    the default.
+    """
+    cases: Tuple[SwitchCase, ...]
+    """
+    One entry per jump target, ordered by lowest case value. Table entries that lead
+    to the default are included, as a case whose target is `default_ea`.
+    """
+    raw_switch_info: ida_nalt.switch_info_t = field(repr=False, compare=False, hash=False)
+    """The underlying `switch_info_t`."""
+
+    def target_of(self, value: int) -> Optional[ea_t]:
+        """
+        Returns where the switch jumps for a value, as its jump table says.
+
+        Values outside the table have no case. Use
+        `switch.target_of(value) or switch.default_ea` to send them to the
+        default, as long as IDA decoded the switch right.
+
+        Args:
+            value: The value being switched on, signed like the case values
+                (-16, not 0xFFFFFFF0).
+
+        Returns:
+            The target of the case that matches `value`, or None if no case matches.
+        """
+        for case in self.cases:
+            if value in case.values:
+                return case.target
+        return None
 
 
 @decorate_all_methods(check_db_open)
@@ -440,3 +514,56 @@ class Instructions(DatabaseEntity):
             An iterator over the jump target addresses.
         """
         return self.database.xrefs.jumps_from_ea(insn.ea)
+
+    def get_switch(self, insn: insn_t) -> Optional[SwitchInfo]:
+        """
+        Retrieves the switch IDA recognized at an instruction.
+
+        IDA stores a switch on one instruction, usually its indirect jump, so this
+        returns None for any other instruction of the switch, including the first
+        one. Table entries IDA cannot resolve to a target are left out of `cases`.
+
+        Args:
+            insn: The instruction holding the switch, usually its indirect jump.
+
+        Returns:
+            The switch, or None if the instruction holds no switch or IDA could not
+            decode its jump table.
+
+        Example:
+            ```python
+            insn = db.instructions.get_at(0x404B83)
+            if insn and (switch := db.instructions.get_switch(insn)):
+                for case in switch.cases:
+                    print(case.values, hex(case.target))
+            ```
+        """
+        si = ida_nalt.get_switch_info(insn.ea)
+        if si is None:
+            return None
+
+        result = ida_xref.calc_switch_cases(insn.ea, si)
+        if result is None:
+            return None
+        cases = [
+            SwitchCase(target=target, values=tuple(sorted(values)))
+            for values, target in zip(result.cases, result.targets)
+            # BADADDR: an entry IDA can't decode, e.g. in a table of jump insns
+            if len(values) and target != ida_idaapi.BADADDR
+        ]
+        # IDA's listing shows these as "switch with an invalid jump table"
+        if not cases:
+            return None
+        cases.sort(key=lambda case: case.values[0])
+
+        return SwitchInfo(
+            ea=insn.ea,
+            jump_table_ea=si.jumps,
+            element_size=si.get_jtable_element_size(),
+            # Not si.get_lowcase(): sparse switches keep their value table
+            # address there, and it comes back unsigned.
+            low_case=cases[0].values[0],
+            default_ea=si.defjump if si.has_default() else None,
+            cases=tuple(cases),
+            raw_switch_info=si,
+        )

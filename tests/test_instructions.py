@@ -2,6 +2,7 @@ import ida_bytes
 import ida_lines
 import ida_xref
 import pytest
+from conftest import min_ida_version
 
 import ida_domain  # isort: skip
 
@@ -201,3 +202,172 @@ def test_get_previous_only_reached_from_higher(tiny_pseudocode_env):
     caller = db.instructions.get_at(0x1A7)
     assert list(db.instructions.call_targets(caller)) == [0x26]
     assert db.instructions.get_previous(0x26) is None
+
+
+def _switch_in(db, func_name):
+    """The only switch IDA found in a function."""
+    func = db.functions.get_by_name(func_name)
+    assert func is not None
+    switches = []
+    for insn in db.functions.get_instructions(func):
+        switch = db.instructions.get_switch(insn)
+        if switch is not None:
+            switches.append(switch)
+    assert len(switches) == 1
+    return switches[0]
+
+
+def _check_get_switches(db):
+    """functions.get_switches() finds what get_switch() finds on every instruction."""
+    found = 0
+    for func in db.functions:
+        expected = [
+            switch
+            for insn in db.functions.get_instructions(func)
+            if (switch := db.instructions.get_switch(insn)) is not None
+        ]
+        assert list(db.functions.get_switches(func)) == expected
+        found += len(expected)
+    return found
+
+
+def _callee(db, ea):
+    """Name of the function the case code at ea calls (tail calls are jumps)."""
+    ref = next(db.xrefs.code_refs_from_ea(ea, flow=False), None)
+    assert ref is not None, f'no call or jump at 0x{ea:x}'
+    return db.names.get_at(ref)
+
+
+def _calls_by_value(db, switch):
+    return {v: _callee(db, case.target) for case in switch.cases for v in case.values}
+
+
+DENSE_CALLS = {
+    10: 'dense_10',
+    11: 'dense_11',
+    12: 'dense_12_14',
+    13: 'dense_default',
+    14: 'dense_12_14',
+    15: 'dense_15',
+    16: 'dense_16',
+    17: 'dense_17',
+    18: 'dense_default',
+    19: 'dense_19',
+}
+
+
+def test_get_switch(tiny_switch_x64_env):
+    db = tiny_switch_x64_env
+
+    switch = _switch_in(db, 'dense')
+    jump = db.instructions.get_at(switch.ea)
+    assert db.instructions.is_indirect_jump_or_call(jump)
+    assert db.instructions.get_switch(jump) == switch
+    assert switch.element_size == 8
+    assert switch.low_case == 10
+    assert _callee(db, switch.default_ea) == 'dense_default'
+    assert _calls_by_value(db, switch) == DENSE_CALLS
+    # Gaps in the cases go to the default block
+    assert switch.target_of(13) == switch.target_of(18) == switch.default_ea
+    assert [case.values for case in switch.cases] == [
+        (10,),
+        (11,),
+        (12, 14),
+        (13, 18),
+        (15,),
+        (16,),
+        (17,),
+        (19,),
+    ]
+    # Values outside the table have no case
+    assert switch.target_of(9) is None
+    assert switch.target_of(20) is None
+    assert switch.target_of(12) == switch.target_of(14) != switch.default_ea
+    assert db.segments.get_name(db.segments.get_at(switch.jump_table_ea)) == '.rodata'
+    assert hash(switch) == hash(db.instructions.get_switch(jump))
+
+    # The switch is stored on the indirect jump only
+    dense = db.functions.get_by_name('dense')
+    assert db.instructions.get_switch(db.instructions.get_at(dense.start_ea)) is None
+
+    switch = _switch_in(db, 'no_default')
+    assert switch.default_ea is None
+    assert switch.low_case == 0
+    assert _calls_by_value(db, switch) == {v: f'no_default_{v}' for v in range(8)}
+    assert switch.target_of(8) is None
+
+    switch = _switch_in(db, 'negative')
+    assert switch.low_case == -3
+    assert _calls_by_value(db, switch) == {
+        -3: 'negative_m3',
+        -2: 'negative_m2',
+        -1: 'negative_m1',
+        0: 'negative_0',
+        1: 'negative_1',
+        2: 'negative_2',
+        3: 'negative_3',
+    }
+    assert switch.target_of(-4) is None
+    assert _callee(db, switch.default_ea) == 'negative_default'
+    # Values are signed: the 32-bit pattern of -1 is not a case
+    assert switch.target_of(0xFFFFFFFF) is None
+
+    assert _check_get_switches(db) == 3
+    assert list(db.functions.get_switches(db.functions.get_by_name('dense_10'))) == []
+
+
+def test_get_switch_thumb(tiny_switch_thumb_env):
+    db = tiny_switch_thumb_env
+
+    # TBB: one-byte jump table entries
+    switch = _switch_in(db, 'dense')
+    assert switch.element_size == 1
+    assert switch.low_case == 10
+    assert _callee(db, switch.default_ea) == 'dense_default'
+    assert _calls_by_value(db, switch) == DENSE_CALLS
+
+    # gcc handles case 0 through the out-of-range branch, so it is IDA's default
+    switch = _switch_in(db, 'no_default')
+    assert switch.low_case == 1
+    assert _calls_by_value(db, switch) == {v: f'no_default_{v}' for v in range(1, 8)}
+    assert switch.target_of(0) is None
+    assert _callee(db, switch.default_ea) == 'no_default_0'
+
+    # IDA doesn't see the ADDS that biases the index here, so it reports table
+    # indices (0..6) instead of -3..3. Fails once IDA recognizes the bias.
+    switch = _switch_in(db, 'negative')
+    assert switch.low_case == 0
+    assert _calls_by_value(db, switch) == {
+        0: 'negative_m3',
+        1: 'negative_m2',
+        2: 'negative_m1',
+        3: 'negative_0',
+        4: 'negative_1',
+        5: 'negative_2',
+        6: 'negative_3',
+    }
+
+    assert _check_get_switches(db) == 3
+
+
+# IDA 9.2 and 9.3 find no switch in this DEX; 9.1 exits while loading it
+@min_ida_version('9.4')
+def test_get_switch_sparse(tiny_switch_dalvik_env):
+    db = tiny_switch_dalvik_env
+
+    # Dalvik sparse-switch: a value table, so switch_info_t has no low case
+    switch = _switch_in(db, 'TinySwitch.sparse@VI')
+    assert switch.raw_switch_info.is_sparse()
+    assert not switch.raw_switch_info.is_indirect()
+    assert switch.low_case == -5
+    assert switch.element_size == 4
+    assert _callee(db, switch.default_ea) == 'TinySwitch.sparse_default@V'
+    assert _calls_by_value(db, switch) == {
+        -5: 'TinySwitch.sparse_m5@V',
+        1: 'TinySwitch.sparse_1@V',
+        100: 'TinySwitch.sparse_100@V',
+        1000: 'TinySwitch.sparse_1000@V',
+    }
+    assert switch.target_of(2) is None
+
+    assert _check_get_switches(db) == 1

@@ -7,7 +7,9 @@ from enum import Flag, IntEnum
 
 import ida_bytes
 import ida_funcs
+import ida_idp
 import ida_lines
+import ida_nalt
 import ida_name
 import ida_typeinf
 from ida_funcs import func_t
@@ -40,6 +42,7 @@ from .types import TypeApplyFlags
 
 if TYPE_CHECKING:
     from .database import Database
+    from .instructions import SwitchInfo
     from .microcode import MicroBlockArray
 
 logger = logging.getLogger(__name__)
@@ -300,6 +303,38 @@ class Functions(DatabaseEntity):
         """
         for chunk in self.get_chunks(func):
             yield from self.database.instructions.get_between(chunk.start_ea, chunk.end_ea)
+
+    def get_switches(self, func: func_t) -> Iterator[SwitchInfo]:
+        """
+        Retrieves the switches IDA recognized in the given function, including its
+        tail chunks.
+
+        Only instructions that hold a switch are decoded, so this is faster than
+        calling `Instructions.get_switch()` on every instruction.
+
+        Args:
+            func: The function instance.
+
+        Returns:
+            An iterator over the function's switches, in address order within
+            each chunk.
+        """
+        # IDA flags switch jumps with FF_JUMP, except in the Dalvik module, which
+        # stores the switch without creating its table (seen up to IDA 9.5, fix
+        # pending in a future release). Look for the switch info at every
+        # instruction there.
+        no_ff_jump = ida_idp.ph_get_id() == ida_idp.PLFM_DALVIK
+        for chunk in self.get_chunks(func):
+            ea = chunk.start_ea
+            while ea != BADADDR and ea < chunk.end_ea:
+                if ida_bytes.get_flags(ea) & ida_bytes.FF_JUMP or (
+                    no_ff_jump and ida_nalt.get_switch_info(ea) is not None
+                ):
+                    insn = self.database.instructions.get_at(ea)
+                    switch = insn and self.database.instructions.get_switch(insn)
+                    if switch:
+                        yield switch
+                ea = ida_bytes.next_head(ea, chunk.end_ea)
 
     def get_disassembly(self, func: func_t, remove_tags: bool = True) -> List[str]:
         """
