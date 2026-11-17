@@ -52,9 +52,9 @@ class SwitchInfo:
 
     - Case values are signed. A value IDA sees as negative is reported negative even
       in a 64-bit database, so a 32-bit `case 0xFFFFFFF0` is -16.
-    - If IDA misses the instruction that subtracts the lowest case before the table
-      lookup (common on ARM, AArch64, MIPS and RISC-V when cases are negative or
-      start far from zero), `low_case` is 0 and the values are table indices.
+    - If IDA misses the instruction that rebases the selector before the table
+      lookup (seen on most architectures when cases are negative or start far from
+      zero), `low_case` is 0 and the values are table indices.
     - `default_ea` is where the table's bounds check jumps. Compilers may route a real
       case through it, and checks before the switch may send values elsewhere.
     """
