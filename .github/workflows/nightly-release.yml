@@ -1,0 +1,227 @@
+name: Nightly Release
+
+# Publishes a development release of the main branch to PyPI.
+#
+# A release is made only when the head of main:
+#   - is not a stable release commit,
+#   - has not already been published by this workflow,
+#   - passed the "Run tests" workflow.
+#
+
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: nightly-release
+  cancel-in-progress: false
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  PYPI_PROJECT: ida-domain
+  PUBLISH_JOB_NAME: Publish to PyPI
+
+jobs:
+  check:
+    name: Check whether a release is needed
+    # Scheduled runs are only meaningful upstream; forks can still trigger the workflow manually.
+    if: github.event_name != 'schedule' || github.repository == 'hexrayssa/ida-domain'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+
+    outputs:
+      should_release: ${{ steps.decide.outputs.should_release }}
+      version: ${{ steps.decide.outputs.version }}
+      sha: ${{ steps.decide.outputs.sha }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Decide
+        id: decide
+        run: |
+          SHA="${GITHUB_SHA}"
+
+          skip() {
+            echo "::${2:-notice}::Nightly release skipped: $1"
+            {
+              echo "### Nightly release skipped"
+              echo "$1"
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          }
+
+          # 1. A stable release commit only bumps the version: a nightly of it would be
+          #    the very same code as the stable release.
+          STABLE_TAG=$(git tag --points-at "$SHA" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1 || true)
+          if [[ -n "$STABLE_TAG" ]]; then
+            skip "$SHA is the stable release $STABLE_TAG."
+          fi
+
+          # 2. Nothing new since the last nightly.
+          RUN_IDS=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/nightly-release.yml/runs?head_sha=$SHA&per_page=100" \
+            --jq '.workflow_runs[].id')
+          for RUN_ID in $RUN_IDS; do
+            PUBLISHED=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/jobs" \
+              --jq "[.jobs[] | select(.name == \"$PUBLISH_JOB_NAME\" and .conclusion == \"success\")] | length")
+            if [[ "$PUBLISHED" != "0" ]]; then
+              skip "$SHA was already published by run $RUN_ID."
+            fi
+          done
+
+          # 3. Only release commits that passed the tests.
+          TESTS=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/tests.yml/runs?head_sha=$SHA&per_page=100" \
+            --jq '[.workflow_runs[] | select(.event != "pull_request")] | sort_by(.created_at) | last
+                  | if . == null then "missing" else "\(.status)/\(.conclusion)" end')
+          if [[ "$TESTS" != "completed/success" ]]; then
+            skip "the tests did not pass on $SHA (latest run: $TESTS)." warning
+          fi
+
+          # 4. Next patch of the highest stable version, as a development release.
+          PROJECT_VERSION=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
+          if [[ ! "$PROJECT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Expected a stable X.Y.Z version in pyproject.toml, found '$PROJECT_VERSION'."
+            exit 1
+          fi
+          # Stable tags are considered too, so that a hotfix released from a maintenance
+          # branch does not end up newer than the nightlies of main.
+          BASE_VERSION=$({
+            echo "$PROJECT_VERSION"
+            git tag -l 'v*' | sed 's/^v//' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' || true
+          } | sort -V | tail -1)
+          IFS=. read -r MAJOR MINOR PATCH <<< "$BASE_VERSION"
+          NIGHTLY_VERSION="$MAJOR.$MINOR.$((10#$PATCH + 1)).dev$(date -u +%Y%m%d)"
+
+          # 5. One nightly per day: PyPI never accepts the same version twice.
+          HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' "https://pypi.org/pypi/$PYPI_PROJECT/$NIGHTLY_VERSION/json")
+          case "$HTTP_CODE" in
+            200) skip "$NIGHTLY_VERSION is already on PyPI; $SHA will be released by the next run." ;;
+            404) ;;
+            *)
+              echo "::error::Unexpected HTTP status $HTTP_CODE from PyPI while looking up $NIGHTLY_VERSION."
+              exit 1
+              ;;
+          esac
+
+          echo "Releasing $SHA as $NIGHTLY_VERSION"
+          {
+            echo "should_release=true"
+            echo "version=$NIGHTLY_VERSION"
+            echo "sha=$SHA"
+          } >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build:
+    name: Build nightly package
+    needs: check
+    if: needs.check.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    env:
+      NIGHTLY_VERSION: ${{ needs.check.outputs.version }}
+      NIGHTLY_SHA: ${{ needs.check.outputs.sha }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.check.outputs.sha }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Install Python
+        run: uv python install 3.13
+
+      - name: Set nightly version
+        run: |
+          python3 - <<'PY'
+          import os
+          import tomllib
+          from pathlib import Path
+
+          new = os.environ['NIGHTLY_VERSION']
+          pyproject = Path('pyproject.toml')
+          old = tomllib.loads(pyproject.read_text(encoding='utf-8'))['project']['version']
+
+          for path, template in (
+              (pyproject, 'version = "{}"'),
+              (Path('ida_domain/__init__.py'), "__version__ = '{}'"),
+          ):
+              text = path.read_text(encoding='utf-8')
+              needle = template.format(old)
+              count = text.count(needle)
+              assert count == 1, f'Expected exactly one {needle!r} in {path}, found {count}'
+              path.write_text(text.replace(needle, template.format(new)), encoding='utf-8')
+          PY
+
+      - name: Build package
+        run: |
+          rm -rf dist
+          uv build
+          ls -l dist
+          test -f "dist/ida_domain-${NIGHTLY_VERSION}-py3-none-any.whl"
+          test -f "dist/ida_domain-${NIGHTLY_VERSION}.tar.gz"
+
+      - name: Upload package
+        uses: actions/upload-artifact@v7
+        with:
+          name: nightly-dist
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Summary
+        run: |
+          {
+            echo "### Nightly release built"
+            echo "- Version: \`$NIGHTLY_VERSION\`"
+            echo "- Commit: \`$NIGHTLY_SHA\`"
+            echo ""
+            echo "The package is published to PyPI only from the main branch of hexrayssa/ida-domain."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  publish:
+    # Keep in sync with PUBLISH_JOB_NAME above.
+    name: Publish to PyPI
+    needs: [check, build]
+    if: github.repository == 'hexrayssa/ida-domain' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+
+    env:
+      NIGHTLY_VERSION: ${{ needs.check.outputs.version }}
+
+    steps:
+      - name: Download package
+        uses: actions/download-artifact@v8
+        with:
+          name: nightly-dist
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+
+      - name: Summary
+        run: |
+          {
+            echo "### Nightly release published"
+            echo "Install with \`pip install $PYPI_PROJECT==$NIGHTLY_VERSION\` or \`pip install --pre $PYPI_PROJECT\`."
+          } >> "$GITHUB_STEP_SUMMARY"

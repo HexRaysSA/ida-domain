@@ -49,8 +49,17 @@ The `idapro` Python module needs to know where IDA Pro is installed. The locatio
 
 ### Install from PyPI
 
+To install the latest stable release use:
+
 ```bash
 pip install ida-domain
+```
+
+Development releases are published nightly, when there are new changes. `pip` and `uv` ignore them unless you opt in:
+
+```bash
+pip install --pre ida-domain
+uv pip install --prerelease=allow ida-domain
 ```
 
 ### Overriding the IDA install directory with `IDADIR`

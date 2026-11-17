@@ -46,6 +46,13 @@ source ida-env/bin/activate  # On Windows: ida-env\Scripts\activate
 pip install ida-domain
 ```
 
+This installs the latest stable release. Development releases of the `main` branch are published nightly (when it has new changes). `pip` and `uv` ignore them unless you opt in:
+
+```bash
+pip install --pre ida-domain
+uv pip install --prerelease=allow ida-domain
+```
+
 ### Step 3: Verify Installation
 
 ```python
