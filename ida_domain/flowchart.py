@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 import logging
-from enum import IntFlag
-from typing import Any
+import warnings
+from enum import IntEnum, IntFlag
 
 import ida_gdl
 from ida_gdl import qbasic_block_t, qflow_chart_t
+from ida_idaapi import BADADDR
 from ida_ua import insn_t
-from typing_extensions import TYPE_CHECKING, Iterator, Optional
+from typing_extensions import TYPE_CHECKING, Iterator, List, Optional
 
+from ._graph import BlockGraph
 from .base import (
     DatabaseEntity,
     InvalidEAError,
@@ -35,8 +37,21 @@ class FlowChartFlags(IntFlag):
     PREDS = ida_gdl.FC_PREDS  # Compute predecessor information
 
 
+class BlockType(IntEnum):
+    """Basic block types corresponding to fcb_* constants."""
+
+    NORMAL = ida_gdl.fcb_normal
+    INDIRECT_JUMP = ida_gdl.fcb_indjump
+    RETURN = ida_gdl.fcb_ret
+    CONDITIONAL_RETURN = ida_gdl.fcb_cndret
+    NORETURN = ida_gdl.fcb_noret
+    EXTERNAL_NORETURN = ida_gdl.fcb_enoret
+    EXTERNAL = ida_gdl.fcb_extern
+    ERROR = ida_gdl.fcb_error
+
+
 @decorate_all_methods(check_db_open)
-class BasicBlock(ida_gdl.BasicBlock, DatabaseEntity):
+class BasicBlock(DatabaseEntity):
     """
     Provides access to basic block properties and navigation
     between connected blocks within a control flow graph.
@@ -47,7 +62,7 @@ class BasicBlock(ida_gdl.BasicBlock, DatabaseEntity):
         database: Optional[Database],
         id: int,
         block: qbasic_block_t,
-        flowchart: qflow_chart_t,
+        flowchart: FlowChart,
     ) -> None:
         """
         Initialize basic block.
@@ -57,24 +72,84 @@ class BasicBlock(ida_gdl.BasicBlock, DatabaseEntity):
             block: The underlying qbasic_block_t object
             flowchart: Parent flowchart
         """
-        DatabaseEntity.__init__(self, database)
-        ida_gdl.BasicBlock.__init__(self, id, block, flowchart)
+        super().__init__(database)
+        self._id = id
+        self._raw = block
+        self._flowchart = flowchart
+
+    # -- raw access --------------------------------------------------------
+
+    @property
+    def raw_block(self) -> qbasic_block_t:
+        """Get the underlying ``qbasic_block_t`` object."""
+        return self._raw
+
+    # -- basic properties --------------------------------------------------
+
+    @property
+    def id(self) -> int:
+        """Block ID within the flowchart (same as its index)."""
+        return self._id
+
+    @property
+    def start_ea(self) -> ea_t:
+        """Start address of the block."""
+        return self._raw.start_ea
+
+    @property
+    def end_ea(self) -> ea_t:
+        """End address of the block (exclusive)."""
+        return self._raw.end_ea
+
+    @property
+    def block_type(self) -> BlockType:
+        """Block type as a :class:`BlockType` enum."""
+        return BlockType(self._flowchart.raw_flowchart.calc_block_type(self._id))
+
+    @property
+    def is_return(self) -> bool:
+        """True if the block returns from the function (conditionally or not)."""
+        return self._flowchart.raw_flowchart.is_ret_block(self._id)
+
+    @property
+    def is_noreturn(self) -> bool:
+        """True if the block does not return."""
+        return self._flowchart.raw_flowchart.is_noret_block(self._id)
+
+    @property
+    def flowchart(self) -> FlowChart:
+        """Parent flowchart."""
+        return self._flowchart
+
+    # -- navigation --------------------------------------------------------
+
+    @property
+    def successor_ids(self) -> List[int]:
+        """List of successor block IDs."""
+        return self._flowchart._successor_ids(self._id)
+
+    @property
+    def predecessor_ids(self) -> List[int]:
+        """List of predecessor block IDs."""
+        return self._flowchart._predecessor_ids(self._id)
 
     def get_successors(self) -> Iterator[BasicBlock]:
         """Iterator over successor blocks."""
-        return self.succs()
+        for i in self.successor_ids:
+            yield self._flowchart[i]
 
     def get_predecessors(self) -> Iterator[BasicBlock]:
         """Iterator over predecessor blocks."""
-        return self.preds()
+        for i in self.predecessor_ids:
+            yield self._flowchart[i]
 
     def count_successors(self) -> int:
         """Count the number of successor blocks."""
-        return sum(1 for _ in self.succs())
+        return self._flowchart.raw_flowchart.nsucc(self._id)
 
     def count_predecessors(self) -> int:
         """Count the number of predecessor blocks."""
-        return sum(1 for _ in self.preds())
+        return self._flowchart.raw_flowchart.npred(self._id)
 
     def get_instructions(self) -> Optional[Iterator[insn_t]]:
         """
@@ -85,9 +160,37 @@ class BasicBlock(ida_gdl.BasicBlock, DatabaseEntity):
         """
         return self.database.instructions.get_between(self.start_ea, self.end_ea)
 
+    # -- deprecated --------------------------------------------------------
+
+    @property
+    def type(self) -> int:
+        warnings.warn('BasicBlock.type deprecated, use block_type instead', DeprecationWarning)
+        return int(self.block_type)
+
+    def succs(self) -> Iterator[BasicBlock]:
+        warnings.warn('succs deprecated, use get_successors instead', DeprecationWarning)
+        return self.get_successors()
+
+    def preds(self) -> Iterator[BasicBlock]:
+        warnings.warn('preds deprecated, use get_predecessors instead', DeprecationWarning)
+        return self.get_predecessors()
+
+    # -- dunder ------------------------------------------------------------
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, BasicBlock):
+            return self._flowchart is other._flowchart and self._id == other._id
+        return NotImplemented
+
+    def __hash__(self) -> int:
+        return hash((id(self._flowchart), self._id))
+
+    def __repr__(self) -> str:
+        return f'BasicBlock(id={self._id}, start_ea={self.start_ea:#x}, end_ea={self.end_ea:#x})'
+
 
 @decorate_all_methods(check_db_open)
-class FlowChart(ida_gdl.FlowChart, DatabaseEntity):
+class FlowChart(BlockGraph[BasicBlock], DatabaseEntity):
     """
     Provides analysis and iteration over basic blocks within
     functions or address ranges.
@@ -111,10 +214,17 @@ class FlowChart(ida_gdl.FlowChart, DatabaseEntity):
             flags: FlowChart creation flags controlling analysis behavior.
                 Defaults to FlowChartFlags.NONE.
 
+        Raises:
+            InvalidParameterError: If neither `func` nor `bounds` is specified,
+                or `bounds` is not a valid range.
+            InvalidEAError: If `bounds` contains an invalid address.
+
         Note:
             At least one of `func` or `bounds` must be specified.
         """
         DatabaseEntity.__init__(self, database)
+        if func is None and bounds is None:
+            raise InvalidParameterError('bounds', bounds, 'func or bounds must be specified')
         if bounds:
             if not self.database.is_valid_ea(bounds[0], strict_check=False):
                 raise InvalidEAError(bounds[0])
@@ -123,42 +233,37 @@ class FlowChart(ida_gdl.FlowChart, DatabaseEntity):
             if bounds[0] >= bounds[1]:
                 raise InvalidParameterError('bounds', bounds, 'must be a valid range')
 
-        ida_gdl.FlowChart.__init__(self, func, bounds, int(flags))
+        start_ea, end_ea = bounds if bounds else (BADADDR, BADADDR)
+        self._raw = qflow_chart_t('', func, start_ea, end_ea, int(flags))
 
-    def __getitem__(self, index: int) -> BasicBlock:
-        """
-        Access flowchart items by index.
+    # -- raw access --------------------------------------------------------
 
-        Args:
-            index: The index of the basic block to retrieve.
+    @property
+    def raw_flowchart(self) -> qflow_chart_t:
+        """Get the underlying ``qflow_chart_t`` object."""
+        return self._raw
 
-        Returns:
-            The basic block at the specified index.
+    def refresh(self) -> None:
+        """Recompute the flowchart. Blocks obtained before the call are stale."""
+        self._raw.refresh()
 
-        Raises:
-            IndexError: If index is out of range.
-        """
-        if not (0 <= index < self.size):
-            raise IndexError(f'Basic block index {index} out of range (0-{self.size - 1})')
+    # -- BlockGraph --------------------------------------------------------
 
-        base_block = super().__getitem__(index)
-        return BasicBlock(self.m_database, base_block.id, base_block, self)
+    def _node_count(self) -> int:
+        return self._raw.size()
 
-    def __iter__(self) -> Iterator[BasicBlock]:
-        """
-        Iterator protocol support for iteration.
+    def _node(self, index: int) -> BasicBlock:
+        return BasicBlock(self.m_database, index, self._raw[index], self)
 
-        Yields:
-            BasicBlock: Basic blocks in the flowchart.
-        """
-        for i in range(self.size):
-            yield self[i]
+    def _successor_ids(self, index: int) -> List[int]:
+        return [self._raw.succ(index, j) for j in range(self._raw.nsucc(index))]
 
-    def __len__(self) -> int:
-        """
-        Return number of basic blocks in flowchart.
+    def _predecessor_ids(self, index: int) -> List[int]:
+        return [self._raw.pred(index, j) for j in range(self._raw.npred(index))]
 
-        Returns:
-            int: Number of basic blocks.
-        """
-        return self.size
+    # -- deprecated --------------------------------------------------------
+
+    @property
+    def size(self) -> int:
+        warnings.warn('FlowChart.size deprecated, use len() instead', DeprecationWarning)
+        return len(self)
