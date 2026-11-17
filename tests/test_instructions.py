@@ -2,6 +2,7 @@ import ida_bytes
 import ida_lines
 import ida_xref
 import pytest
+from conftest import min_ida_version
 
 import ida_domain  # isort: skip
 
@@ -349,6 +350,8 @@ def test_get_switch_thumb(tiny_switch_thumb_env):
     assert _check_get_switches(db) == 3
 
 
+# IDA 9.2 and 9.3 find no switch in this DEX; 9.1 exits while loading it
+@min_ida_version('9.4')
 def test_get_switch_sparse(tiny_switch_dalvik_env):
     db = tiny_switch_dalvik_env
 
