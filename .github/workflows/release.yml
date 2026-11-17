@@ -8,11 +8,10 @@ on:
         required: true
         type: choice
         options:
-          - Development
           - Hotfix
           - Minor Release
           - Major Release
-        default: 'Development'
+        default: 'Minor Release'
 
 jobs:
   create-release-pr:
@@ -44,15 +43,9 @@ jobs:
           BASE_BRANCH="${GITHUB_REF_NAME}"
           RELEASE_BRANCH="release/${{ github.run_id }}-${{ github.run_attempt }}"
 
+          # Development releases are not created here: they are published from main by
+          # the "Nightly Release" workflow.
           case "${{ github.event.inputs.release_type }}" in
-            "Development")
-              VERSION=$(uv run semantic-release version --print-last-released | tail -1)
-              if [[ "$VERSION" == *dev* ]]; then
-                uv run semantic-release version --prerelease --prerelease-token dev --no-changelog --no-push --no-vcs-release
-              else
-                uv run semantic-release version --as-prerelease --patch --prerelease-token dev --no-changelog --no-push --no-vcs-release
-              fi
-              ;;
             "Major Release")
               uv run semantic-release version --major --no-changelog --no-push --no-vcs-release
               ;;
@@ -60,8 +53,6 @@ jobs:
               uv run semantic-release version --minor --no-changelog --no-push --no-vcs-release
               ;;
             "Hotfix")
-              # Remove local dev tags to ensure patch increments from last stable release
-              git tag -d $(git tag -l | grep -E "dev") 2>/dev/null || true
               uv run semantic-release version --patch --no-changelog --no-push --no-vcs-release
               ;;
           esac
