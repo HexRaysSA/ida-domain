@@ -1,10 +1,14 @@
 import os
+import re
+import shutil
 
 import conftest
+import pytest
 from conftest import min_ida_version
 
 import ida_domain  # isort: skip
 
+from ida_domain.base import DatabaseError
 from ida_domain.database import IdaCommandOptions
 
 
@@ -176,6 +180,34 @@ def test_script_file_with_spaces():
     finally:
         db.close(False)
     assert os.path.exists(marker)
+
+
+@min_ida_version('9.5')
+def test_open_idb_converts_to_i64():
+    """A 32-bit .idb is converted on the first open; the next open must point to the .i64."""
+    import ida_loader
+
+    work_dir = os.path.dirname(conftest.idb_path)
+    resources = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'resources')
+    idb = os.path.join(work_dir, 'be_ornot_be.idb')
+    i64 = os.path.join(work_dir, 'be_ornot_be.i64')
+    shutil.copy(os.path.join(resources, 'be_ornot_be.idb'), idb)
+    assert not os.path.exists(i64)
+
+    db = ida_domain.Database.open(path=idb, save_on_close=False)
+    try:
+        assert db.is_open()
+        # the session continues with the converted database
+        assert os.path.samefile(ida_loader.get_path(ida_loader.PATH_TYPE_IDB), i64)
+        assert len(db.functions) == 1
+    finally:
+        db.close(False)
+    assert os.path.exists(i64)
+    assert os.path.exists(idb)
+
+    with pytest.raises(DatabaseError, match=re.escape(f'Open {i64} instead')):
+        ida_domain.Database.open(path=idb, save_on_close=False)
+    assert not ida_domain.Database().is_open()
 
 
 def test_ida_command_options():
