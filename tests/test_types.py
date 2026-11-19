@@ -792,6 +792,120 @@ def test_struct_builder_alignment(test_env):
             db.types.create_struct('BadAlign').set_alignment(alignment)  # type: ignore
 
 
+def test_struct_builder_member_offset(test_env):
+    """Test that add_member places a member at its explicit byte offset."""
+    db = test_env
+    int1 = db.types.create_primitive(1)
+    int4 = db.types.create_primitive(4)
+    int8 = db.types.create_primitive(8)
+
+    def members(struct_type):
+        return [(m.name, m.offset // 8, m.is_gap()) for m in _udt(struct_type)]
+
+    # Offsets of the natural layout add no gaps
+    natural = (
+        db.types.create_struct('NaturalOffsets')
+        .add_member('a', int4, offset=0)
+        .add_member('b', int4, offset=4)
+        .build()
+    )
+    assert natural.get_size() == 8
+    assert members(natural) == [('a', 0, False), ('b', 4, False)]
+
+    # A gap in front of the first member, a member after one with an offset
+    gapped = (
+        db.types.create_struct('GappedOffsets')
+        .add_member('a', int4, offset=0x10)
+        .add_member('b', int4, offset=0x20)
+        .add_member('c', int8)
+        .build()
+    )
+    assert gapped.get_size() == 0x30
+    assert members(gapped) == [
+        ('_pad0', 0, True),
+        ('a', 0x10, False),
+        ('_pad14', 0x14, True),
+        ('b', 0x20, False),
+        ('c', 0x28, False),
+    ]
+
+    # Only a packed struct can hold a member at an unaligned offset
+    packed = (
+        db.types.create_struct('PackedOffsets')
+        .set_packed()
+        .add_member('a', int1)
+        .add_member('b', int4, offset=6)
+        .build()
+    )
+    assert packed.get_size() == 10
+    assert members(packed) == [('a', 0, False), ('_pad1', 1, True), ('b', 6, False)]
+    with pytest.raises(DatabaseError):
+        db.types.create_struct('Unaligned').add_member('a', int1).add_member(
+            'b', int4, offset=6
+        ).build()
+
+    aligned = (
+        db.types.create_struct('AlignedOffsets')
+        .set_alignment(16)
+        .add_member('a', int4)
+        .add_member('b', int4, offset=8)
+        .build()
+    )
+    assert aligned.get_size() == 16
+    assert members(aligned) == [('a', 0, False), ('_pad4', 4, True), ('b', 8, False)]
+
+    # A member that follows a struct ending with padding
+    tail_padded = (
+        db.types.create_struct('TailPadded').add_member('a', int8).add_member('b', int1).build()
+    )
+    assert tail_padded.get_size() == 16
+    after_tail_padded = (
+        db.types.create_struct('AfterTailPadded')
+        .add_member('t', tail_padded)
+        .add_member('n', int8, offset=16)
+        .add_member('m', int1, offset=32)
+        .build()
+    )
+    assert members(after_tail_padded) == [
+        ('t', 0, False),
+        ('n', 16, False),
+        ('_pad18', 24, True),
+        ('m', 32, False),
+    ]
+
+    saved = (
+        db.types.create_struct('SavedOffsets')
+        .add_member('a', int4)
+        .add_member('b', int4, offset=8)
+        .build_and_save()
+    )
+    assert members(saved) == [('a', 0, False), ('_pad4', 4, True), ('b', 8, False)]
+    assert members(db.types.get_by_name('SavedOffsets')) == members(saved)
+
+    # A member named like the padding in front of it keeps its name
+    same_name = (
+        db.types.create_struct('PadNamedMember')
+        .add_member('a', int4)
+        .add_member('_pad4', int4, offset=8)
+        .add_member('_pad4_', int4, offset=16)
+        .build()
+    )
+    assert members(same_name) == [
+        ('a', 0, False),
+        ('_pad4__', 4, True),
+        ('_pad4', 8, False),
+        ('_padC', 12, True),
+        ('_pad4_', 16, False),
+    ]
+
+    # Offsets inside or before the previous member
+    for first, second in ((0, 0), (0, 2), (8, 0), (-4, None)):
+        with pytest.raises(DatabaseError):
+            db.types.create_struct('BadOffsets').add_member('a', int4, offset=first).add_member(
+                'b', int4, offset=second
+            ).build()
+
+
 def test_enum_builder_base_size(test_env):
     """Test that base_size sets the enum width, and None keeps the database default."""
     db = test_env
