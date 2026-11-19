@@ -48,6 +48,7 @@ from typing_extensions import (
     Union,
 )
 
+from . import _ida_compat
 from .base import (
     DatabaseEntity,
     DatabaseError,
@@ -1002,14 +1003,15 @@ class TypeMemberLookupMode(Enum):
 # =============================================================================
 
 
-class CallingConvention(Enum):
+class CallingConvention(IntEnum):
     """Calling convention for function types."""
 
-    CDECL = 'cdecl'
-    STDCALL = 'stdcall'
-    FASTCALL = 'fastcall'
-    THISCALL = 'thiscall'
-    DEFAULT = 'default'
+    CDECL = ida_typeinf.CM_CC_CDECL
+    STDCALL = ida_typeinf.CM_CC_STDCALL
+    FASTCALL = ida_typeinf.CM_CC_FASTCALL
+    THISCALL = ida_typeinf.CM_CC_THISCALL
+    DEFAULT = ida_typeinf.CM_CC_UNKNOWN
+    """The database's default calling convention."""
 
 
 # =============================================================================
@@ -1060,6 +1062,12 @@ class StructBuilder:
     def set_packed(self, packed: bool = True) -> 'StructBuilder':
         """
         Set whether the struct is packed (no padding).
+
+        Args:
+            packed: True to pack the struct, False for natural alignment.
+
+        Returns:
+            Self for method chaining.
         """
         self._packed = packed
         return self
@@ -1067,7 +1075,25 @@ class StructBuilder:
     def set_alignment(self, alignment: int) -> 'StructBuilder':
         """
         Set explicit alignment for the struct.
+
+        Args:
+            alignment: Alignment in bytes, a power of two from 1 to 16384.
+
+        Returns:
+            Self for method chaining.
+
+        Raises:
+            InvalidParameterError: If alignment is not a power of two from 1 to 16384.
         """
+        if (
+            not isinstance(alignment, int)
+            or alignment < 1
+            or alignment & (alignment - 1)
+            or alignment.bit_length() > ida_typeinf.MAX_DECL_ALIGN
+        ):
+            raise InvalidParameterError(
+                'alignment', alignment, 'must be a power of two from 1 to 16384'
+            )
         self._alignment = alignment
         return self
 
@@ -1083,6 +1109,10 @@ class StructBuilder:
         """
         udt = udt_type_data_t()
         udt.is_union = False
+        if self._packed:
+            udt.taudt_bits |= ida_typeinf.TAUDT_UNALIGNED
+        if self._alignment is not None:
+            udt.sda = self._alignment.bit_length()  # log2(alignment) + 1
 
         for name, member_type, offset in self._members:
             if offset is not None:
@@ -1205,14 +1235,21 @@ class EnumBuilder:
         >>> file_mode = builder.build()
     """
 
-    def __init__(self, name: str, base_size: int = 4) -> None:
+    def __init__(self, name: str, base_size: Optional[int] = None) -> None:
         """
         Initialize an enum builder.
 
         Args:
             name: Name for the enum type.
-            base_size: Size in bytes (1, 2, 4, or 8).
+            base_size: Size in bytes (1, 2, 4, or 8), or None for the database's default.
+
+        Raises:
+            InvalidParameterError: If base_size is not None, 1, 2, 4, or 8.
         """
+        if base_size is not None and (
+            not isinstance(base_size, int) or base_size not in (1, 2, 4, 8)
+        ):
+            raise InvalidParameterError('base_size', base_size, 'must be 1, 2, 4, or 8')
         self._name = name
         self._base_size = base_size
         self._members: List[Tuple[str, int]] = []
@@ -1235,6 +1272,12 @@ class EnumBuilder:
     def set_bitmask(self, is_bitmask: bool = True) -> 'EnumBuilder':
         """
         Set whether this is a bitmask enum.
+
+        Args:
+            is_bitmask: True for a bitmask enum, False for a regular enum.
+
+        Returns:
+            Self for method chaining.
         """
         self._is_bitmask = is_bitmask
         return self
@@ -1247,19 +1290,28 @@ class EnumBuilder:
             The constructed tinfo_t.
 
         Raises:
-            DatabaseError: If enum creation fails.
+            DatabaseError: If enum creation fails, or the members cannot form a
+                bitmask enum.
         """
         enum_data = enum_type_data_t()
+
+        if self._base_size is not None:
+            enum_data.set_nbytes(self._base_size)
 
         for name, value in self._members:
             enum_data.add_constant(name, value)
 
-        if self._is_bitmask:
-            enum_data.set_bf(True)
-
         result = tinfo_t()
         if not result.create_enum(enum_data):
             raise DatabaseError(f"Failed to create enum '{self._name}'")
+
+        if self._is_bitmask:
+            code = result.set_enum_is_bitmask(tinfo_t.ENUMBM_ON)
+            if code != ida_typeinf.TERR_OK:
+                raise DatabaseError(
+                    f"Failed to make enum '{self._name}' a bitmask: "
+                    f'{ida_typeinf.tinfo_errstr(code)}'
+                )
 
         return result
 
@@ -1336,13 +1388,21 @@ class FuncTypeBuilder:
 
         Returns:
             Self for method chaining.
+
+        Raises:
+            InvalidParameterError: If cc is not a CallingConvention.
         """
+        if not isinstance(cc, CallingConvention):
+            raise InvalidParameterError('cc', cc, 'must be a CallingConvention')
         self._calling_convention = cc
         return self
 
     def set_variadic(self, variadic: bool = True) -> 'FuncTypeBuilder':
         """
         Set whether function accepts variable arguments.
+
+        Args:
+            variadic: True for a variadic function, False for a fixed argument list.
 
         Returns:
             Self for method chaining.
@@ -1358,8 +1418,19 @@ class FuncTypeBuilder:
             The constructed tinfo_t.
 
         Raises:
+            InvalidParameterError: If set_variadic() is combined with a calling convention
+                other than CDECL or DEFAULT.
             DatabaseError: If function type creation fails.
         """
+        if self._variadic and self._calling_convention not in (
+            None,
+            CallingConvention.CDECL,
+            CallingConvention.DEFAULT,
+        ):
+            raise InvalidParameterError(
+                'cc', repr(self._calling_convention), 'cannot be combined with set_variadic()'
+            )
+
         ftd = func_type_data_t()
 
         # Set return type
@@ -1376,6 +1447,11 @@ class FuncTypeBuilder:
             fa.name = name
             fa.type = arg_type
             ftd.push_back(fa)
+
+        if self._variadic:
+            _ida_compat.set_func_type_cc(ftd, ida_typeinf.CM_CC_ELLIPSIS)
+        elif self._calling_convention is not None:
+            _ida_compat.set_func_type_cc(ftd, self._calling_convention)
 
         result = tinfo_t()
         if not result.create_func(ftd):
@@ -2249,16 +2325,20 @@ class Types(DatabaseEntity):
         """
         return UnionBuilder(name)
 
-    def create_enum(self, name: str, base_size: int = 4) -> EnumBuilder:
+    def create_enum(self, name: str, base_size: Optional[int] = None) -> EnumBuilder:
         """
         Create an enum builder.
 
         Args:
             name: Name for the enum.
-            base_size: Underlying integer size (1, 2, 4, or 8).
+            base_size: Underlying integer size (1, 2, 4, or 8), or None for the
+                database's default.
 
         Returns:
             An EnumBuilder for constructing the type.
+
+        Raises:
+            InvalidParameterError: If base_size is not None, 1, 2, 4, or 8.
         """
         return EnumBuilder(name, base_size)
 
