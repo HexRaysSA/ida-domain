@@ -22,6 +22,7 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+from collections import Counter
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -46,8 +47,12 @@ def _is_prompt(line):
     return line.lstrip().startswith(('>>>', '... ')) or line.strip() == '...'
 
 
-def _extract(lines, first_line, prompts):
-    """Yield (line of the first code line, code) for each snippet in `lines`."""
+def _extract(lines, first_line, prompts, skipped):
+    """Yield (line of the first code line, code) for each snippet in `lines`.
+
+    Fences that are deliberately not checked are appended to `skipped`, so the
+    caller can report how much of the documentation was excluded.
+    """
     i = 0
     while i < len(lines):
         if FENCE_OPEN.match(lines[i]):
@@ -56,7 +61,11 @@ def _extract(lines, first_line, prompts):
             while end < len(lines) and not FENCE_CLOSE.match(lines[end]):
                 end += 1
             body = lines[start:end]
-            if prev != SKIP_MARKER and not any('--8<--' in ln for ln in body):
+            if prev == SKIP_MARKER:
+                skipped.append('skip marker')
+            elif any('--8<--' in ln for ln in body):
+                skipped.append('--8<-- include')
+            else:
                 if any(ln.lstrip().startswith('>>>') for ln in body):
                     body = _strip_prompts(body)
                 yield first_line + start, textwrap.dedent('\n'.join(body))
@@ -71,12 +80,15 @@ def _extract(lines, first_line, prompts):
 
 
 def collect():
-    """Return a list of (path, line, code) for every snippet."""
+    """Return (snippets, skipped): what gets checked and why the rest does not."""
     snippets = []
+    skipped = []
     for md in sorted((ROOT / 'docs').rglob('*.md')):
         rel = md.relative_to(ROOT).as_posix()
         lines = md.read_text(encoding='utf-8').splitlines()
-        snippets += [(rel, line, code) for line, code in _extract(lines, 1, prompts=False)]
+        snippets += [
+            (rel, line, code) for line, code in _extract(lines, 1, prompts=False, skipped=skipped)
+        ]
 
     for py in sorted((ROOT / 'ida_domain').glob('*.py')):
         rel = py.relative_to(ROOT).as_posix()
@@ -91,9 +103,10 @@ def collect():
             doc = node.body[0].value
             lines = doc.value.splitlines()
             snippets += [
-                (rel, line, code) for line, code in _extract(lines, doc.lineno, prompts=True)
+                (rel, line, code)
+                for line, code in _extract(lines, doc.lineno, prompts=True, skipped=skipped)
             ]
-    return snippets
+    return snippets, skipped
 
 
 def _preamble():
@@ -107,7 +120,7 @@ def _preamble():
 
 
 def main():
-    snippets = collect()
+    snippets, skipped = collect()
     preamble = _preamble()
     offset = preamble.count('\n')  # snippet line 1 is file line offset + 1
     error = re.compile(r'^(?P<file>.+?):(?P<line>\d+): (?P<rest>.*)$')
@@ -153,7 +166,14 @@ def main():
             print(out_line)
     print(result.stderr, end='', file=sys.stderr)
 
-    print(f'{len(snippets)} snippets checked, {reported} errors')
+    skipped_detail = ', '.join(
+        f'{count} {reason}' for reason, count in sorted(Counter(skipped).items())
+    )
+    print(
+        f'{len(snippets)} snippets checked, {len(skipped)} skipped'
+        + (f' ({skipped_detail})' if skipped_detail else '')
+        + f', {reported} errors'
+    )
     return 1 if result.returncode or reported else 0
 
 
