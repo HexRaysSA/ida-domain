@@ -8,6 +8,7 @@ import ida_idaapi
 import ida_idp
 import ida_lines
 import ida_nalt
+import ida_regfinder
 import ida_ua
 import ida_xref
 from ida_ua import insn_t
@@ -567,3 +568,49 @@ class Instructions(DatabaseEntity):
             cases=tuple(cases),
             raw_switch_info=si,
         )
+
+    def get_register_value(self, at: ea_t | insn_t, register: str) -> Optional[int]:
+        """
+        Returns the constant a register holds at an instruction, like an argument passed to a call.
+
+        Uses IDA's register tracker, which follows moves and simple arithmetic within the
+        function. Returns None when it cannot resolve a constant, for example when the value
+        comes from memory. A sub-register name such as "eax" gives the full register's value.
+
+        Args:
+            at: The instruction, such as a call, or its address; the value is the one just
+                before it executes.
+            register: Register name, such as "rdi", "r0" or "eax".
+
+        Returns:
+            The constant, or None if the tracker cannot resolve one.
+
+        Raises:
+            InvalidEAError: If the address is invalid.
+            InvalidParameterError: If the processor has no register named `register`.
+            NotImplementedError: If the processor module has no register tracker.
+
+        Example:
+            ```python
+            if puts := db.functions.get_by_name('puts'):
+                for call_ea in db.xrefs.calls_to_ea(puts.start_ea):
+                    # rdi: first argument passed to puts
+                    ptr = db.instructions.get_register_value(call_ea, 'rdi')
+                    if ptr is not None:
+                        print(hex(call_ea), db.bytes.get_cstring_at(ptr))
+            ```
+        """
+        ea = at.ea if isinstance(at, insn_t) else at
+        if not self.database.is_valid_ea(ea):
+            raise InvalidEAError(ea)
+        reg = ida_idp.str2reg(register)
+        if reg == -1:
+            raise InvalidParameterError('register', register, 'no such register on this processor')
+        try:
+            value: Optional[int] = ida_regfinder.find_reg_value(ea, reg)
+        except RuntimeError as e:
+            # The binding raises instead of returning -1 for an unsupported processor
+            if 'register tracker' not in str(e):
+                raise
+            raise NotImplementedError(str(e)) from e
+        return value
