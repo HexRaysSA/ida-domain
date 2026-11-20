@@ -128,3 +128,12 @@ with [smali](https://github.com/baksmali/smali) 3.0.7:
 ```bash
 java -jar smali.jar assemble -o tiny_switch_dalvik.dex tiny_switch_dalvik.smali
 ```
+
+---
+
+## 32-bit IDB (be_ornot_be)
+
+`be_ornot_be.idb` is a 32-bit database in the legacy `.idb` format, taken from
+the IDAPython examples in the IDA SDK (`src/plugins/idapython/examples/idbs`).
+IDA 9.x cannot create such databases, it only converts them to `.i64`.
+Used to test that `Database.open()` converts a `.idb` and reports an existing `.i64`.
