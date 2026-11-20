@@ -691,6 +691,64 @@ def test_struct_with_union_member_round_trip(test_env):
     assert retrieved.data.as_short == -1  # low 2 bytes = 0xFFFF
 
 
+def test_struct_builder_build_and_save_replace(test_env):
+    """Test that build_and_save replaces an existing type only with replace=True."""
+    db = test_env
+    int4 = db.types.create_primitive(4)
+
+    db.types.create_struct('Replaced').add_member('a', int4).build_and_save()
+    assert db.types.parse_declarations(None, 'struct ReplacedHolder { Replaced inner; };', 0) == 0
+    ordinal = db.types.get_by_name('Replaced').get_ordinal()
+
+    two_members = db.types.create_struct('Replaced').add_member('a', int4).add_member('b', int4)
+    with pytest.raises(DatabaseError):
+        two_members.build_and_save()
+    assert db.types.get_by_name('Replaced').get_size() == 4
+
+    replaced = two_members.build_and_save(replace=True)
+    assert replaced.get_ordinal() == ordinal
+    assert replaced.get_size() == 8
+    assert db.types.get_by_name('ReplacedHolder').get_size() == 8
+
+    db.types.create_struct('ReplacedNew').add_member('a', int4).build_and_save(replace=True)
+    assert db.types.get_by_name('ReplacedNew').get_size() == 4
+
+
+def test_union_builder_build_and_save_replace(test_env):
+    """Test that build_and_save replaces an existing union only with replace=True."""
+    db = test_env
+    int4, int8 = db.types.create_primitive(4), db.types.create_primitive(8)
+
+    db.types.create_union('ReplacedUnion').add_member('a', int4).build_and_save()
+    ordinal = db.types.get_by_name('ReplacedUnion').get_ordinal()
+
+    wider = db.types.create_union('ReplacedUnion').add_member('a', int4).add_member('b', int8)
+    with pytest.raises(DatabaseError):
+        wider.build_and_save()
+    assert db.types.get_by_name('ReplacedUnion').get_size() == 4
+
+    replaced = wider.build_and_save(replace=True)
+    assert replaced.get_ordinal() == ordinal
+    assert replaced.get_size() == 8
+
+
+def test_enum_builder_build_and_save_replace(test_env):
+    """Test that build_and_save replaces an existing enum only with replace=True."""
+    db = test_env
+
+    db.types.create_enum('ReplacedEnum').add_member('A', 1).build_and_save()
+    ordinal = db.types.get_by_name('ReplacedEnum').get_ordinal()
+
+    more = db.types.create_enum('ReplacedEnum').add_member('A', 1).add_member('B', 2)
+    with pytest.raises(DatabaseError):
+        more.build_and_save()
+    assert db.types.get_enum_member_count(db.types.get_by_name('ReplacedEnum')) == 1
+
+    replaced = more.build_and_save(replace=True)
+    assert replaced.get_ordinal() == ordinal
+    assert db.types.get_enum_member_count(replaced) == 2
+
+
 def test_create_primitive_signed_and_unsigned(test_env):
     """Test that create_primitive produces correct signed/unsigned types for all sizes."""
     db = test_env
