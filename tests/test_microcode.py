@@ -2692,6 +2692,72 @@ def test_microcode_mba_build_graph(test_env):
     assert found_succs
 
 
+def test_microcode_generate_keeps_decompiler_graph(tiny_imports_env):
+    """Test generate() does not rebuild the graph the decompiler built from LOCOPT on."""
+    from ida_domain.microcode import MicroMaturity
+
+    db = tiny_imports_env
+    func = db.functions.get_at(0x401160)
+    for mat in [m for m in MicroMaturity if m >= MicroMaturity.LOCOPT]:
+        mf = db.microcode.generate(func, maturity=mat)
+        expected = db.microcode.generate(func, maturity=mat, build_graph=False)
+        assert [b.block_flags for b in mf] == [b.block_flags for b in expected]
+        # A rebuild re-adds assertions such as `mov #0.1, $__TMC_END__.1` at LVARS.
+        assert mf.to_text() == expected.to_text()
+
+        mf = db.microcode.generate_for_range(func.start_ea, func.end_ea, maturity=mat)
+        expected = db.microcode.generate_for_range(
+            func.start_ea, func.end_ea, maturity=mat, build_graph=False
+        )
+        assert [b.block_flags for b in mf] == [b.block_flags for b in expected]
+        assert mf.to_text() == expected.to_text()
+
+
+def test_microcode_generate_builds_graph_below_locopt(tiny_imports_env):
+    """Test generate() builds the graph if the generated microcode is below LOCOPT."""
+    from ida_domain.microcode import MicroMaturity
+
+    db = tiny_imports_env
+    func = db.functions.get_at(0x401160)
+    for mat in [m for m in MicroMaturity if m < MicroMaturity.LOCOPT]:
+        mf = db.microcode.generate(func, maturity=mat)
+        assert any(b.successor_count for b in mf)
+        mf = db.microcode.generate(func, maturity=mat, build_graph=False)
+        assert not any(b.successor_count for b in mf)
+
+        mf = db.microcode.generate_for_range(func.start_ea, func.end_ea, maturity=mat)
+        assert any(b.successor_count for b in mf)
+        mf = db.microcode.generate_for_range(
+            func.start_ea, func.end_ea, maturity=mat, build_graph=False
+        )
+        assert not any(b.successor_count for b in mf)
+
+
+def test_microcode_generate_builds_graph_after_early_stop(tiny_imports_env):
+    """Test generate() builds the graph if a hook stops generation below LOCOPT."""
+    from ida_domain.hooks import DecompilerHooks
+    from ida_domain.microcode import MicroError, MicroMaturity
+
+    class StopAfterPreoptimized(DecompilerHooks):
+        def preoptimized(self, mba):
+            return MicroError.STOP
+
+    db = tiny_imports_env
+    func = db.functions.get_at(0x401160)
+    for mat in [m for m in MicroMaturity if m >= MicroMaturity.LOCOPT]:
+        hook = StopAfterPreoptimized()
+        hook.hook()
+        try:
+            mf = db.microcode.generate(func, maturity=mat)
+            mf_range = db.microcode.generate_for_range(func.start_ea, func.end_ea, maturity=mat)
+        finally:
+            hook.unhook()
+        assert mf.maturity < MicroMaturity.LOCOPT
+        assert mf_range.maturity < MicroMaturity.LOCOPT
+        assert any(b.successor_count for b in mf)
+        assert any(b.successor_count for b in mf_range)
+
+
 def test_microcode_mba_copy_block(test_env):
     """Test MicroBlockArray.copy_block() duplicates a block."""
     from ida_domain.microcode import CopyBlockFlags, MicroBlockType
