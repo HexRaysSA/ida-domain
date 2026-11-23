@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 
+import ida_bitrange
 import ida_bytes
 import ida_idaapi
 import ida_idp
@@ -575,7 +576,8 @@ class Instructions(DatabaseEntity):
 
         Uses IDA's register tracker, which follows moves and simple arithmetic within the
         function. Returns None when it cannot resolve a constant, for example when the value
-        comes from memory. A sub-register name such as "eax" gives the full register's value.
+        comes from memory. A sub-register name such as "eax" or "ah" gives only that
+        sub-register's bits of the full register's value.
 
         Args:
             at: The instruction, such as a call, or its address; the value is the one just
@@ -603,7 +605,12 @@ class Instructions(DatabaseEntity):
         ea = at.ea if isinstance(at, insn_t) else at
         if not self.database.is_valid_ea(ea):
             raise InvalidEAError(ea)
-        reg = ida_idp.str2reg(register)
+        # The tracker only follows full registers, so look up the main one and slice it.
+        # Some processor modules (e.g. Dalvik) don't implement get_reg_info(): fall back
+        # to the name as given.
+        bits = ida_bitrange.bitrange_t()
+        main_reg = ida_idp.get_reg_info(register, bits) or register
+        reg = ida_idp.str2reg(main_reg)
         if reg == -1:
             raise InvalidParameterError('register', register, 'no such register on this processor')
         try:
@@ -613,4 +620,6 @@ class Instructions(DatabaseEntity):
             if 'register tracker' not in str(e):
                 raise
             raise NotImplementedError(str(e)) from e
+        if value is not None and bits.bitsize():
+            value = (value >> bits.bitoff()) & ((1 << bits.bitsize()) - 1)
         return value

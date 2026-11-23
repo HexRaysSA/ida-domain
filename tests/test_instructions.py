@@ -395,6 +395,12 @@ def test_get_register_value(tiny_imports_env):
     # The value before the instruction, not after: rax is only set by this lea
     assert db.instructions.get_register_value(0x4011A9, 'rax') is None
     assert db.instructions.get_register_value(0x4011B0, 'rax') == 0x402004
+    # Sub-registers give their own bits, even ones str2reg numbers separately
+    assert db.instructions.get_register_value(0x4011B0, 'eax') == 0x402004
+    assert db.instructions.get_register_value(0x4011B0, 'ax') == 0x2004
+    assert db.instructions.get_register_value(0x4011B0, 'al') == 0x04
+    assert db.instructions.get_register_value(0x4011B0, 'ah') == 0x20
+    assert db.instructions.get_register_value(0x4011BD, 'dil') == 0x40
 
     # mov rax, [rbp+ptr]; mov rdi, rax; call free: loaded from memory
     assert db.instructions.get_register_value(0x4011DF, 'rdi') is None
