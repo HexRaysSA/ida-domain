@@ -1528,6 +1528,20 @@ class MicroOperand:
         return (idx, self._raw.s.off)
 
     @property
+    def local_var_index(self) -> Optional[int]:
+        """Index into ``mba.vars`` for ``mop_l`` operands, or *None*."""
+        if self._raw.t == self._T.LOCAL_VAR:
+            return self._raw.l.idx
+        return None
+
+    @property
+    def local_var_offset(self) -> Optional[int]:
+        """Offset from the beginning of the variable for ``mop_l`` operands, or *None*."""
+        if self._raw.t == self._T.LOCAL_VAR:
+            return self._raw.l.off
+        return None
+
+    @property
     def sub_instruction(self) -> Optional[MicroInstruction]:
         """Nested :class:`MicroInstruction` for ``mop_d`` operands, or *None*."""
         if self._raw.t == self._T.SUB_INSN:
@@ -1601,6 +1615,10 @@ class MicroOperand:
     @requires_ida('9.2')
     def is_global_address(self) -> bool:
         return self._raw.is_glbvar()
+
+    @property
+    def is_local_variable(self) -> bool:
+        return self._raw.t == self._T.LOCAL_VAR
 
     @property
     def is_helper(self) -> bool:
