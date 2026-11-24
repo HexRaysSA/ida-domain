@@ -1295,6 +1295,12 @@ class EnumBuilder:
 
         Raises:
             DatabaseError: If enum creation or saving fails.
+
+        Warning:
+            Enum member names are unique within a type library. With
+            ``replace=True``, a member name that another enum in ``library``
+            already uses is taken away from that enum. An enum that loses all
+            its members becomes a typedef of this one.
         """
         result = self.build()
         if library is None:

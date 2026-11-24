@@ -746,6 +746,30 @@ def test_enum_builder_build_and_save_replace(test_env):
     assert replaced.get_ordinal() == ordinal
     assert db.types.get_enum_member_count(replaced) == 2
 
+    with pytest.raises(DatabaseError):
+        db.types.create_enum('ReplacedEnumRival').add_member('B', 3).build_and_save()
+    assert db.types.get_enum_member_by_name(replaced, 'B').value == 2
+
+
+def test_enum_builder_build_and_save_replace_member_names(test_env):
+    """Test that build_and_save(replace=True) takes member names from other enums."""
+    db = test_env
+
+    owner = (
+        db.types.create_enum('NameOwner')
+        .add_member('Taken', 1)
+        .add_member('Kept', 2)
+        .build_and_save()
+    )
+    db.types.create_enum('NameTaker').add_member('Taken', 3).build_and_save(replace=True)
+    assert [member.name for member in db.types.get_enum_members(owner)] == ['Kept']
+    assert db.types.get_enum_member_by_name(db.types.get_by_name('NameTaker'), 'Taken').value == 3
+
+    alias = db.types.create_enum('AllNamesOwner').add_member('Only', 1).build_and_save()
+    db.types.create_enum('AllNamesTaker').add_member('Only', 2).build_and_save(replace=True)
+    assert alias.is_typedef()
+    assert alias.get_next_type_name() == 'AllNamesTaker'
+
 
 def test_create_primitive_signed_and_unsigned(test_env):
     """Test that create_primitive produces correct signed/unsigned types for all sizes."""
