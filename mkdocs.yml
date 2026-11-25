@@ -32,6 +32,7 @@ nav:
       - ref/imports.md
       - ref/instructions.md
       - ref/license.md
+      - ref/lines.md
       - ref/microcode.md
       - ref/pseudocode.md
       - ref/names.md

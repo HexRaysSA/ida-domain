@@ -3441,7 +3441,7 @@ class Pseudocode(DatabaseEntity):
 
         ```python
         decomp = db.pseudocode.decompile(ea_or_func)
-        return decomp.to_text(remove_tags)
+        return decomp.to_text(remove_tags=True)
         ```
 
         Args:

@@ -8,7 +8,6 @@ from typing import Any, Optional
 
 import ida_bytes
 import ida_idp
-import ida_lines
 import ida_name
 import ida_offset
 import ida_typeinf
@@ -17,6 +16,7 @@ from ida_idaapi import as_signed, ea_t
 from typing_extensions import TYPE_CHECKING
 
 from .base import InvalidParameterError
+from .lines import remove_tags
 
 if TYPE_CHECKING:
     from .database import Database
@@ -547,7 +547,7 @@ class MemoryOperand(Operand):
     def get_formatted_string(self) -> Optional[str]:
         """Get the formatted operand string from IDA."""
         ret = ida_ua.print_operand(self._instruction_ea, self.number)
-        return ida_lines.tag_remove(ret)
+        return remove_tags(ret)
 
     def __str__(self) -> str:
         class_name = self.__class__.__name__
