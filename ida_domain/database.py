@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -550,6 +551,12 @@ class Database:
 
         result = idapro.open_database(path, args.auto_analysis, args.build_args())
         if result != 0:
+            i64_path = os.path.splitext(path)[0] + '.i64'
+            if path.lower().endswith('.idb') and os.path.exists(i64_path):
+                raise DatabaseError(
+                    f'Failed to open database {path}: IDA does not convert a 32-bit .idb '
+                    f'when the converted database already exists. Open {i64_path} instead.'
+                )
             raise DatabaseError(f'Failed to open database {path}')
 
     @classmethod
