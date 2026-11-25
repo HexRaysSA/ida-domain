@@ -19,6 +19,7 @@ nav:
   - Usage:
       - Overview: usage.md
       - llms.txt: llm.md
+      - Migration Guide: migration-guide.md
   - API Reference:
       - ref/database.md
       - ref/flowchart.md
@@ -151,6 +152,8 @@ plugins:
           - index.md
         Usage:
           - usage.md
+          - migration-guide.md
+          - faq.md
         Examples:
           - getting_started.md
           - examples.md
