@@ -371,3 +371,61 @@ def test_get_switch_sparse(tiny_switch_dalvik_env):
     assert switch.target_of(2) is None
 
     assert _check_get_switches(db) == 1
+
+
+def test_get_register_value(tiny_imports_env):
+    db = tiny_imports_env
+
+    puts = db.functions.get_by_name('.puts')
+    calls = list(db.xrefs.calls_to_ea(puts.start_ea))
+    assert calls == [0x4011B3, 0x4011EE]
+    # lea rax, s; mov rdi, rax: the tracker follows the move
+    assert [db.instructions.get_register_value(ea, 'rdi') for ea in calls] == [
+        0x402004,
+        0x40201C,
+    ]
+    assert db.bytes.get_cstring_at(0x402004) == 'IDA Domain Imports Test'
+    assert db.bytes.get_cstring_at(0x40201C) == 'Testing complete'
+
+    # mov edi, 40h; call malloc
+    assert db.instructions.get_register_value(0x4011BD, 'rdi') == 0x40
+    assert db.instructions.get_register_value(0x4011BD, 'edi') == 0x40
+    # mov edi, 0; call exit
+    assert db.instructions.get_register_value(0x4011F8, 'rdi') == 0
+    # The value before the instruction, not after: rax is only set by this lea
+    assert db.instructions.get_register_value(0x4011A9, 'rax') is None
+    assert db.instructions.get_register_value(0x4011B0, 'rax') == 0x402004
+    # Sub-registers give their own bits, even ones str2reg numbers separately
+    assert db.instructions.get_register_value(0x4011B0, 'eax') == 0x402004
+    assert db.instructions.get_register_value(0x4011B0, 'ax') == 0x2004
+    assert db.instructions.get_register_value(0x4011B0, 'al') == 0x04
+    assert db.instructions.get_register_value(0x4011B0, 'ah') == 0x20
+    assert db.instructions.get_register_value(0x4011BD, 'dil') == 0x40
+
+    # mov rax, [rbp+ptr]; mov rdi, rax; call free: loaded from memory
+    assert db.instructions.get_register_value(0x4011DF, 'rdi') is None
+
+    # An instruction and its address give the same value
+    for ea in (0x4011B3, 0x4011BD, 0x4011DF):
+        insn = db.instructions.get_at(ea)
+        assert db.instructions.get_register_value(insn, 'rdi') == (
+            db.instructions.get_register_value(ea, 'rdi')
+        )
+
+    with pytest.raises(InvalidParameterError):
+        db.instructions.get_register_value(0x4011B3, 'r0')
+    with pytest.raises(ValueError):
+        db.instructions.get_register_value(0x4011B3, 'bogus')
+    with pytest.raises(InvalidEAError):
+        db.instructions.get_register_value(0xFFFFFFFF, 'rdi')
+
+
+# IDA 9.2 and 9.3 find no switch in this DEX; 9.1 exits while loading it
+@min_ida_version('9.4')
+def test_get_register_value_no_tracker(tiny_switch_dalvik_env):
+    db = tiny_switch_dalvik_env
+
+    # Dalvik has no register tracker
+    func = db.functions.get_by_name('TinySwitch.sparse@VI')
+    with pytest.raises(NotImplementedError):
+        db.instructions.get_register_value(func.start_ea, 'v0')
