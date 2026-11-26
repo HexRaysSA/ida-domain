@@ -12,6 +12,7 @@ import ida_domain  # isort: skip
 from ida_domain.base import DatabaseError, InvalidEAError, InvalidParameterError
 from ida_domain.types import (
     CallingConvention,
+    FuncArgumentFlags,
     ObjectIOFlags,
     TypeAttr,
     TypeDetails,
@@ -960,6 +961,36 @@ def test_func_type_builder_calling_convention(test_env):
 
     with pytest.raises(InvalidParameterError):
         builder().set_calling_convention('cdecl')  # type: ignore
+
+
+def test_func_type_builder_argument_flags(test_env):
+    """Test that add_argument stores the argument flags in the function type."""
+    db = test_env
+    int4 = db.types.create_primitive(4)
+    int4_ptr = db.types.create_pointer(int4)
+
+    arguments = (
+        ('this', int4_ptr, FuncArgumentFlags.HIDDEN),
+        ('retstr', int4_ptr, FuncArgumentFlags.RETURN_POINTER | FuncArgumentFlags.STRUCT),
+        ('items', int4_ptr, FuncArgumentFlags.ARRAY),
+        ('spare', int4, FuncArgumentFlags.UNUSED),
+        ('count', int4, FuncArgumentFlags.NONE),
+    )
+    builder = db.types.create_func_type()
+    for name, arg_type, flags in arguments:
+        builder.add_argument(name, arg_type, flags)
+    func_type = builder.build()
+
+    details = ida_typeinf.func_type_data_t()
+    assert func_type.get_func_details(details)
+    assert [arg.flags for arg in details] == [flags for _, _, flags in arguments]
+
+    plain = db.types.create_func_type().add_argument('a', int4).build()
+    assert plain.get_func_details(details)
+    assert details[0].flags == FuncArgumentFlags.NONE
+
+    with pytest.raises(InvalidParameterError):
+        db.types.create_func_type().add_argument('a', int4, ida_typeinf.FAI_HIDDEN)  # type: ignore
 
 
 def test_pointer_followed_at_idb(test_env):
