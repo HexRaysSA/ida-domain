@@ -1051,7 +1051,9 @@ class StructBuilder:
         Args:
             name: Member name.
             member_type: Member type.
-            offset: Explicit byte offset (auto-calculated if None).
+            offset: Byte offset of the member, or None to place it right after
+                the previous member. An offset past the end of the previous
+                member adds padding before the member.
 
         Returns:
             Self for method chaining.
@@ -1105,8 +1107,50 @@ class StructBuilder:
             The constructed tinfo_t.
 
         Raises:
-            DatabaseError: If struct creation fails.
+            DatabaseError: If struct creation fails, or a member cannot be placed
+                at the offset given to add_member()
         """
+        members: List[Tuple[str, tinfo_t, bool]] = []  # (name, type, is padding)
+        requested_offsets: List[Tuple[int, str, int]] = []  # (index in members, name, offset)
+        member_names = {name for name, _, _ in self._members}
+        for name, member_type, offset in self._members:
+            if offset is not None:
+                end = self._end_offset(members)
+                if offset > end:
+                    padding = tinfo_t()
+                    padding.create_array(tinfo_t(ida_typeinf.BT_UNK_BYTE), offset - end)
+                    padding_name = f'_pad{end:X}'
+                    while padding_name in member_names:  # IDA would rename the member
+                        padding_name += '_'
+                    members.append((padding_name, padding, True))
+                requested_offsets.append((len(members), name, offset))
+            members.append((name, member_type, False))
+
+        result = self._create_tinfo(members)
+
+        if requested_offsets:
+            udt = udt_type_data_t()
+            result.get_udt_details(udt)
+            for index, name, offset in requested_offsets:
+                if udt[index].offset != offset * 8:
+                    raise DatabaseError(
+                        f"Failed to place member '{name}' of struct '{self._name}' "
+                        f'at offset {offset}'
+                    )
+
+        return result
+
+    def _end_offset(self, members: List[Tuple[str, tinfo_t, bool]]) -> int:
+        """Byte offset where the last of the members ends, as laid out by IDA."""
+        if not members:
+            return 0
+        udt = udt_type_data_t()
+        self._create_tinfo(members).get_udt_details(udt)
+        last = udt[len(members) - 1]
+        return (last.offset + last.size + 7) // 8  # bits to bytes, rounded up
+
+    def _create_tinfo(self, members: List[Tuple[str, tinfo_t, bool]]) -> tinfo_t:
+        """Create the struct from (name, type, is padding) members, laid out by IDA."""
         udt = udt_type_data_t()
         udt.is_union = False
         if self._packed:
@@ -1114,18 +1158,14 @@ class StructBuilder:
         if self._alignment is not None:
             udt.sda = self._alignment.bit_length()  # log2(alignment) + 1
 
-        for name, member_type, offset in self._members:
-            if offset is not None:
-                udt_member = udt.add_member(name, member_type, offset)
-            else:
-                udt_member = udt.add_member(name, member_type)
-            if udt_member is None:
-                raise DatabaseError(f"Failed to add member '{name}' to struct '{self._name}'")
+        for name, member_type, is_padding in members:
+            udt_member = udt.add_member(name, member_type)
+            if is_padding:
+                udt_member.tafld_bits |= ida_typeinf.TAFLD_GAP
 
         result = tinfo_t()
         if not result.create_udt(udt, BTF_STRUCT):
             raise DatabaseError(f"Failed to create struct '{self._name}'")
-
         return result
 
     def build_and_save(self, library: Optional[til_t] = None, replace: bool = False) -> tinfo_t:
