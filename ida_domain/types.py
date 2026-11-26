@@ -999,7 +999,7 @@ class TypeMemberLookupMode(Enum):
 
 
 # =============================================================================
-# Calling Convention Enum
+# Function Type Enums
 # =============================================================================
 
 
@@ -1012,6 +1012,23 @@ class CallingConvention(IntEnum):
     THISCALL = ida_typeinf.CM_CC_THISCALL
     DEFAULT = ida_typeinf.CM_CC_UNKNOWN
     """The database's default calling convention."""
+
+
+class FuncArgumentFlags(IntFlag):
+    """Properties of a function argument."""
+
+    NONE = 0
+    """No flags."""
+    HIDDEN = ida_typeinf.FAI_HIDDEN
+    """Not written in the source code, such as the C++ ``this`` (``__hidden``)."""
+    RETURN_POINTER = ida_typeinf.FAI_RETPTR
+    """Pointer to the return value; implies hidden (``__return_ptr``)."""
+    STRUCT = ida_typeinf.FAI_STRUCT
+    """Pointer to a structure that the source passes or returns by value (``__struct_ptr``)."""
+    ARRAY = ida_typeinf.FAI_ARRAY
+    """Pointer that the source declares as an array (``__array_ptr``)."""
+    UNUSED = ida_typeinf.FAI_UNUSED
+    """Not used by the function (``__unused``)."""
 
 
 # =============================================================================
@@ -1378,7 +1395,7 @@ class FuncTypeBuilder:
     def __init__(self) -> None:
         """Initialize a function type builder."""
         self._return_type: Optional[tinfo_t] = None
-        self._arguments: List[Tuple[str, tinfo_t]] = []
+        self._arguments: List[Tuple[str, tinfo_t, FuncArgumentFlags]] = []
         self._calling_convention: Optional[CallingConvention] = None
         self._variadic = False
 
@@ -1395,18 +1412,26 @@ class FuncTypeBuilder:
         self._return_type = ret_type
         return self
 
-    def add_argument(self, name: str, arg_type: tinfo_t) -> 'FuncTypeBuilder':
+    def add_argument(
+        self, name: str, arg_type: tinfo_t, flags: FuncArgumentFlags = FuncArgumentFlags.NONE
+    ) -> 'FuncTypeBuilder':
         """
         Add an argument to the function type.
 
         Args:
             name: Argument name.
             arg_type: Argument type.
+            flags: Argument properties, such as HIDDEN for the C++ ``this``.
 
         Returns:
             Self for method chaining.
+
+        Raises:
+            InvalidParameterError: If flags is not a FuncArgumentFlags.
         """
-        self._arguments.append((name, arg_type))
+        if not isinstance(flags, FuncArgumentFlags):
+            raise InvalidParameterError('flags', flags, 'must be a FuncArgumentFlags')
+        self._arguments.append((name, arg_type, flags))
         return self
 
     def set_calling_convention(self, cc: CallingConvention) -> 'FuncTypeBuilder':
@@ -1472,10 +1497,11 @@ class FuncTypeBuilder:
             ftd.rettype = void_type
 
         # Add arguments
-        for name, arg_type in self._arguments:
+        for name, arg_type, flags in self._arguments:
             fa = funcarg_t()
             fa.name = name
             fa.type = arg_type
+            fa.flags = flags
             ftd.push_back(fa)
 
         if self._variadic:
